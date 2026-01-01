@@ -5,7 +5,7 @@ import { z } from "zod";
 
 // Enums
 export const userTypeEnum = pgEnum("user_type", ["staff", "beneficiary"]);
-export const roleEnum = pgEnum("role", ["admin", "lawyer", "intake_officer", "viewer", "expert"]);
+export const roleEnum = pgEnum("role", ["super_admin", "admin", "lawyer", "intake_officer", "viewer", "expert"]);
 export const caseTypeEnum = pgEnum("case_type", ["civil", "criminal", "family", "labor", "asylum"]);
 export const caseStatusEnum = pgEnum("case_status", ["open", "in_progress", "pending", "closed", "urgent"]);
 export const priorityEnum = pgEnum("priority", ["low", "medium", "high", "urgent"]);
@@ -13,6 +13,17 @@ export const intakeStatusEnum = pgEnum("intake_status", ["pending", "approved", 
 export const beneficiaryStatusEnum = pgEnum("beneficiary_status", ["active", "pending", "archived"]);
 export const appointmentTypeEnum = pgEnum("appointment_type", ["online", "in_person"]);
 export const appointmentStatusEnum = pgEnum("appointment_status", ["pending", "confirmed", "cancelled", "completed"]);
+export const taskStatusEnum = pgEnum("task_status", ["pending", "in_progress", "completed", "cancelled"]);
+export const taskTypeEnum = pgEnum("task_type", ["follow_up", "document_preparation", "court_appearance", "client_meeting", "research", "other"]);
+export const paymentMethodEnum = pgEnum("payment_method", ["cash", "transfer", "sadad", "cheque"]);
+export const voucherTypeEnum = pgEnum("voucher_type", ["receipt", "disbursement"]);
+export const templateTypeEnum = pgEnum("template_type", ["settlement", "voucher", "acknowledgement", "invoice", "contract"]);
+export const permissionEnum = pgEnum("permission", [
+  "view_dashboard", "manage_users", "manage_beneficiaries", "manage_cases",
+  "manage_intake", "manage_tasks", "manage_finance", "manage_documents",
+  "manage_templates", "manage_settings", "view_reports", "manage_consultations",
+  "manage_power_of_attorney", "manage_sessions"
+]);
 
 // Users table
 export const users = pgTable("users", {
@@ -61,6 +72,8 @@ export const beneficiaries = pgTable("beneficiaries", {
   dateOfBirth: timestamp("date_of_birth"),
   nationality: text("nationality"),
   gender: text("gender"),
+  roleCapacity: text("role_capacity"),
+  attachments: text("attachments").array(),
   status: beneficiaryStatusEnum("status").notNull().default("pending"),
   createdAt: timestamp("created_at").notNull().defaultNow(),
   updatedAt: timestamp("updated_at").notNull().defaultNow(),
@@ -96,6 +109,9 @@ export const cases = pgTable("cases", {
   beneficiaryId: varchar("beneficiary_id").notNull().references(() => beneficiaries.id),
   caseType: caseTypeEnum("case_type").notNull(),
   description: text("description").notNull(),
+  opponentName: text("opponent_name"),
+  opponentLawyer: text("opponent_lawyer"),
+  opponentContact: text("opponent_contact"),
   status: caseStatusEnum("status").notNull().default("open"),
   priority: priorityEnum("priority").notNull().default("medium"),
   assignedLawyerId: varchar("assigned_lawyer_id").references(() => users.id),
@@ -191,3 +207,227 @@ export const auditLog = pgTable("audit_log", {
 export const insertAuditLogSchema = createInsertSchema(auditLog).omit({ id: true, createdAt: true });
 export type InsertAuditLog = z.infer<typeof insertAuditLogSchema>;
 export type AuditLog = typeof auditLog.$inferSelect;
+
+// System Settings table
+export const systemSettings = pgTable("system_settings", {
+  id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
+  orgName: text("org_name").notNull().default("Adala Legal Aid"),
+  orgLogoUrl: text("org_logo_url"),
+  vatPercentage: integer("vat_percentage").notNull().default(15),
+  contactEmail: text("contact_email"),
+  contactPhone: text("contact_phone"),
+  address: text("address"),
+  updatedAt: timestamp("updated_at").notNull().defaultNow(),
+});
+
+export const insertSystemSettingsSchema = createInsertSchema(systemSettings).omit({ id: true, updatedAt: true });
+export type InsertSystemSettings = z.infer<typeof insertSystemSettingsSchema>;
+export type SystemSettings = typeof systemSettings.$inferSelect;
+
+// Rules table (permission bundles)
+export const rules = pgTable("rules", {
+  id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
+  name: text("name").notNull().unique(),
+  description: text("description"),
+  permissions: text("permissions").array().notNull(),
+  createdAt: timestamp("created_at").notNull().defaultNow(),
+  updatedAt: timestamp("updated_at").notNull().defaultNow(),
+});
+
+export const insertRuleSchema = createInsertSchema(rules).omit({ id: true, createdAt: true, updatedAt: true });
+export type InsertRule = z.infer<typeof insertRuleSchema>;
+export type Rule = typeof rules.$inferSelect;
+
+// User Rules junction table
+export const userRules = pgTable("user_rules", {
+  id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
+  userId: varchar("user_id").notNull().references(() => users.id),
+  ruleId: varchar("rule_id").notNull().references(() => rules.id),
+  createdAt: timestamp("created_at").notNull().defaultNow(),
+});
+
+export const insertUserRuleSchema = createInsertSchema(userRules).omit({ id: true, createdAt: true });
+export type InsertUserRule = z.infer<typeof insertUserRuleSchema>;
+export type UserRule = typeof userRules.$inferSelect;
+
+// Tasks table
+export const tasks = pgTable("tasks", {
+  id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
+  title: text("title").notNull(),
+  description: text("description"),
+  taskType: taskTypeEnum("task_type").notNull(),
+  assignedTo: varchar("assigned_to").notNull().references(() => users.id),
+  assignedBy: varchar("assigned_by").notNull().references(() => users.id),
+  caseId: varchar("case_id").references(() => cases.id),
+  status: taskStatusEnum("status").notNull().default("pending"),
+  priority: priorityEnum("priority").notNull().default("medium"),
+  dueDate: timestamp("due_date"),
+  completedAt: timestamp("completed_at"),
+  createdAt: timestamp("created_at").notNull().defaultNow(),
+  updatedAt: timestamp("updated_at").notNull().defaultNow(),
+});
+
+export const insertTaskSchema = createInsertSchema(tasks).omit({ id: true, createdAt: true, updatedAt: true });
+export type InsertTask = z.infer<typeof insertTaskSchema>;
+export type Task = typeof tasks.$inferSelect;
+
+// Sessions table (court sessions with Hijri/Gregorian dates)
+export const sessions = pgTable("sessions", {
+  id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
+  caseId: varchar("case_id").notNull().references(() => cases.id),
+  title: text("title").notNull(),
+  sessionNumber: integer("session_number"),
+  gregorianDate: timestamp("gregorian_date").notNull(),
+  hijriDate: text("hijri_date"),
+  location: text("location"),
+  notes: text("notes"),
+  outcome: text("outcome"),
+  nextSessionDate: timestamp("next_session_date"),
+  createdAt: timestamp("created_at").notNull().defaultNow(),
+  updatedAt: timestamp("updated_at").notNull().defaultNow(),
+});
+
+export const insertSessionSchema = createInsertSchema(sessions).omit({ id: true, createdAt: true, updatedAt: true });
+export type InsertSession = z.infer<typeof insertSessionSchema>;
+export type Session = typeof sessions.$inferSelect;
+
+// Consultations table
+export const consultations = pgTable("consultations", {
+  id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
+  consultationNumber: text("consultation_number").notNull().unique(),
+  beneficiaryId: varchar("beneficiary_id").notNull().references(() => beneficiaries.id),
+  lawyerId: varchar("lawyer_id").references(() => users.id),
+  topic: text("topic").notNull(),
+  description: text("description").notNull(),
+  consultationType: text("consultation_type"),
+  status: text("status").notNull().default("pending"),
+  scheduledDate: timestamp("scheduled_date"),
+  notes: text("notes"),
+  followUpRequired: boolean("follow_up_required").default(false),
+  createdAt: timestamp("created_at").notNull().defaultNow(),
+  updatedAt: timestamp("updated_at").notNull().defaultNow(),
+});
+
+export const insertConsultationSchema = createInsertSchema(consultations).omit({ id: true, createdAt: true, updatedAt: true });
+export type InsertConsultation = z.infer<typeof insertConsultationSchema>;
+export type Consultation = typeof consultations.$inferSelect;
+
+// Power of Attorney table
+export const powerOfAttorney = pgTable("power_of_attorney", {
+  id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
+  poaNumber: text("poa_number").notNull().unique(),
+  beneficiaryId: varchar("beneficiary_id").notNull().references(() => beneficiaries.id),
+  lawyerId: varchar("lawyer_id").references(() => users.id),
+  caseId: varchar("case_id").references(() => cases.id),
+  issueDate: timestamp("issue_date").notNull(),
+  expiryDate: timestamp("expiry_date"),
+  scope: text("scope").notNull(),
+  restrictions: text("restrictions"),
+  isActive: boolean("is_active").notNull().default(true),
+  documentUrl: text("document_url"),
+  notes: text("notes"),
+  createdAt: timestamp("created_at").notNull().defaultNow(),
+  updatedAt: timestamp("updated_at").notNull().defaultNow(),
+});
+
+export const insertPowerOfAttorneySchema = createInsertSchema(powerOfAttorney).omit({ id: true, createdAt: true, updatedAt: true });
+export type InsertPowerOfAttorney = z.infer<typeof insertPowerOfAttorneySchema>;
+export type PowerOfAttorney = typeof powerOfAttorney.$inferSelect;
+
+// Contracts table
+export const contracts = pgTable("contracts", {
+  id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
+  contractNumber: text("contract_number").notNull().unique(),
+  caseId: varchar("case_id").notNull().references(() => cases.id),
+  beneficiaryId: varchar("beneficiary_id").notNull().references(() => beneficiaries.id),
+  contractValue: integer("contract_value").notNull(),
+  vatAmount: integer("vat_amount").notNull().default(0),
+  totalAmount: integer("total_amount").notNull(),
+  paidAmount: integer("paid_amount").notNull().default(0),
+  remainingAmount: integer("remaining_amount").notNull(),
+  paymentMethod: paymentMethodEnum("payment_method").notNull(),
+  signedDate: timestamp("signed_date"),
+  notes: text("notes"),
+  createdAt: timestamp("created_at").notNull().defaultNow(),
+  updatedAt: timestamp("updated_at").notNull().defaultNow(),
+});
+
+export const insertContractSchema = createInsertSchema(contracts).omit({ id: true, createdAt: true, updatedAt: true });
+export type InsertContract = z.infer<typeof insertContractSchema>;
+export type Contract = typeof contracts.$inferSelect;
+
+// Installments table
+export const installments = pgTable("installments", {
+  id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
+  contractId: varchar("contract_id").notNull().references(() => contracts.id),
+  installmentNumber: integer("installment_number").notNull(),
+  amount: integer("amount").notNull(),
+  dueDate: timestamp("due_date").notNull(),
+  paidDate: timestamp("paid_date"),
+  status: text("status").notNull().default("pending"),
+  notes: text("notes"),
+  createdAt: timestamp("created_at").notNull().defaultNow(),
+});
+
+export const insertInstallmentSchema = createInsertSchema(installments).omit({ id: true, createdAt: true });
+export type InsertInstallment = z.infer<typeof insertInstallmentSchema>;
+export type Installment = typeof installments.$inferSelect;
+
+// Vouchers table (receipts and disbursements)
+export const vouchers = pgTable("vouchers", {
+  id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
+  voucherNumber: text("voucher_number").notNull().unique(),
+  voucherType: voucherTypeEnum("voucher_type").notNull(),
+  beneficiaryId: varchar("beneficiary_id").references(() => beneficiaries.id),
+  caseId: varchar("case_id").references(() => cases.id),
+  contractId: varchar("contract_id").references(() => contracts.id),
+  amount: integer("amount").notNull(),
+  paymentMethod: paymentMethodEnum("payment_method").notNull(),
+  description: text("description").notNull(),
+  issuedBy: varchar("issued_by").notNull().references(() => users.id),
+  issuedDate: timestamp("issued_date").notNull().defaultNow(),
+  notes: text("notes"),
+  createdAt: timestamp("created_at").notNull().defaultNow(),
+});
+
+export const insertVoucherSchema = createInsertSchema(vouchers).omit({ id: true, createdAt: true });
+export type InsertVoucher = z.infer<typeof insertVoucherSchema>;
+export type Voucher = typeof vouchers.$inferSelect;
+
+// Documents Library table
+export const documents = pgTable("documents", {
+  id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
+  title: text("title").notNull(),
+  description: text("description"),
+  fileUrl: text("file_url").notNull(),
+  fileType: text("file_type").notNull(),
+  fileSize: integer("file_size"),
+  category: text("category"),
+  tags: text("tags").array(),
+  uploadedBy: varchar("uploaded_by").notNull().references(() => users.id),
+  beneficiaryId: varchar("beneficiary_id").references(() => beneficiaries.id),
+  caseId: varchar("case_id").references(() => cases.id),
+  isPublic: boolean("is_public").notNull().default(false),
+  createdAt: timestamp("created_at").notNull().defaultNow(),
+});
+
+export const insertDocumentSchema = createInsertSchema(documents).omit({ id: true, createdAt: true });
+export type InsertDocument = z.infer<typeof insertDocumentSchema>;
+export type Document = typeof documents.$inferSelect;
+
+// Templates table
+export const templates = pgTable("templates", {
+  id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
+  name: text("name").notNull(),
+  templateType: templateTypeEnum("template_type").notNull(),
+  content: text("content").notNull(),
+  variables: text("variables").array(),
+  isActive: boolean("is_active").notNull().default(true),
+  createdBy: varchar("created_by").notNull().references(() => users.id),
+  createdAt: timestamp("created_at").notNull().defaultNow(),
+  updatedAt: timestamp("updated_at").notNull().defaultNow(),
+});
+
+export const insertTemplateSchema = createInsertSchema(templates).omit({ id: true, createdAt: true, updatedAt: true });
+export type InsertTemplate = z.infer<typeof insertTemplateSchema>;
+export type Template = typeof templates.$inferSelect;

@@ -1,12 +1,6 @@
 import { createContext, useContext, useState, useEffect, ReactNode } from "react";
 import { authAPI } from "@/lib/api";
-
-interface User {
-  id: string;
-  username: string;
-  fullName: string;
-  role: string;
-}
+import type { User } from "@shared/schema";
 
 interface AuthContextType {
   user: User | null;

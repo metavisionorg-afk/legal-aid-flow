@@ -56,12 +56,17 @@ export function Sidebar() {
       </nav>
 
       <div className="p-4 border-t border-sidebar-border">
-        <Link href="/login">
-          <div className="flex items-center gap-3 px-3 py-2 rounded-md text-sm font-medium text-sidebar-foreground/70 hover:bg-sidebar-accent/50 hover:text-sidebar-foreground transition-colors cursor-pointer">
-            <LogOut className="h-4 w-4 rtl:ml-2 rtl:mr-0" />
-            {t('app.logout')}
-          </div>
-        </Link>
+        <div 
+          className="flex items-center gap-3 px-3 py-2 rounded-md text-sm font-medium text-sidebar-foreground/70 hover:bg-sidebar-accent/50 hover:text-sidebar-foreground transition-colors cursor-pointer"
+          onClick={async () => {
+            const { authAPI } = await import("@/lib/api");
+            await authAPI.logout();
+            window.location.href = "/login";
+          }}
+        >
+          <LogOut className="h-4 w-4 rtl:ml-2 rtl:mr-0" />
+          {t('app.logout')}
+        </div>
       </div>
     </div>
   );

@@ -1,7 +1,7 @@
 import { drizzle } from "drizzle-orm/node-postgres";
 import pkg from "pg";
 const { Pool } = pkg;
-import { eq, desc, and, sql } from "drizzle-orm";
+import { eq, desc, and, sql, gte, lte } from "drizzle-orm";
 import * as schema from "@shared/schema";
 import type {
   User,
@@ -16,6 +16,14 @@ import type {
   InsertHearing,
   AuditLog,
   InsertAuditLog,
+  ExpertProfile,
+  InsertExpertProfile,
+  Appointment,
+  InsertAppointment,
+  AvailabilitySlot,
+  InsertAvailabilitySlot,
+  Notification,
+  InsertNotification,
 } from "@shared/schema";
 
 const pool = new Pool({ connectionString: process.env.DATABASE_URL });
@@ -27,10 +35,20 @@ export interface IStorage {
   getUserByUsername(username: string): Promise<User | undefined>;
   getUserByEmail(email: string): Promise<User | undefined>;
   createUser(user: InsertUser): Promise<User>;
+  updateUser(id: string, updates: Partial<InsertUser>): Promise<User | undefined>;
   getAllUsers(): Promise<User[]>;
+  getStaffUsers(): Promise<User[]>;
+  getExpertUsers(): Promise<User[]>;
+
+  // Expert Profiles
+  getExpertProfile(userId: string): Promise<ExpertProfile | undefined>;
+  getAllExpertProfiles(): Promise<ExpertProfile[]>;
+  createExpertProfile(profile: InsertExpertProfile): Promise<ExpertProfile>;
+  updateExpertProfile(userId: string, updates: Partial<InsertExpertProfile>): Promise<ExpertProfile | undefined>;
 
   // Beneficiaries
   getBeneficiary(id: string): Promise<Beneficiary | undefined>;
+  getBeneficiaryByIdNumber(idNumber: string): Promise<Beneficiary | undefined>;
   getAllBeneficiaries(): Promise<Beneficiary[]>;
   createBeneficiary(beneficiary: InsertBeneficiary): Promise<Beneficiary>;
   updateBeneficiary(id: string, beneficiary: Partial<InsertBeneficiary>): Promise<Beneficiary | undefined>;
@@ -39,6 +57,7 @@ export interface IStorage {
   // Intake Requests
   getIntakeRequest(id: string): Promise<IntakeRequest | undefined>;
   getAllIntakeRequests(): Promise<IntakeRequest[]>;
+  getIntakeRequestsByBeneficiary(beneficiaryId: string): Promise<IntakeRequest[]>;
   createIntakeRequest(request: InsertIntakeRequest): Promise<IntakeRequest>;
   updateIntakeRequest(id: string, request: Partial<InsertIntakeRequest>): Promise<IntakeRequest | undefined>;
 
@@ -59,6 +78,29 @@ export interface IStorage {
   updateHearing(id: string, hearing: Partial<InsertHearing>): Promise<Hearing | undefined>;
   deleteHearing(id: string): Promise<boolean>;
 
+  // Appointments
+  getAppointment(id: string): Promise<Appointment | undefined>;
+  getAllAppointments(): Promise<Appointment[]>;
+  getAppointmentsByBeneficiary(beneficiaryId: string): Promise<Appointment[]>;
+  getAppointmentsByExpert(expertId: string): Promise<Appointment[]>;
+  createAppointment(appointment: InsertAppointment): Promise<Appointment>;
+  updateAppointment(id: string, updates: Partial<InsertAppointment>): Promise<Appointment | undefined>;
+  deleteAppointment(id: string): Promise<boolean>;
+
+  // Availability Slots
+  getAvailabilitySlotsByExpert(expertId: string): Promise<AvailabilitySlot[]>;
+  createAvailabilitySlot(slot: InsertAvailabilitySlot): Promise<AvailabilitySlot>;
+  updateAvailabilitySlot(id: string, updates: Partial<InsertAvailabilitySlot>): Promise<AvailabilitySlot | undefined>;
+  deleteAvailabilitySlot(id: string): Promise<boolean>;
+
+  // Notifications
+  getNotification(id: string): Promise<Notification | undefined>;
+  getNotificationsByUser(userId: string): Promise<Notification[]>;
+  getUnreadNotifications(userId: string): Promise<Notification[]>;
+  createNotification(notification: InsertNotification): Promise<Notification>;
+  markNotificationAsRead(id: string): Promise<Notification | undefined>;
+  markAllNotificationsAsRead(userId: string): Promise<void>;
+
   // Audit Log
   createAuditLog(log: InsertAuditLog): Promise<AuditLog>;
   getAuditLogs(limit?: number): Promise<AuditLog[]>;
@@ -69,6 +111,14 @@ export interface IStorage {
     activeCases: number;
     pendingIntake: number;
     upcomingHearings: number;
+  }>;
+
+  // Beneficiary Dashboard Stats
+  getBeneficiaryDashboardStats(beneficiaryId: string): Promise<{
+    totalCases: number;
+    activeCases: number;
+    pendingIntake: number;
+    upcomingAppointments: number;
   }>;
 }
 
@@ -94,13 +144,62 @@ export class DatabaseStorage implements IStorage {
     return user;
   }
 
+  async updateUser(id: string, updates: Partial<InsertUser>): Promise<User | undefined> {
+    const [user] = await db
+      .update(schema.users)
+      .set(updates)
+      .where(eq(schema.users.id, id))
+      .returning();
+    return user;
+  }
+
   async getAllUsers(): Promise<User[]> {
     return db.select().from(schema.users);
+  }
+
+  async getStaffUsers(): Promise<User[]> {
+    return db.select().from(schema.users).where(eq(schema.users.userType, "staff"));
+  }
+
+  async getExpertUsers(): Promise<User[]> {
+    return db.select().from(schema.users).where(and(
+      eq(schema.users.userType, "staff"),
+      eq(schema.users.role, "expert")
+    ));
+  }
+
+  // Expert Profiles
+  async getExpertProfile(userId: string): Promise<ExpertProfile | undefined> {
+    const [profile] = await db.select().from(schema.expertProfiles).where(eq(schema.expertProfiles.userId, userId));
+    return profile;
+  }
+
+  async getAllExpertProfiles(): Promise<ExpertProfile[]> {
+    return db.select().from(schema.expertProfiles).where(eq(schema.expertProfiles.isAvailableForBooking, true));
+  }
+
+  async createExpertProfile(insertProfile: InsertExpertProfile): Promise<ExpertProfile> {
+    const [profile] = await db.insert(schema.expertProfiles).values(insertProfile).returning();
+    return profile;
+  }
+
+  async updateExpertProfile(userId: string, updates: Partial<InsertExpertProfile>): Promise<ExpertProfile | undefined> {
+    const [profile] = await db
+      .update(schema.expertProfiles)
+      .set({ ...updates, updatedAt: new Date() })
+      .where(eq(schema.expertProfiles.userId, userId))
+      .returning();
+    return profile;
   }
 
   // Beneficiaries
   async getBeneficiary(id: string): Promise<Beneficiary | undefined> {
     const [beneficiary] = await db.select().from(schema.beneficiaries).where(eq(schema.beneficiaries.id, id));
+    return beneficiary;
+  }
+
+  async getBeneficiaryByIdNumber(idNumber: string): Promise<Beneficiary | undefined> {
+    const [beneficiary] = await db.select().from(schema.beneficiaries).where(eq(schema.beneficiaries.idNumber, idNumber));
     return beneficiary;
   }
 
@@ -135,6 +234,10 @@ export class DatabaseStorage implements IStorage {
 
   async getAllIntakeRequests(): Promise<IntakeRequest[]> {
     return db.select().from(schema.intakeRequests).orderBy(desc(schema.intakeRequests.createdAt));
+  }
+
+  async getIntakeRequestsByBeneficiary(beneficiaryId: string): Promise<IntakeRequest[]> {
+    return db.select().from(schema.intakeRequests).where(eq(schema.intakeRequests.beneficiaryId, beneficiaryId));
   }
 
   async createIntakeRequest(insertRequest: InsertIntakeRequest): Promise<IntakeRequest> {
@@ -221,6 +324,117 @@ export class DatabaseStorage implements IStorage {
     return result.rowCount ? result.rowCount > 0 : false;
   }
 
+  // Appointments
+  async getAppointment(id: string): Promise<Appointment | undefined> {
+    const [appointment] = await db.select().from(schema.appointments).where(eq(schema.appointments.id, id));
+    return appointment;
+  }
+
+  async getAllAppointments(): Promise<Appointment[]> {
+    return db.select().from(schema.appointments).orderBy(desc(schema.appointments.scheduledDate));
+  }
+
+  async getAppointmentsByBeneficiary(beneficiaryId: string): Promise<Appointment[]> {
+    return db.select().from(schema.appointments)
+      .where(eq(schema.appointments.beneficiaryId, beneficiaryId))
+      .orderBy(desc(schema.appointments.scheduledDate));
+  }
+
+  async getAppointmentsByExpert(expertId: string): Promise<Appointment[]> {
+    return db.select().from(schema.appointments)
+      .where(eq(schema.appointments.expertId, expertId))
+      .orderBy(desc(schema.appointments.scheduledDate));
+  }
+
+  async createAppointment(insertAppointment: InsertAppointment): Promise<Appointment> {
+    const [appointment] = await db.insert(schema.appointments).values(insertAppointment).returning();
+    return appointment;
+  }
+
+  async updateAppointment(id: string, updates: Partial<InsertAppointment>): Promise<Appointment | undefined> {
+    const [appointment] = await db
+      .update(schema.appointments)
+      .set({ ...updates, updatedAt: new Date() })
+      .where(eq(schema.appointments.id, id))
+      .returning();
+    return appointment;
+  }
+
+  async deleteAppointment(id: string): Promise<boolean> {
+    const result = await db.delete(schema.appointments).where(eq(schema.appointments.id, id));
+    return result.rowCount ? result.rowCount > 0 : false;
+  }
+
+  // Availability Slots
+  async getAvailabilitySlotsByExpert(expertId: string): Promise<AvailabilitySlot[]> {
+    return db.select().from(schema.availabilitySlots)
+      .where(and(
+        eq(schema.availabilitySlots.expertId, expertId),
+        eq(schema.availabilitySlots.isActive, true)
+      ));
+  }
+
+  async createAvailabilitySlot(insertSlot: InsertAvailabilitySlot): Promise<AvailabilitySlot> {
+    const [slot] = await db.insert(schema.availabilitySlots).values(insertSlot).returning();
+    return slot;
+  }
+
+  async updateAvailabilitySlot(id: string, updates: Partial<InsertAvailabilitySlot>): Promise<AvailabilitySlot | undefined> {
+    const [slot] = await db
+      .update(schema.availabilitySlots)
+      .set(updates)
+      .where(eq(schema.availabilitySlots.id, id))
+      .returning();
+    return slot;
+  }
+
+  async deleteAvailabilitySlot(id: string): Promise<boolean> {
+    const result = await db.delete(schema.availabilitySlots).where(eq(schema.availabilitySlots.id, id));
+    return result.rowCount ? result.rowCount > 0 : false;
+  }
+
+  // Notifications
+  async getNotification(id: string): Promise<Notification | undefined> {
+    const [notification] = await db.select().from(schema.notifications).where(eq(schema.notifications.id, id));
+    return notification;
+  }
+
+  async getNotificationsByUser(userId: string): Promise<Notification[]> {
+    return db.select().from(schema.notifications)
+      .where(eq(schema.notifications.userId, userId))
+      .orderBy(desc(schema.notifications.createdAt));
+  }
+
+  async getUnreadNotifications(userId: string): Promise<Notification[]> {
+    return db.select().from(schema.notifications)
+      .where(and(
+        eq(schema.notifications.userId, userId),
+        eq(schema.notifications.isRead, false)
+      ))
+      .orderBy(desc(schema.notifications.createdAt));
+  }
+
+  async createNotification(insertNotification: InsertNotification): Promise<Notification> {
+    const [notification] = await db.insert(schema.notifications).values(insertNotification).returning();
+    return notification;
+  }
+
+  async markNotificationAsRead(id: string): Promise<Notification | undefined> {
+    const [notification] = await db
+      .update(schema.notifications)
+      .set({ isRead: true })
+      .where(eq(schema.notifications.id, id))
+      .returning();
+    return notification;
+  }
+
+  async markAllNotificationsAsRead(userId: string): Promise<void> {
+    await db
+      .update(schema.notifications)
+      .set({ isRead: true })
+      .where(eq(schema.notifications.userId, userId));
+  }
+
   // Audit Log
   async createAuditLog(insertLog: InsertAuditLog): Promise<AuditLog> {
     const [log] = await db.insert(schema.auditLog).values(insertLog).returning();
@@ -260,6 +474,48 @@ export class DatabaseStorage implements IStorage {
       activeCases: Number(activeCases?.count || 0),
       pendingIntake: Number(pendingIntake?.count || 0),
       upcomingHearings: Number(upcomingHearings?.count || 0),
+    };
+  }
+
+  // Beneficiary Dashboard Stats
+  async getBeneficiaryDashboardStats(beneficiaryId: string) {
+    const [totalCases] = await db
+      .select({ count: sql<number>`count(*)` })
+      .from(schema.cases)
+      .where(eq(schema.cases.beneficiaryId, beneficiaryId));
+    
+    const [activeCases] = await db
+      .select({ count: sql<number>`count(*)` })
+      .from(schema.cases)
+      .where(and(
+        eq(schema.cases.beneficiaryId, beneficiaryId),
+        eq(schema.cases.status, "in_progress")
+      ));
+    
+    const [pendingIntake] = await db
+      .select({ count: sql<number>`count(*)` })
+      .from(schema.intakeRequests)
+      .where(and(
+        eq(schema.intakeRequests.beneficiaryId, beneficiaryId),
+        eq(schema.intakeRequests.status, "pending")
+      ));
+    
+    const today = new Date();
+    
+    const [upcomingAppointments] = await db
+      .select({ count: sql<number>`count(*)` })
+      .from(schema.appointments)
+      .where(and(
+        eq(schema.appointments.beneficiaryId, beneficiaryId),
+        gte(schema.appointments.scheduledDate, today),
+        eq(schema.appointments.status, "confirmed")
+      ));
+
+    return {
+      totalCases: Number(totalCases?.count || 0),
+      activeCases: Number(activeCases?.count || 0),
+      pendingIntake: Number(pendingIntake?.count || 0),
+      upcomingAppointments: Number(upcomingAppointments?.count || 0),
     };
   }
 }

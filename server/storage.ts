@@ -24,6 +24,14 @@ import type {
   InsertAvailabilitySlot,
   Notification,
   InsertNotification,
+  SystemSettings,
+  InsertSystemSettings,
+  Rule,
+  InsertRule,
+  UserRule,
+  InsertUserRule,
+  Task,
+  InsertTask,
 } from "@shared/schema";
 
 const pool = new Pool({ connectionString: process.env.DATABASE_URL });
@@ -119,6 +127,43 @@ export interface IStorage {
     activeCases: number;
     pendingIntake: number;
     upcomingAppointments: number;
+  }>;
+
+  // System Settings
+  getSystemSettings(): Promise<SystemSettings | undefined>;
+  updateSystemSettings(settings: Partial<InsertSystemSettings>): Promise<SystemSettings>;
+
+  // Rules (Permission bundles)
+  getRule(id: string): Promise<Rule | undefined>;
+  getAllRules(): Promise<Rule[]>;
+  createRule(rule: InsertRule): Promise<Rule>;
+  updateRule(id: string, updates: Partial<InsertRule>): Promise<Rule | undefined>;
+  deleteRule(id: string): Promise<boolean>;
+
+  // User Rules
+  getUserRules(userId: string): Promise<Rule[]>;
+  assignRuleToUser(userId: string, ruleId: string): Promise<UserRule>;
+  removeRuleFromUser(userId: string, ruleId: string): Promise<boolean>;
+  getUserPermissions(userId: string): Promise<string[]>;
+
+  // Tasks
+  getTask(id: string): Promise<Task | undefined>;
+  getAllTasks(): Promise<Task[]>;
+  getTasksByAssignee(userId: string): Promise<Task[]>;
+  getTasksByCase(caseId: string): Promise<Task[]>;
+  createTask(task: InsertTask): Promise<Task>;
+  updateTask(id: string, updates: Partial<InsertTask>): Promise<Task | undefined>;
+  deleteTask(id: string): Promise<boolean>;
+
+  // Enhanced Dashboard Stats
+  getEnhancedDashboardStats(): Promise<{
+    totalCases: number;
+    activeCases: number;
+    pendingIntake: number;
+    upcomingHearings: number;
+    pendingTasks: number;
+    totalBeneficiaries: number;
+    upcomingSessions: number;
   }>;
 }
 
@@ -516,6 +561,182 @@ export class DatabaseStorage implements IStorage {
       activeCases: Number(activeCases?.count || 0),
       pendingIntake: Number(pendingIntake?.count || 0),
       upcomingAppointments: Number(upcomingAppointments?.count || 0),
+    };
+  }
+
+  // System Settings
+  async getSystemSettings(): Promise<SystemSettings | undefined> {
+    const [settings] = await db.select().from(schema.systemSettings).limit(1);
+    return settings;
+  }
+
+  async updateSystemSettings(updates: Partial<InsertSystemSettings>): Promise<SystemSettings> {
+    const existing = await this.getSystemSettings();
+    
+    if (existing) {
+      const [updated] = await db
+        .update(schema.systemSettings)
+        .set({ ...updates, updatedAt: new Date() })
+        .where(eq(schema.systemSettings.id, existing.id))
+        .returning();
+      return updated;
+    } else {
+      const [created] = await db.insert(schema.systemSettings).values(updates).returning();
+      return created;
+    }
+  }
+
+  // Rules (Permission bundles)
+  async getRule(id: string): Promise<Rule | undefined> {
+    const [rule] = await db.select().from(schema.rules).where(eq(schema.rules.id, id));
+    return rule;
+  }
+
+  async getAllRules(): Promise<Rule[]> {
+    return db.select().from(schema.rules).orderBy(desc(schema.rules.createdAt));
+  }
+
+  async createRule(insertRule: InsertRule): Promise<Rule> {
+    const [rule] = await db.insert(schema.rules).values(insertRule).returning();
+    return rule;
+  }
+
+  async updateRule(id: string, updates: Partial<InsertRule>): Promise<Rule | undefined> {
+    const [rule] = await db
+      .update(schema.rules)
+      .set({ ...updates, updatedAt: new Date() })
+      .where(eq(schema.rules.id, id))
+      .returning();
+    return rule;
+  }
+
+  async deleteRule(id: string): Promise<boolean> {
+    const result = await db.delete(schema.rules).where(eq(schema.rules.id, id));
+    return result.rowCount ? result.rowCount > 0 : false;
+  }
+
+  // User Rules
+  async getUserRules(userId: string): Promise<Rule[]> {
+    const userRules = await db
+      .select({ rule: schema.rules })
+      .from(schema.userRules)
+      .innerJoin(schema.rules, eq(schema.userRules.ruleId, schema.rules.id))
+      .where(eq(schema.userRules.userId, userId));
+    
+    return userRules.map(ur => ur.rule);
+  }
+
+  async assignRuleToUser(userId: string, ruleId: string): Promise<UserRule> {
+    const [userRule] = await db.insert(schema.userRules).values({ userId, ruleId }).returning();
+    return userRule;
+  }
+
+  async removeRuleFromUser(userId: string, ruleId: string): Promise<boolean> {
+    const result = await db
+      .delete(schema.userRules)
+      .where(and(
+        eq(schema.userRules.userId, userId),
+        eq(schema.userRules.ruleId, ruleId)
+      ));
+    return result.rowCount ? result.rowCount > 0 : false;
+  }
+
+  async getUserPermissions(userId: string): Promise<string[]> {
+    const rules = await this.getUserRules(userId);
+    const allPermissions = rules.flatMap(rule => rule.permissions);
+    return Array.from(new Set(allPermissions));
+  }
+
+  // Tasks
+  async getTask(id: string): Promise<Task | undefined> {
+    const [task] = await db.select().from(schema.tasks).where(eq(schema.tasks.id, id));
+    return task;
+  }
+
+  async getAllTasks(): Promise<Task[]> {
+    return db.select().from(schema.tasks).orderBy(desc(schema.tasks.createdAt));
+  }
+
+  async getTasksByAssignee(userId: string): Promise<Task[]> {
+    return db
+      .select()
+      .from(schema.tasks)
+      .where(eq(schema.tasks.assignedTo, userId))
+      .orderBy(desc(schema.tasks.createdAt));
+  }
+
+  async getTasksByCase(caseId: string): Promise<Task[]> {
+    return db
+      .select()
+      .from(schema.tasks)
+      .where(eq(schema.tasks.caseId, caseId))
+      .orderBy(desc(schema.tasks.createdAt));
+  }
+
+  async createTask(insertTask: InsertTask): Promise<Task> {
+    const [task] = await db.insert(schema.tasks).values(insertTask).returning();
+    return task;
+  }
+
+  async updateTask(id: string, updates: Partial<InsertTask>): Promise<Task | undefined> {
+    const [task] = await db
+      .update(schema.tasks)
+      .set({ ...updates, updatedAt: new Date() })
+      .where(eq(schema.tasks.id, id))
+      .returning();
+    return task;
+  }
+
+  async deleteTask(id: string): Promise<boolean> {
+    const result = await db.delete(schema.tasks).where(eq(schema.tasks.id, id));
+    return result.rowCount ? result.rowCount > 0 : false;
+  }
+
+  // Enhanced Dashboard Stats
+  async getEnhancedDashboardStats() {
+    const [totalCases] = await db.select({ count: sql<number>`count(*)` }).from(schema.cases);
+    const [activeCases] = await db
+      .select({ count: sql<number>`count(*)` })
+      .from(schema.cases)
+      .where(eq(schema.cases.status, "in_progress"));
+    const [pendingIntake] = await db
+      .select({ count: sql<number>`count(*)` })
+      .from(schema.intakeRequests)
+      .where(eq(schema.intakeRequests.status, "pending"));
+    const [totalBeneficiaries] = await db.select({ count: sql<number>`count(*)` }).from(schema.beneficiaries);
+    const [pendingTasks] = await db
+      .select({ count: sql<number>`count(*)` })
+      .from(schema.tasks)
+      .where(eq(schema.tasks.status, "pending"));
+    
+    const today = new Date();
+    const nextWeek = new Date(today);
+    nextWeek.setDate(nextWeek.getDate() + 7);
+    
+    const [upcomingHearings] = await db
+      .select({ count: sql<number>`count(*)` })
+      .from(schema.hearings)
+      .where(and(
+        gte(schema.hearings.scheduledDate, today),
+        lte(schema.hearings.scheduledDate, nextWeek)
+      ));
+
+    const [upcomingSessions] = await db
+      .select({ count: sql<number>`count(*)` })
+      .from(schema.sessions)
+      .where(and(
+        gte(schema.sessions.gregorianDate, today),
+        lte(schema.sessions.gregorianDate, nextWeek)
+      ));
+
+    return {
+      totalCases: Number(totalCases?.count || 0),
+      activeCases: Number(activeCases?.count || 0),
+      pendingIntake: Number(pendingIntake?.count || 0),
+      upcomingHearings: Number(upcomingHearings?.count || 0),
+      pendingTasks: Number(pendingTasks?.count || 0),
+      totalBeneficiaries: Number(totalBeneficiaries?.count || 0),
+      upcomingSessions: Number(upcomingSessions?.count || 0),
     };
   }
 }

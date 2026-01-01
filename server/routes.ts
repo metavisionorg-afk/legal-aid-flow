@@ -11,7 +11,10 @@ import {
   insertExpertProfileSchema,
   insertAppointmentSchema,
   insertAvailabilitySlotSchema,
-  insertNotificationSchema
+  insertNotificationSchema,
+  insertSystemSettingsSchema,
+  insertRuleSchema,
+  insertTaskSchema
 } from "@shared/schema";
 import { fromZodError } from "zod-validation-error";
 import bcrypt from "bcrypt";
@@ -818,6 +821,246 @@ export async function registerRoutes(
       const users = await storage.getAllUsers();
       const usersWithoutPasswords = users.map(({ password, ...user }) => user);
       res.json(usersWithoutPasswords);
+    } catch (error: any) {
+      res.status(500).json({ error: error.message });
+    }
+  });
+
+  // ========== SYSTEM SETTINGS ROUTES ==========
+
+  app.get("/api/system-settings", requireStaff, async (req, res) => {
+    try {
+      const settings = await storage.getSystemSettings();
+      res.json(settings || {});
+    } catch (error: any) {
+      res.status(500).json({ error: error.message });
+    }
+  });
+
+  app.patch("/api/system-settings", requireStaff, async (req: AuthRequest, res) => {
+    try {
+      const user = req.user as User;
+      const settings = await storage.updateSystemSettings(req.body);
+      await createAudit(user.id, "update", "system_settings", settings.id, "Updated system settings", req.ip);
+      res.json(settings);
+    } catch (error: any) {
+      res.status(500).json({ error: error.message });
+    }
+  });
+
+  // ========== RULES & PERMISSIONS ROUTES ==========
+
+  app.get("/api/rules", requireStaff, async (req, res) => {
+    try {
+      const rules = await storage.getAllRules();
+      res.json(rules);
+    } catch (error: any) {
+      res.status(500).json({ error: error.message });
+    }
+  });
+
+  app.get("/api/rules/:id", requireStaff, async (req, res) => {
+    try {
+      const rule = await storage.getRule(req.params.id);
+      if (!rule) {
+        return res.status(404).json({ error: "Rule not found" });
+      }
+      res.json(rule);
+    } catch (error: any) {
+      res.status(500).json({ error: error.message });
+    }
+  });
+
+  app.post("/api/rules", requireStaff, async (req: AuthRequest, res) => {
+    try {
+      const result = insertRuleSchema.safeParse(req.body);
+      if (!result.success) {
+        return res.status(400).json({ error: fromZodError(result.error).message });
+      }
+      const user = req.user as User;
+      const rule = await storage.createRule(result.data);
+      await createAudit(user.id, "create", "rule", rule.id, `Created rule: ${rule.name}`, req.ip);
+      res.json(rule);
+    } catch (error: any) {
+      res.status(500).json({ error: error.message });
+    }
+  });
+
+  app.patch("/api/rules/:id", requireStaff, async (req: AuthRequest, res) => {
+    try {
+      const user = req.user as User;
+      const rule = await storage.updateRule(req.params.id, req.body);
+      if (!rule) {
+        return res.status(404).json({ error: "Rule not found" });
+      }
+      await createAudit(user.id, "update", "rule", rule.id, `Updated rule: ${rule.name}`, req.ip);
+      res.json(rule);
+    } catch (error: any) {
+      res.status(500).json({ error: error.message });
+    }
+  });
+
+  app.delete("/api/rules/:id", requireStaff, async (req: AuthRequest, res) => {
+    try {
+      const user = req.user as User;
+      const success = await storage.deleteRule(req.params.id);
+      if (!success) {
+        return res.status(404).json({ error: "Rule not found" });
+      }
+      await createAudit(user.id, "delete", "rule", req.params.id, "Deleted rule", req.ip);
+      res.json({ success: true });
+    } catch (error: any) {
+      res.status(500).json({ error: error.message });
+    }
+  });
+
+  // User Rules (assign/remove rules from users)
+  app.get("/api/users/:userId/rules", requireStaff, async (req, res) => {
+    try {
+      const rules = await storage.getUserRules(req.params.userId);
+      res.json(rules);
+    } catch (error: any) {
+      res.status(500).json({ error: error.message });
+    }
+  });
+
+  app.post("/api/users/:userId/rules/:ruleId", requireStaff, async (req: AuthRequest, res) => {
+    try {
+      const user = req.user as User;
+      const userRule = await storage.assignRuleToUser(req.params.userId, req.params.ruleId);
+      await createAudit(user.id, "assign_rule", "user", req.params.userId, `Assigned rule ${req.params.ruleId}`, req.ip);
+      res.json(userRule);
+    } catch (error: any) {
+      res.status(500).json({ error: error.message });
+    }
+  });
+
+  app.delete("/api/users/:userId/rules/:ruleId", requireStaff, async (req: AuthRequest, res) => {
+    try {
+      const user = req.user as User;
+      const success = await storage.removeRuleFromUser(req.params.userId, req.params.ruleId);
+      if (!success) {
+        return res.status(404).json({ error: "User rule not found" });
+      }
+      await createAudit(user.id, "remove_rule", "user", req.params.userId, `Removed rule ${req.params.ruleId}`, req.ip);
+      res.json({ success: true });
+    } catch (error: any) {
+      res.status(500).json({ error: error.message });
+    }
+  });
+
+  app.get("/api/users/:userId/permissions", requireStaff, async (req, res) => {
+    try {
+      const permissions = await storage.getUserPermissions(req.params.userId);
+      res.json(permissions);
+    } catch (error: any) {
+      res.status(500).json({ error: error.message });
+    }
+  });
+
+  // ========== TASKS ROUTES ==========
+
+  app.get("/api/tasks", requireStaff, async (req, res) => {
+    try {
+      const tasks = await storage.getAllTasks();
+      res.json(tasks);
+    } catch (error: any) {
+      res.status(500).json({ error: error.message });
+    }
+  });
+
+  app.get("/api/tasks/:id", requireStaff, async (req, res) => {
+    try {
+      const task = await storage.getTask(req.params.id);
+      if (!task) {
+        return res.status(404).json({ error: "Task not found" });
+      }
+      res.json(task);
+    } catch (error: any) {
+      res.status(500).json({ error: error.message });
+    }
+  });
+
+  app.get("/api/users/:userId/tasks", requireStaff, async (req, res) => {
+    try {
+      const tasks = await storage.getTasksByAssignee(req.params.userId);
+      res.json(tasks);
+    } catch (error: any) {
+      res.status(500).json({ error: error.message });
+    }
+  });
+
+  app.get("/api/cases/:caseId/tasks", requireStaff, async (req, res) => {
+    try {
+      const tasks = await storage.getTasksByCase(req.params.caseId);
+      res.json(tasks);
+    } catch (error: any) {
+      res.status(500).json({ error: error.message });
+    }
+  });
+
+  app.post("/api/tasks", requireStaff, async (req: AuthRequest, res) => {
+    try {
+      const result = insertTaskSchema.safeParse(req.body);
+      if (!result.success) {
+        return res.status(400).json({ error: fromZodError(result.error).message });
+      }
+      const user = req.user as User;
+      const task = await storage.createTask({
+        ...result.data,
+        assignedBy: user.id,
+      });
+      
+      // Send notification to assignee
+      await storage.createNotification({
+        userId: task.assignedTo,
+        type: "task_assigned",
+        title: "New Task Assigned",
+        message: `You have been assigned a new task: ${task.title}`,
+        relatedEntityId: task.id,
+      });
+
+      await createAudit(user.id, "create", "task", task.id, `Created task: ${task.title}`, req.ip);
+      res.json(task);
+    } catch (error: any) {
+      res.status(500).json({ error: error.message });
+    }
+  });
+
+  app.patch("/api/tasks/:id", requireStaff, async (req: AuthRequest, res) => {
+    try {
+      const user = req.user as User;
+      const task = await storage.updateTask(req.params.id, req.body);
+      if (!task) {
+        return res.status(404).json({ error: "Task not found" });
+      }
+      await createAudit(user.id, "update", "task", task.id, `Updated task: ${task.title}`, req.ip);
+      res.json(task);
+    } catch (error: any) {
+      res.status(500).json({ error: error.message });
+    }
+  });
+
+  app.delete("/api/tasks/:id", requireStaff, async (req: AuthRequest, res) => {
+    try {
+      const user = req.user as User;
+      const success = await storage.deleteTask(req.params.id);
+      if (!success) {
+        return res.status(404).json({ error: "Task not found" });
+      }
+      await createAudit(user.id, "delete", "task", req.params.id, "Deleted task", req.ip);
+      res.json({ success: true });
+    } catch (error: any) {
+      res.status(500).json({ error: error.message });
+    }
+  });
+
+  // ========== ENHANCED DASHBOARD STATS ==========
+
+  app.get("/api/dashboard/enhanced-stats", requireStaff, async (req, res) => {
+    try {
+      const stats = await storage.getEnhancedDashboardStats();
+      res.json(stats);
     } catch (error: any) {
       res.status(500).json({ error: error.message });
     }

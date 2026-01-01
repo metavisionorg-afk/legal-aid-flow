@@ -1,9 +1,11 @@
-import { Switch, Route, Redirect, useLocation } from "wouter";
+import { Switch, Route, useLocation } from "wouter";
 import { queryClient } from "./lib/queryClient";
 import { QueryClientProvider } from "@tanstack/react-query";
 import { Toaster } from "@/components/ui/toaster";
 import { TooltipProvider } from "@/components/ui/tooltip";
 import { AuthProvider, useAuth } from "./contexts/AuthContext";
+import { Layout } from "@/components/layout/Layout";
+import { PortalLayout } from "@/components/layout/PortalLayout";
 import NotFound from "@/pages/not-found";
 import Login from "@/pages/Login";
 import Dashboard from "@/pages/Dashboard";
@@ -13,11 +15,14 @@ import Cases from "@/pages/Cases";
 import CalendarPage from "@/pages/Calendar";
 import Reports from "@/pages/Reports";
 import Settings from "@/pages/Settings";
+import PortalLogin from "@/pages/portal/PortalLogin";
+import PortalRegister from "@/pages/portal/PortalRegister";
+import PortalDashboard from "@/pages/portal/PortalDashboard";
 
 // Initialize i18n
 import "./i18n";
 
-function ProtectedRoute({ component: Component, ...rest }: any) {
+function StaffRoute({ component: Component }: any) {
   const { user, loading } = useAuth();
   const [, setLocation] = useLocation();
 
@@ -34,34 +39,93 @@ function ProtectedRoute({ component: Component, ...rest }: any) {
     return null;
   }
 
-  return <Component {...rest} />;
+  if (user.userType !== "staff") {
+    setLocation("/portal");
+    return null;
+  }
+
+  return (
+    <Layout>
+      <Component />
+    </Layout>
+  );
+}
+
+function PortalRoute({ component: Component }: any) {
+  const { user, loading } = useAuth();
+  const [, setLocation] = useLocation();
+
+  if (loading) {
+    return (
+      <div className="min-h-screen flex items-center justify-center">
+        <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-primary" />
+      </div>
+    );
+  }
+
+  if (!user) {
+    setLocation("/portal/login");
+    return null;
+  }
+
+  if (user.userType !== "beneficiary") {
+    setLocation("/");
+    return null;
+  }
+
+  return (
+    <PortalLayout>
+      <Component />
+    </PortalLayout>
+  );
 }
 
 function Router() {
   return (
     <Switch>
+      {/* Staff Routes */}
       <Route path="/login" component={Login} />
       <Route path="/">
-        {() => <ProtectedRoute component={Dashboard} />}
+        {() => <StaffRoute component={Dashboard} />}
       </Route>
       <Route path="/intake">
-        {() => <ProtectedRoute component={Intake} />}
+        {() => <StaffRoute component={Intake} />}
       </Route>
       <Route path="/beneficiaries">
-        {() => <ProtectedRoute component={Beneficiaries} />}
+        {() => <StaffRoute component={Beneficiaries} />}
       </Route>
       <Route path="/cases">
-        {() => <ProtectedRoute component={Cases} />}
+        {() => <StaffRoute component={Cases} />}
       </Route>
       <Route path="/calendar">
-        {() => <ProtectedRoute component={CalendarPage} />}
+        {() => <StaffRoute component={CalendarPage} />}
       </Route>
       <Route path="/reports">
-        {() => <ProtectedRoute component={Reports} />}
+        {() => <StaffRoute component={Reports} />}
       </Route>
       <Route path="/settings">
-        {() => <ProtectedRoute component={Settings} />}
+        {() => <StaffRoute component={Settings} />}
       </Route>
+      
+      {/* Portal Routes */}
+      <Route path="/portal/login" component={PortalLogin} />
+      <Route path="/portal/register" component={PortalRegister} />
+      <Route path="/portal">
+        {() => <PortalRoute component={PortalDashboard} />}
+      </Route>
+      <Route path="/portal/my-cases">
+        {() => <PortalRoute component={PortalDashboard} />}
+      </Route>
+      <Route path="/portal/my-requests">
+        {() => <PortalRoute component={PortalDashboard} />}
+      </Route>
+      <Route path="/portal/my-appointments">
+        {() => <PortalRoute component={PortalDashboard} />}
+      </Route>
+      <Route path="/portal/profile">
+        {() => <PortalRoute component={PortalDashboard} />}
+      </Route>
+      
       <Route component={NotFound} />
     </Switch>
   );

@@ -26,15 +26,64 @@
     "date": "Date",
     "actions": "Actions"
   },
+  "portal": {
+    "title": "Client Portal",
+    "register": "Create Account",
+    "welcome": "Welcome",
+    "my_profile": "My Profile",
+    "my_cases": "My Cases",
+    "my_requests": "My Requests",
+    "my_appointments": "My Appointments",
+    "book_appointment": "Book Appointment",
+    "experts": "Legal Experts",
+    "new_request": "Submit Request",
+    "account_created": "Account created successfully",
+    "register_subtitle": "Access legal aid services",
+    "have_account": "Already have an account?",
+    "no_account": "Don't have an account?",
+    "register_now": "Register now",
+    "username": "Username",
+    "confirm_password": "Confirm Password",
+    "full_name": "Full Name",
+    "id_number": "National ID / Passport Number",
+    "phone": "Phone Number",
+    "create_account": "Create Account"
+  },
+  "appointments": {
+    "title": "Appointments",
+    "book_new": "Book New Appointment",
+    "select_expert": "Select Expert",
+    "select_date": "Select Date & Time",
+    "appointment_type": "Appointment Type",
+    "online": "Online Consultation",
+    "in_person": "In-Person Meeting",
+    "topic": "Topic / Subject",
+    "notes": "Additional Notes",
+    "upcoming": "Upcoming Appointments",
+    "past": "Past Appointments",
+    "status_pending": "Pending Confirmation",
+    "status_confirmed": "Confirmed",
+    "status_cancelled": "Cancelled",
+    "status_completed": "Completed",
+    "expert_profile": "Expert Profile",
+    "specialties": "Specialties",
+    "languages": "Languages Spoken",
+    "availability": "Availability",
+    "book_with_expert": "Book with this expert",
+    "confirm_booking": "Confirm Booking",
+    "cancel_appointment": "Cancel Appointment"
+  },
   "dashboard": {
     "total_cases": "Total Cases",
     "active_cases": "Active Cases",
     "pending_intake": "Pending Intake",
     "upcoming_hearings": "Upcoming Hearings",
+    "upcoming_appointments": "Upcoming Appointments",
     "recent_activity": "Recent Activity",
     "case_distribution": "Case Distribution",
     "by_type": "By Type",
-    "by_status": "By Status"
+    "by_status": "By Status",
+    "welcome_message": "Welcome to your dashboard"
   },
   "intake": {
     "new_request": "New Intake Request",
@@ -48,23 +97,53 @@
     "case_type": "Case Type",
     "description": "Description",
     "upload_docs": "Upload Documents",
-    "submit": "Submit Request"
+    "submit": "Submit Request",
+    "request_submitted": "Request submitted successfully",
+    "under_review": "Your request is being reviewed"
+  },
+  "cases": {
+    "case_number": "Case Number",
+    "case_title": "Case Title",
+    "view_details": "View Details",
+    "no_cases": "No cases found",
+    "case_status": "Case Status",
+    "last_updated": "Last Updated"
+  },
+  "profile": {
+    "title": "My Profile",
+    "edit": "Edit Profile",
+    "save": "Save Changes",
+    "personal_details": "Personal Details",
+    "contact_info": "Contact Information",
+    "address": "Address",
+    "date_of_birth": "Date of Birth",
+    "nationality": "Nationality",
+    "gender": "Gender",
+    "male": "Male",
+    "female": "Female",
+    "other": "Other"
   },
   "status": {
     "open": "Open",
     "closed": "Closed",
     "pending": "Pending",
+    "approved": "Approved",
+    "rejected": "Rejected",
     "in_progress": "In Progress",
     "urgent": "Urgent",
+    "under_review": "Under Review",
     "high": "High",
     "medium": "Medium",
-    "low": "Low"
+    "low": "Low",
+    "active": "Active",
+    "archived": "Archived"
   },
   "calendar": {
     "upcoming_events": "Upcoming Events",
     "hearing": "Hearing",
     "meeting": "Meeting",
-    "deadline": "Deadline"
+    "deadline": "Deadline",
+    "appointment": "Appointment"
   },
   "reports": {
     "case_distribution_title": "Case Distribution by Type",
@@ -93,5 +172,20 @@
     "audit_log": "System Audit Log",
     "audit_desc": "Track all system activities",
     "access": "Access"
+  },
+  "common": {
+    "loading": "Loading...",
+    "error": "Error",
+    "success": "Success",
+    "cancel": "Cancel",
+    "confirm": "Confirm",
+    "delete": "Delete",
+    "edit": "Edit",
+    "save": "Save",
+    "close": "Close",
+    "back": "Back",
+    "next": "Next",
+    "submit": "Submit",
+    "view": "View"
   }
 }

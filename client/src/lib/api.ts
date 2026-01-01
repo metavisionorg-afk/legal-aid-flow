@@ -40,7 +40,40 @@ export const authAPI = {
     }),
 };
 
-// Beneficiaries API
+// Portal API (Beneficiary)
+export const portalAPI = {
+  register: (data: any) =>
+    fetchAPI("/portal/register", {
+      method: "POST",
+      body: JSON.stringify(data),
+    }),
+  
+  getProfile: () =>
+    fetchAPI("/portal/profile"),
+  
+  updateProfile: (data: any) =>
+    fetchAPI("/portal/profile", {
+      method: "PATCH",
+      body: JSON.stringify(data),
+    }),
+  
+  getMyCases: () =>
+    fetchAPI("/portal/my-cases"),
+  
+  getMyIntakeRequests: () =>
+    fetchAPI("/portal/my-intake-requests"),
+  
+  createIntakeRequest: (data: any) =>
+    fetchAPI("/portal/intake-requests", {
+      method: "POST",
+      body: JSON.stringify(data),
+    }),
+  
+  getDashboardStats: () =>
+    fetchAPI("/portal/dashboard-stats"),
+};
+
+// Beneficiaries API (Staff only)
 export const beneficiariesAPI = {
   getAll: () => fetchAPI("/beneficiaries"),
   getOne: (id: string) => fetchAPI(`/beneficiaries/${id}`),
@@ -58,7 +91,7 @@ export const beneficiariesAPI = {
     fetchAPI(`/beneficiaries/${id}`, { method: "DELETE" }),
 };
 
-// Intake Requests API
+// Intake Requests API (Staff only)
 export const intakeAPI = {
   getAll: () => fetchAPI("/intake-requests"),
   getOne: (id: string) => fetchAPI(`/intake-requests/${id}`),
@@ -74,7 +107,7 @@ export const intakeAPI = {
     }),
 };
 
-// Cases API
+// Cases API (Staff only)
 export const casesAPI = {
   getAll: () => fetchAPI("/cases"),
   getOne: (id: string) => fetchAPI(`/cases/${id}`),
@@ -92,7 +125,7 @@ export const casesAPI = {
     fetchAPI(`/cases/${id}`, { method: "DELETE" }),
 };
 
-// Hearings API
+// Hearings API (Staff only)
 export const hearingsAPI = {
   getAll: () => fetchAPI("/hearings"),
   getOne: (id: string) => fetchAPI(`/hearings/${id}`),
@@ -110,18 +143,62 @@ export const hearingsAPI = {
     fetchAPI(`/hearings/${id}`, { method: "DELETE" }),
 };
 
-// Dashboard API
+// Experts API
+export const expertsAPI = {
+  getAll: () => fetchAPI("/experts"),
+  getOne: (userId: string) => fetchAPI(`/experts/${userId}`),
+  create: (data: any) =>
+    fetchAPI("/experts", {
+      method: "POST",
+      body: JSON.stringify(data),
+    }),
+  update: (userId: string, data: any) =>
+    fetchAPI(`/experts/${userId}`, {
+      method: "PATCH",
+      body: JSON.stringify(data),
+    }),
+};
+
+// Appointments API
+export const appointmentsAPI = {
+  getAll: () => fetchAPI("/appointments"),
+  getOne: (id: string) => fetchAPI(`/appointments/${id}`),
+  create: (data: any) =>
+    fetchAPI("/appointments", {
+      method: "POST",
+      body: JSON.stringify(data),
+    }),
+  update: (id: string, data: any) =>
+    fetchAPI(`/appointments/${id}`, {
+      method: "PATCH",
+      body: JSON.stringify(data),
+    }),
+  delete: (id: string) =>
+    fetchAPI(`/appointments/${id}`, { method: "DELETE" }),
+};
+
+// Notifications API
+export const notificationsAPI = {
+  getAll: () => fetchAPI("/notifications"),
+  getUnread: () => fetchAPI("/notifications/unread"),
+  markAsRead: (id: string) =>
+    fetchAPI(`/notifications/${id}/read`, { method: "PATCH" }),
+  markAllAsRead: () =>
+    fetchAPI("/notifications/mark-all-read", { method: "POST" }),
+};
+
+// Dashboard API (Staff only)
 export const dashboardAPI = {
   getStats: () => fetchAPI("/dashboard/stats"),
 };
 
-// Audit Logs API
+// Audit Logs API (Staff only)
 export const auditAPI = {
   getLogs: (limit?: number) =>
     fetchAPI(`/audit-logs${limit ? `?limit=${limit}` : ""}`),
 };
 
-// Users API
+// Users API (Staff only)
 export const usersAPI = {
   getAll: () => fetchAPI("/users"),
 };

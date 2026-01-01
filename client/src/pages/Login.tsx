@@ -5,14 +5,40 @@ import { Card, CardContent, CardDescription, CardFooter, CardHeader, CardTitle }
 import { Label } from "@/components/ui/label";
 import { LanguageSwitcher } from "@/components/LanguageSwitcher";
 import { useLocation } from "wouter";
+import { useState } from "react";
+import { authAPI } from "@/lib/api";
+import { useToast } from "@/hooks/use-toast";
 
 export default function Login() {
   const { t } = useTranslation();
   const [, setLocation] = useLocation();
+  const { toast } = useToast();
+  const [loading, setLoading] = useState(false);
 
-  const handleLogin = (e: React.FormEvent) => {
+  const handleLogin = async (e: React.FormEvent<HTMLFormElement>) => {
     e.preventDefault();
-    setLocation("/");
+    setLoading(true);
+
+    const formData = new FormData(e.currentTarget);
+    const username = formData.get("username") as string;
+    const password = formData.get("password") as string;
+
+    try {
+      await authAPI.login(username, password);
+      toast({
+        title: "Success",
+        description: "Logged in successfully",
+      });
+      setLocation("/");
+    } catch (error: any) {
+      toast({
+        title: "Error",
+        description: error.message || "Invalid credentials",
+        variant: "destructive",
+      });
+    } finally {
+      setLoading(false);
+    }
   };
 
   return (
@@ -34,8 +60,16 @@ export default function Login() {
         <form onSubmit={handleLogin}>
           <CardContent className="space-y-4">
             <div className="space-y-2">
-              <Label htmlFor="email">{t('app.email')}</Label>
-              <Input id="email" type="email" placeholder="m@example.com" required />
+              <Label htmlFor="username">Username</Label>
+              <Input 
+                id="username" 
+                name="username" 
+                type="text" 
+                placeholder="admin or lawyer" 
+                required 
+                defaultValue="admin"
+                data-testid="input-username"
+              />
             </div>
             <div className="space-y-2">
               <div className="flex items-center justify-between">
@@ -44,12 +78,22 @@ export default function Login() {
                   {t('app.forgot_password')}
                 </a>
               </div>
-              <Input id="password" type="password" required />
+              <Input 
+                id="password" 
+                name="password" 
+                type="password" 
+                required 
+                defaultValue="admin123"
+                data-testid="input-password"
+              />
+            </div>
+            <div className="text-xs text-muted-foreground">
+              Demo: admin/admin123 or lawyer/lawyer123
             </div>
           </CardContent>
           <CardFooter>
-            <Button type="submit" className="w-full">
-              {t('app.sign_in')}
+            <Button type="submit" className="w-full" disabled={loading} data-testid="button-login">
+              {loading ? "Signing in..." : t('app.sign_in')}
             </Button>
           </CardFooter>
         </form>

@@ -20,45 +20,23 @@ import {
 } from "@/components/ui/dropdown-menu";
 import { Badge } from "@/components/ui/badge";
 import { MoreHorizontal, Plus, Search, Filter } from "lucide-react";
+import { useQuery } from "@tanstack/react-query";
+import { beneficiariesAPI } from "@/lib/api";
+import { Skeleton } from "@/components/ui/skeleton";
 
 export default function Beneficiaries() {
   const { t } = useTranslation();
 
-  const beneficiaries = [
-    {
-      id: "BEN-001",
-      name: "Ahmed Salem",
-      idNumber: "987654321",
-      phone: "+962 79 123 4567",
-      status: "Active",
-      cases: 2,
-      lastContact: "2023-10-15",
-    },
-    {
-      id: "BEN-002",
-      name: "Layla Mahmoud",
-      idNumber: "123456789",
-      phone: "+962 78 987 6543",
-      status: "Pending",
-      cases: 1,
-      lastContact: "2023-10-20",
-    },
-    {
-      id: "BEN-003",
-      name: "Omar Khalid",
-      idNumber: "456789123",
-      phone: "+962 77 654 3210",
-      status: "Archived",
-      cases: 0,
-      lastContact: "2023-09-01",
-    },
-  ];
+  const { data: beneficiaries, isLoading } = useQuery({
+    queryKey: ["beneficiaries"],
+    queryFn: beneficiariesAPI.getAll,
+  });
 
   return (
     <Layout>
       <div className="flex flex-col sm:flex-row items-start sm:items-center justify-between gap-4">
         <h1 className="text-3xl font-bold tracking-tight">{t('app.beneficiaries')}</h1>
-        <Button>
+        <Button data-testid="button-add-beneficiary">
           <Plus className="mr-2 h-4 w-4 rtl:ml-2 rtl:mr-0" />
           {t('app.add_new')}
         </Button>
@@ -70,9 +48,10 @@ export default function Beneficiaries() {
           <Input
             placeholder={t('app.search')}
             className="pl-9 rtl:pr-9 rtl:pl-3"
+            data-testid="input-search"
           />
         </div>
-        <Button variant="outline" size="icon">
+        <Button variant="outline" size="icon" data-testid="button-filter">
           <Filter className="h-4 w-4" />
         </Button>
       </div>
@@ -90,36 +69,55 @@ export default function Beneficiaries() {
             </TableRow>
           </TableHeader>
           <TableBody>
-            {beneficiaries.map((ben) => (
-              <TableRow key={ben.id}>
-                <TableCell className="font-medium">{ben.id}</TableCell>
-                <TableCell>{ben.name}</TableCell>
-                <TableCell>{ben.idNumber}</TableCell>
-                <TableCell className="text-muted-foreground">{ben.phone}</TableCell>
-                <TableCell>
-                  <Badge variant={ben.status === "Active" ? "default" : "secondary"}>
-                    {ben.status}
-                  </Badge>
-                </TableCell>
-                <TableCell className="text-right rtl:text-left">
-                  <DropdownMenu>
-                    <DropdownMenuTrigger asChild>
-                      <Button variant="ghost" size="icon">
-                        <MoreHorizontal className="h-4 w-4" />
-                        <span className="sr-only">Actions</span>
-                      </Button>
-                    </DropdownMenuTrigger>
-                    <DropdownMenuContent align="end">
-                      <DropdownMenuLabel>Actions</DropdownMenuLabel>
-                      <DropdownMenuItem>View Profile</DropdownMenuItem>
-                      <DropdownMenuItem>Edit Details</DropdownMenuItem>
-                      <DropdownMenuSeparator />
-                      <DropdownMenuItem className="text-destructive">Archive</DropdownMenuItem>
-                    </DropdownMenuContent>
-                  </DropdownMenu>
+            {isLoading ? (
+              Array.from({ length: 3 }).map((_, i) => (
+                <TableRow key={i}>
+                  <TableCell><Skeleton className="h-4 w-20" /></TableCell>
+                  <TableCell><Skeleton className="h-4 w-32" /></TableCell>
+                  <TableCell><Skeleton className="h-4 w-24" /></TableCell>
+                  <TableCell><Skeleton className="h-4 w-28" /></TableCell>
+                  <TableCell><Skeleton className="h-4 w-16" /></TableCell>
+                  <TableCell><Skeleton className="h-4 w-10" /></TableCell>
+                </TableRow>
+              ))
+            ) : beneficiaries && beneficiaries.length > 0 ? (
+              beneficiaries.map((ben: any) => (
+                <TableRow key={ben.id} data-testid={`row-beneficiary-${ben.id}`}>
+                  <TableCell className="font-medium">{ben.id.slice(0, 8)}</TableCell>
+                  <TableCell>{ben.fullName}</TableCell>
+                  <TableCell>{ben.idNumber}</TableCell>
+                  <TableCell className="text-muted-foreground">{ben.phone}</TableCell>
+                  <TableCell>
+                    <Badge variant={ben.status === "active" ? "default" : "secondary"}>
+                      {ben.status}
+                    </Badge>
+                  </TableCell>
+                  <TableCell className="text-right rtl:text-left">
+                    <DropdownMenu>
+                      <DropdownMenuTrigger asChild>
+                        <Button variant="ghost" size="icon" data-testid={`button-actions-${ben.id}`}>
+                          <MoreHorizontal className="h-4 w-4" />
+                          <span className="sr-only">Actions</span>
+                        </Button>
+                      </DropdownMenuTrigger>
+                      <DropdownMenuContent align="end">
+                        <DropdownMenuLabel>Actions</DropdownMenuLabel>
+                        <DropdownMenuItem>View Profile</DropdownMenuItem>
+                        <DropdownMenuItem>Edit Details</DropdownMenuItem>
+                        <DropdownMenuSeparator />
+                        <DropdownMenuItem className="text-destructive">Archive</DropdownMenuItem>
+                      </DropdownMenuContent>
+                    </DropdownMenu>
+                  </TableCell>
+                </TableRow>
+              ))
+            ) : (
+              <TableRow>
+                <TableCell colSpan={6} className="text-center text-muted-foreground py-8">
+                  No beneficiaries found
                 </TableCell>
               </TableRow>
-            ))}
+            )}
           </TableBody>
         </Table>
       </div>

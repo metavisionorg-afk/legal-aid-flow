@@ -8,9 +8,18 @@ import { Button } from "@/components/ui/button";
 import { Switch } from "@/components/ui/switch";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
 import { Badge } from "@/components/ui/badge";
+import { useQuery } from "@tanstack/react-query";
+import { auditAPI } from "@/lib/api";
+import { Skeleton } from "@/components/ui/skeleton";
+import { format } from "date-fns";
 
 export default function Settings() {
   const { t } = useTranslation();
+
+  const { data: auditLogs, isLoading } = useQuery({
+    queryKey: ["audit-logs"],
+    queryFn: () => auditAPI.getLogs(20),
+  });
 
   return (
     <Layout>
@@ -97,17 +106,37 @@ export default function Settings() {
               <CardDescription>{t('settings.audit_desc')}</CardDescription>
             </CardHeader>
             <CardContent>
-               <div className="space-y-4">
-                {[1, 2, 3].map((_, i) => (
-                  <div key={i} className="flex items-center justify-between border-b pb-4 last:border-0 last:pb-0">
-                    <div className="space-y-1">
-                      <p className="text-sm font-medium">User "Sarah Ahmed" accessed Case #2023-001</p>
-                      <p className="text-xs text-muted-foreground">IP: 192.168.1.1 • 2 mins ago</p>
+              {isLoading ? (
+                <div className="space-y-4">
+                  {Array.from({ length: 3 }).map((_, i) => (
+                    <div key={i} className="border-b pb-4">
+                      <Skeleton className="h-5 w-3/4 mb-2" />
+                      <Skeleton className="h-3 w-1/2" />
                     </div>
-                    <Badge variant="outline">{t('settings.access')}</Badge>
-                  </div>
-                ))}
-              </div>
+                  ))}
+                </div>
+              ) : auditLogs && auditLogs.length > 0 ? (
+                <div className="space-y-4">
+                  {auditLogs.map((log: any) => (
+                    <div key={log.id} className="flex items-center justify-between border-b pb-4 last:border-0 last:pb-0">
+                      <div className="space-y-1">
+                        <p className="text-sm font-medium">
+                          {log.action.charAt(0).toUpperCase() + log.action.slice(1)} {log.entity}
+                        </p>
+                        <p className="text-xs text-muted-foreground">
+                          {log.details ? `${log.details} • ` : ""}
+                          {log.ipAddress} • {format(new Date(log.createdAt), "MMM d, h:mm a")}
+                        </p>
+                      </div>
+                      <Badge variant="outline">{t('settings.access')}</Badge>
+                    </div>
+                  ))}
+                </div>
+              ) : (
+                <div className="p-8 text-center text-muted-foreground">
+                  No audit logs available
+                </div>
+              )}
             </CardContent>
           </Card>
         </TabsContent>

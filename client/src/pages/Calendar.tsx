@@ -4,16 +4,19 @@ import { Calendar as CalendarComponent } from "@/components/ui/calendar";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { useState } from "react";
+import { useQuery } from "@tanstack/react-query";
+import { hearingsAPI } from "@/lib/api";
+import { Skeleton } from "@/components/ui/skeleton";
+import { format } from "date-fns";
 
 export default function CalendarPage() {
   const { t } = useTranslation();
   const [date, setDate] = useState<Date | undefined>(new Date());
 
-  const events = [
-    { date: new Date(), title: "Court Hearing - Case #2023-001", type: "Hearing", time: "09:00 AM" },
-    { date: new Date(), title: "Client Meeting - Ahmed Salem", type: "Meeting", time: "11:30 AM" },
-    { date: new Date(new Date().setDate(new Date().getDate() + 2)), title: "Document Submission Deadline", type: "Deadline", time: "02:00 PM" },
-  ];
+  const { data: hearings, isLoading } = useQuery({
+    queryKey: ["hearings"],
+    queryFn: hearingsAPI.getAll,
+  });
 
   return (
     <Layout>
@@ -40,24 +43,42 @@ export default function CalendarPage() {
           </CardHeader>
           <CardContent>
             <div className="space-y-4">
-              {events.map((event, i) => (
-                <div key={i} className="flex items-center p-4 border rounded-lg bg-card hover:bg-accent/50 transition-colors">
-                  <div className="flex-1">
-                    <div className="flex items-center gap-2 mb-1">
-                      <Badge variant={event.type === "Hearing" ? "destructive" : "secondary"}>
-                        {event.type === "Hearing" ? t('calendar.hearing') : 
-                         event.type === "Meeting" ? t('calendar.meeting') : 
-                         t('calendar.deadline')}
-                      </Badge>
-                      <span className="text-xs text-muted-foreground">{event.time}</span>
-                    </div>
-                    <h4 className="font-medium text-sm">{event.title}</h4>
-                    <p className="text-xs text-muted-foreground mt-1">
-                      {event.date.toLocaleDateString()}
-                    </p>
+              {isLoading ? (
+                Array.from({ length: 3 }).map((_, i) => (
+                  <div key={i} className="p-4 border rounded-lg">
+                    <Skeleton className="h-5 w-32 mb-2" />
+                    <Skeleton className="h-4 w-full" />
                   </div>
+                ))
+              ) : hearings && hearings.length > 0 ? (
+                hearings.map((hearing: any) => (
+                  <div key={hearing.id} className="flex items-center p-4 border rounded-lg bg-card hover:bg-accent/50 transition-colors">
+                    <div className="flex-1">
+                      <div className="flex items-center gap-2 mb-1">
+                        <Badge variant="destructive">
+                          {t('calendar.hearing')}
+                        </Badge>
+                        <span className="text-xs text-muted-foreground">
+                          {format(new Date(hearing.scheduledDate), "h:mm a")}
+                        </span>
+                      </div>
+                      <h4 className="font-medium text-sm">{hearing.title}</h4>
+                      <p className="text-xs text-muted-foreground mt-1">
+                        {format(new Date(hearing.scheduledDate), "MMMM d, yyyy")}
+                      </p>
+                      {hearing.location && (
+                        <p className="text-xs text-muted-foreground mt-1">
+                          📍 {hearing.location}
+                        </p>
+                      )}
+                    </div>
+                  </div>
+                ))
+              ) : (
+                <div className="p-8 text-center text-muted-foreground">
+                  No upcoming hearings
                 </div>
-              ))}
+              )}
             </div>
           </CardContent>
         </Card>

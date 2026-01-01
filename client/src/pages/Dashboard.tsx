@@ -18,14 +18,22 @@ import {
   Tooltip, 
   ResponsiveContainer 
 } from 'recharts';
+import { useQuery } from "@tanstack/react-query";
+import { dashboardAPI } from "@/lib/api";
+import { Skeleton } from "@/components/ui/skeleton";
 
 export default function Dashboard() {
   const { t } = useTranslation();
 
-  const stats = [
+  const { data: stats, isLoading } = useQuery({
+    queryKey: ["dashboard-stats"],
+    queryFn: dashboardAPI.getStats,
+  });
+
+  const statsConfig = [
     {
       title: t('dashboard.total_cases'),
-      value: "1,248",
+      value: stats?.totalCases || 0,
       change: "+12%",
       trend: "up",
       icon: Briefcase,
@@ -33,7 +41,7 @@ export default function Dashboard() {
     },
     {
       title: t('dashboard.active_cases'),
-      value: "432",
+      value: stats?.activeCases || 0,
       change: "+4%",
       trend: "up",
       icon: FileText,
@@ -41,7 +49,7 @@ export default function Dashboard() {
     },
     {
       title: t('dashboard.pending_intake'),
-      value: "24",
+      value: stats?.pendingIntake || 0,
       change: "-2%",
       trend: "down",
       icon: Users,
@@ -49,7 +57,7 @@ export default function Dashboard() {
     },
     {
       title: t('dashboard.upcoming_hearings'),
-      value: "12",
+      value: stats?.upcomingHearings || 0,
       change: "Today",
       trend: "neutral",
       icon: CalendarDays,
@@ -70,8 +78,8 @@ export default function Dashboard() {
   return (
     <Layout>
       <div className="grid gap-4 md:grid-cols-2 lg:grid-cols-4">
-        {stats.map((stat, i) => (
-          <Card key={i}>
+        {statsConfig.map((stat, i) => (
+          <Card key={i} data-testid={`stat-card-${i}`}>
             <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
               <CardTitle className="text-sm font-medium">
                 {stat.title}
@@ -79,7 +87,11 @@ export default function Dashboard() {
               <stat.icon className={`h-4 w-4 ${stat.color}`} />
             </CardHeader>
             <CardContent>
-              <div className="text-2xl font-bold">{stat.value}</div>
+              {isLoading ? (
+                <Skeleton className="h-8 w-20" />
+              ) : (
+                <div className="text-2xl font-bold" data-testid={`stat-value-${i}`}>{stat.value}</div>
+              )}
               <p className="text-xs text-muted-foreground flex items-center mt-1">
                 {stat.trend === "up" ? (
                   <ArrowUpRight className="h-3 w-3 text-green-500 mr-1 rtl:ml-1 rtl:mr-0" />

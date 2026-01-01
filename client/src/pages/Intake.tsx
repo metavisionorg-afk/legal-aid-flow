@@ -7,7 +7,6 @@ import { Button } from "@/components/ui/button";
 import {
   Form,
   FormControl,
-  FormDescription,
   FormField,
   FormItem,
   FormLabel,
@@ -17,14 +16,17 @@ import { Input } from "@/components/ui/input";
 import { Textarea } from "@/components/ui/textarea";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/components/ui/card";
-import { Separator } from "@/components/ui/separator";
 import { Upload } from "lucide-react";
 import { useToast } from "@/hooks/use-toast";
+import { beneficiariesAPI, intakeAPI } from "@/lib/api";
+import { useMutation, useQueryClient } from "@tanstack/react-query";
+import { useState } from "react";
 
 const formSchema = z.object({
   fullName: z.string().min(2, "Name is required"),
   phone: z.string().min(8, "Valid phone number required"),
   idNumber: z.string().min(5, "ID Number required"),
+  email: z.string().email().optional().or(z.literal("")),
   caseType: z.string(),
   description: z.string().min(10, "Description must be at least 10 characters"),
 });
@@ -32,6 +34,8 @@ const formSchema = z.object({
 export default function Intake() {
   const { t } = useTranslation();
   const { toast } = useToast();
+  const queryClient = useQueryClient();
+  const [isSubmitting, setIsSubmitting] = useState(false);
 
   const form = useForm<z.infer<typeof formSchema>>({
     resolver: zodResolver(formSchema),
@@ -39,18 +43,49 @@ export default function Intake() {
       fullName: "",
       phone: "",
       idNumber: "",
+      email: "",
       caseType: "civil",
       description: "",
     },
   });
 
-  function onSubmit(values: z.infer<typeof formSchema>) {
-    console.log(values);
-    toast({
-      title: "Request Submitted",
-      description: "The intake request has been successfully recorded.",
-    });
-    form.reset();
+  async function onSubmit(values: z.infer<typeof formSchema>) {
+    setIsSubmitting(true);
+    try {
+      // First create or find beneficiary
+      const beneficiary = await beneficiariesAPI.create({
+        fullName: values.fullName,
+        idNumber: values.idNumber,
+        phone: values.phone,
+        email: values.email || undefined,
+        status: "pending",
+      });
+
+      // Then create intake request
+      await intakeAPI.create({
+        beneficiaryId: beneficiary.id,
+        caseType: values.caseType,
+        description: values.description,
+        status: "pending",
+      });
+
+      toast({
+        title: "Request Submitted",
+        description: "The intake request has been successfully recorded.",
+      });
+
+      queryClient.invalidateQueries({ queryKey: ["intake-requests"] });
+      queryClient.invalidateQueries({ queryKey: ["beneficiaries"] });
+      form.reset();
+    } catch (error: any) {
+      toast({
+        title: "Error",
+        description: error.message || "Failed to submit request",
+        variant: "destructive",
+      });
+    } finally {
+      setIsSubmitting(false);
+    }
   }
 
   return (
@@ -76,7 +111,7 @@ export default function Intake() {
                       <FormItem className="sm:col-span-2">
                         <FormLabel>{t('intake.full_name')}</FormLabel>
                         <FormControl>
-                          <Input placeholder="John Doe" {...field} />
+                          <Input placeholder="John Doe" {...field} data-testid="input-fullname" />
                         </FormControl>
                         <FormMessage />
                       </FormItem>
@@ -89,7 +124,7 @@ export default function Intake() {
                       <FormItem>
                         <FormLabel>{t('intake.id_number')}</FormLabel>
                         <FormControl>
-                          <Input placeholder="123456789" {...field} />
+                          <Input placeholder="123456789" {...field} data-testid="input-idnumber" />
                         </FormControl>
                         <FormMessage />
                       </FormItem>
@@ -102,7 +137,7 @@ export default function Intake() {
                       <FormItem>
                         <FormLabel>{t('intake.phone')}</FormLabel>
                         <FormControl>
-                          <Input placeholder="+1234567890" {...field} />
+                          <Input placeholder="+1234567890" {...field} data-testid="input-phone" />
                         </FormControl>
                         <FormMessage />
                       </FormItem>
@@ -125,7 +160,7 @@ export default function Intake() {
                         <FormLabel>{t('intake.case_type')}</FormLabel>
                         <Select onValueChange={field.onChange} defaultValue={field.value}>
                           <FormControl>
-                            <SelectTrigger>
+                            <SelectTrigger data-testid="select-casetype">
                               <SelectValue placeholder="Select case type" />
                             </SelectTrigger>
                           </FormControl>
@@ -153,6 +188,7 @@ export default function Intake() {
                             placeholder="Describe the legal issue..." 
                             className="min-h-[120px]"
                             {...field} 
+                            data-testid="textarea-description"
                           />
                         </FormControl>
                         <FormMessage />
@@ -162,8 +198,14 @@ export default function Intake() {
                 </CardContent>
               </Card>
 
-              <Button type="submit" size="lg" className="w-full sm:w-auto">
-                {t('intake.submit')}
+              <Button 
+                type="submit" 
+                size="lg" 
+                className="w-full sm:w-auto"
+                disabled={isSubmitting}
+                data-testid="button-submit"
+              >
+                {isSubmitting ? "Submitting..." : t('intake.submit')}
               </Button>
             </form>
           </Form>

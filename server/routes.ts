@@ -1,9 +1,24 @@
-import type { Express } from "express";
+import type { Express, Request } from "express";
 import { type Server } from "http";
 import { storage } from "./storage";
-import { insertUserSchema, insertBeneficiarySchema, insertIntakeRequestSchema, insertCaseSchema, insertHearingSchema } from "@shared/schema";
+import type { User } from "@shared/schema";
+import { 
+  insertUserSchema, 
+  insertBeneficiarySchema, 
+  insertIntakeRequestSchema, 
+  insertCaseSchema, 
+  insertHearingSchema,
+  insertExpertProfileSchema,
+  insertAppointmentSchema,
+  insertAvailabilitySlotSchema,
+  insertNotificationSchema
+} from "@shared/schema";
 import { fromZodError } from "zod-validation-error";
 import bcrypt from "bcrypt";
+
+interface AuthRequest extends Request {
+  user?: User;
+}
 
 export async function registerRoutes(
   httpServer: Server,
@@ -15,6 +30,32 @@ export async function registerRoutes(
     if (!req.session?.userId) {
       return res.status(401).json({ error: "Unauthorized" });
     }
+    next();
+  }
+
+  // Staff-only Middleware
+  async function requireStaff(req: AuthRequest, res: any, next: any) {
+    if (!req.session?.userId) {
+      return res.status(401).json({ error: "Unauthorized" });
+    }
+    const user = await storage.getUser(req.session.userId);
+    if (!user || user.userType !== "staff") {
+      return res.status(403).json({ error: "Staff access required" });
+    }
+    req.user = user;
+    next();
+  }
+
+  // Beneficiary-only Middleware
+  async function requireBeneficiary(req: AuthRequest, res: any, next: any) {
+    if (!req.session?.userId) {
+      return res.status(401).json({ error: "Unauthorized" });
+    }
+    const user = await storage.getUser(req.session.userId);
+    if (!user || user.userType !== "beneficiary") {
+      return res.status(403).json({ error: "Beneficiary access required" });
+    }
+    req.user = user;
     next();
   }
 
@@ -30,7 +71,7 @@ export async function registerRoutes(
     });
   }
 
-  // ========== AUTH ROUTES ==========
+  // ========== AUTH ROUTES (STAFF) ==========
   
   app.post("/api/auth/register", async (req, res) => {
     try {
@@ -41,7 +82,6 @@ export async function registerRoutes(
 
       const { username, email, password, fullName, role } = result.data;
       
-      // Check if user exists
       const existingUser = await storage.getUserByUsername(username);
       if (existingUser) {
         return res.status(400).json({ error: "Username already exists" });
@@ -52,7 +92,6 @@ export async function registerRoutes(
         return res.status(400).json({ error: "Email already exists" });
       }
 
-      // Hash password
       const hashedPassword = await bcrypt.hash(password, 10);
 
       const user = await storage.createUser({
@@ -61,9 +100,10 @@ export async function registerRoutes(
         password: hashedPassword,
         fullName,
         role: role || "viewer",
+        userType: "staff",
+        emailVerified: false,
       });
 
-      // Don't send password back
       const { password: _, ...userWithoutPassword } = user;
       res.json(userWithoutPassword);
     } catch (error: any) {
@@ -89,10 +129,8 @@ export async function registerRoutes(
         return res.status(401).json({ error: "Invalid credentials" });
       }
 
-      // Set session
       req.session.userId = user.id;
 
-      // Create audit log
       await createAudit(user.id, "login", "user", user.id, "User logged in", req.ip);
 
       const { password: _, ...userWithoutPassword } = user;
@@ -126,9 +164,59 @@ export async function registerRoutes(
     }
   });
 
-  // ========== BENEFICIARIES ROUTES ==========
+  // ========== BENEFICIARY PORTAL AUTH ROUTES ==========
 
-  app.get("/api/beneficiaries", requireAuth, async (req, res) => {
+  app.post("/api/portal/register", async (req, res) => {
+    try {
+      const { username, email, password, fullName, idNumber, phone } = req.body;
+
+      if (!username || !email || !password || !fullName || !idNumber || !phone) {
+        return res.status(400).json({ error: "All fields are required" });
+      }
+
+      const existingUser = await storage.getUserByUsername(username);
+      if (existingUser) {
+        return res.status(400).json({ error: "Username already exists" });
+      }
+
+      const existingEmail = await storage.getUserByEmail(email);
+      if (existingEmail) {
+        return res.status(400).json({ error: "Email already exists" });
+      }
+
+      const hashedPassword = await bcrypt.hash(password, 10);
+
+      // Create beneficiary record
+      const beneficiary = await storage.createBeneficiary({
+        fullName,
+        idNumber,
+        phone,
+        email,
+        status: "pending",
+      });
+
+      // Create user account
+      const user = await storage.createUser({
+        username,
+        email,
+        password: hashedPassword,
+        fullName,
+        role: "viewer",
+        userType: "beneficiary",
+        emailVerified: false,
+        beneficiaryId: beneficiary.id,
+      });
+
+      const { password: _, ...userWithoutPassword } = user;
+      res.json({ user: userWithoutPassword, beneficiary });
+    } catch (error: any) {
+      res.status(500).json({ error: error.message });
+    }
+  });
+
+  // ========== BENEFICIARIES ROUTES (STAFF) ==========
+
+  app.get("/api/beneficiaries", requireStaff, async (req, res) => {
     try {
       const beneficiaries = await storage.getAllBeneficiaries();
       res.json(beneficiaries);
@@ -137,7 +225,7 @@ export async function registerRoutes(
     }
   });
 
-  app.get("/api/beneficiaries/:id", requireAuth, async (req, res) => {
+  app.get("/api/beneficiaries/:id", requireStaff, async (req, res) => {
     try {
       const beneficiary = await storage.getBeneficiary(req.params.id);
       if (!beneficiary) {
@@ -149,7 +237,7 @@ export async function registerRoutes(
     }
   });
 
-  app.post("/api/beneficiaries", requireAuth, async (req, res) => {
+  app.post("/api/beneficiaries", requireStaff, async (req, res) => {
     try {
       const result = insertBeneficiarySchema.safeParse(req.body);
       if (!result.success) {
@@ -164,7 +252,7 @@ export async function registerRoutes(
     }
   });
 
-  app.patch("/api/beneficiaries/:id", requireAuth, async (req, res) => {
+  app.patch("/api/beneficiaries/:id", requireStaff, async (req, res) => {
     try {
       const beneficiary = await storage.updateBeneficiary(req.params.id, req.body);
       if (!beneficiary) {
@@ -177,7 +265,7 @@ export async function registerRoutes(
     }
   });
 
-  app.delete("/api/beneficiaries/:id", requireAuth, async (req, res) => {
+  app.delete("/api/beneficiaries/:id", requireStaff, async (req, res) => {
     try {
       const success = await storage.deleteBeneficiary(req.params.id);
       if (!success) {
@@ -190,9 +278,110 @@ export async function registerRoutes(
     }
   });
 
-  // ========== INTAKE REQUESTS ROUTES ==========
+  // ========== BENEFICIARY PORTAL ROUTES ==========
 
-  app.get("/api/intake-requests", requireAuth, async (req, res) => {
+  app.get("/api/portal/profile", requireBeneficiary, async (req: AuthRequest, res) => {
+    try {
+      const user = req.user!;
+      if (!user.beneficiaryId) {
+        return res.status(404).json({ error: "Beneficiary profile not found" });
+      }
+      const beneficiary = await storage.getBeneficiary(user.beneficiaryId);
+      res.json(beneficiary);
+    } catch (error: any) {
+      res.status(500).json({ error: error.message });
+    }
+  });
+
+  app.patch("/api/portal/profile", requireBeneficiary, async (req: AuthRequest, res) => {
+    try {
+      const user = req.user!;
+      if (!user.beneficiaryId) {
+        return res.status(404).json({ error: "Beneficiary profile not found" });
+      }
+      const beneficiary = await storage.updateBeneficiary(user.beneficiaryId, req.body);
+      res.json(beneficiary);
+    } catch (error: any) {
+      res.status(500).json({ error: error.message });
+    }
+  });
+
+  app.get("/api/portal/my-cases", requireBeneficiary, async (req: AuthRequest, res) => {
+    try {
+      const user = req.user!;
+      if (!user.beneficiaryId) {
+        return res.json([]);
+      }
+      const cases = await storage.getCasesByBeneficiary(user.beneficiaryId);
+      // Remove internal notes for beneficiary view
+      const publicCases = cases.map(({ internalNotes, ...caseData }) => caseData);
+      res.json(publicCases);
+    } catch (error: any) {
+      res.status(500).json({ error: error.message });
+    }
+  });
+
+  app.get("/api/portal/my-intake-requests", requireBeneficiary, async (req: AuthRequest, res) => {
+    try {
+      const user = req.user!;
+      if (!user.beneficiaryId) {
+        return res.json([]);
+      }
+      const requests = await storage.getIntakeRequestsByBeneficiary(user.beneficiaryId);
+      // Remove review notes for beneficiary view
+      const publicRequests = requests.map(({ reviewNotes, ...request }) => request);
+      res.json(publicRequests);
+    } catch (error: any) {
+      res.status(500).json({ error: error.message });
+    }
+  });
+
+  app.post("/api/portal/intake-requests", requireBeneficiary, async (req: AuthRequest, res) => {
+    try {
+      const user = req.user!;
+      if (!user.beneficiaryId) {
+        return res.status(400).json({ error: "Beneficiary profile not found" });
+      }
+
+      const request = await storage.createIntakeRequest({
+        beneficiaryId: user.beneficiaryId,
+        caseType: req.body.caseType,
+        description: req.body.description,
+        documents: req.body.documents || [],
+        status: "pending",
+      });
+
+      // Create notification for staff
+      await storage.createNotification({
+        userId: user.id,
+        type: "intake_request",
+        title: "New Intake Request",
+        message: `New intake request submitted by ${user.fullName}`,
+        relatedEntityId: request.id,
+      });
+
+      res.json(request);
+    } catch (error: any) {
+      res.status(500).json({ error: error.message });
+    }
+  });
+
+  app.get("/api/portal/dashboard-stats", requireBeneficiary, async (req: AuthRequest, res) => {
+    try {
+      const user = req.user!;
+      if (!user.beneficiaryId) {
+        return res.json({ totalCases: 0, activeCases: 0, pendingIntake: 0, upcomingAppointments: 0 });
+      }
+      const stats = await storage.getBeneficiaryDashboardStats(user.beneficiaryId);
+      res.json(stats);
+    } catch (error: any) {
+      res.status(500).json({ error: error.message });
+    }
+  });
+
+  // ========== INTAKE REQUESTS ROUTES (STAFF) ==========
+
+  app.get("/api/intake-requests", requireStaff, async (req, res) => {
     try {
       const requests = await storage.getAllIntakeRequests();
       res.json(requests);
@@ -201,7 +390,7 @@ export async function registerRoutes(
     }
   });
 
-  app.get("/api/intake-requests/:id", requireAuth, async (req, res) => {
+  app.get("/api/intake-requests/:id", requireStaff, async (req, res) => {
     try {
       const request = await storage.getIntakeRequest(req.params.id);
       if (!request) {
@@ -213,7 +402,7 @@ export async function registerRoutes(
     }
   });
 
-  app.post("/api/intake-requests", requireAuth, async (req, res) => {
+  app.post("/api/intake-requests", requireStaff, async (req, res) => {
     try {
       const result = insertIntakeRequestSchema.safeParse(req.body);
       if (!result.success) {
@@ -228,7 +417,7 @@ export async function registerRoutes(
     }
   });
 
-  app.patch("/api/intake-requests/:id", requireAuth, async (req, res) => {
+  app.patch("/api/intake-requests/:id", requireStaff, async (req, res) => {
     try {
       const request = await storage.updateIntakeRequest(req.params.id, req.body);
       if (!request) {
@@ -241,9 +430,9 @@ export async function registerRoutes(
     }
   });
 
-  // ========== CASES ROUTES ==========
+  // ========== CASES ROUTES (STAFF) ==========
 
-  app.get("/api/cases", requireAuth, async (req, res) => {
+  app.get("/api/cases", requireStaff, async (req, res) => {
     try {
       const cases = await storage.getAllCases();
       res.json(cases);
@@ -252,7 +441,7 @@ export async function registerRoutes(
     }
   });
 
-  app.get("/api/cases/:id", requireAuth, async (req, res) => {
+  app.get("/api/cases/:id", requireStaff, async (req, res) => {
     try {
       const caseData = await storage.getCase(req.params.id);
       if (!caseData) {
@@ -264,7 +453,7 @@ export async function registerRoutes(
     }
   });
 
-  app.post("/api/cases", requireAuth, async (req, res) => {
+  app.post("/api/cases", requireStaff, async (req, res) => {
     try {
       const result = insertCaseSchema.safeParse(req.body);
       if (!result.success) {
@@ -279,7 +468,7 @@ export async function registerRoutes(
     }
   });
 
-  app.patch("/api/cases/:id", requireAuth, async (req, res) => {
+  app.patch("/api/cases/:id", requireStaff, async (req, res) => {
     try {
       const caseData = await storage.updateCase(req.params.id, req.body);
       if (!caseData) {
@@ -292,7 +481,7 @@ export async function registerRoutes(
     }
   });
 
-  app.delete("/api/cases/:id", requireAuth, async (req, res) => {
+  app.delete("/api/cases/:id", requireStaff, async (req, res) => {
     try {
       const success = await storage.deleteCase(req.params.id);
       if (!success) {
@@ -305,9 +494,9 @@ export async function registerRoutes(
     }
   });
 
-  // ========== HEARINGS ROUTES ==========
+  // ========== HEARINGS ROUTES (STAFF) ==========
 
-  app.get("/api/hearings", requireAuth, async (req, res) => {
+  app.get("/api/hearings", requireStaff, async (req, res) => {
     try {
       const hearings = await storage.getAllHearings();
       res.json(hearings);
@@ -316,7 +505,7 @@ export async function registerRoutes(
     }
   });
 
-  app.get("/api/hearings/:id", requireAuth, async (req, res) => {
+  app.get("/api/hearings/:id", requireStaff, async (req, res) => {
     try {
       const hearing = await storage.getHearing(req.params.id);
       if (!hearing) {
@@ -328,7 +517,7 @@ export async function registerRoutes(
     }
   });
 
-  app.post("/api/hearings", requireAuth, async (req, res) => {
+  app.post("/api/hearings", requireStaff, async (req, res) => {
     try {
       const result = insertHearingSchema.safeParse(req.body);
       if (!result.success) {
@@ -343,7 +532,7 @@ export async function registerRoutes(
     }
   });
 
-  app.patch("/api/hearings/:id", requireAuth, async (req, res) => {
+  app.patch("/api/hearings/:id", requireStaff, async (req, res) => {
     try {
       const hearing = await storage.updateHearing(req.params.id, req.body);
       if (!hearing) {
@@ -356,7 +545,7 @@ export async function registerRoutes(
     }
   });
 
-  app.delete("/api/hearings/:id", requireAuth, async (req, res) => {
+  app.delete("/api/hearings/:id", requireStaff, async (req, res) => {
     try {
       const success = await storage.deleteHearing(req.params.id);
       if (!success) {
@@ -369,9 +558,243 @@ export async function registerRoutes(
     }
   });
 
+  // ========== EXPERT PROFILES ROUTES ==========
+
+  app.get("/api/experts", async (req, res) => {
+    try {
+      const profiles = await storage.getAllExpertProfiles();
+      const expertsWithUsers = await Promise.all(
+        profiles.map(async (profile) => {
+          const user = await storage.getUser(profile.userId);
+          return {
+            ...profile,
+            user: user ? { id: user.id, fullName: user.fullName, email: user.email } : null,
+          };
+        })
+      );
+      res.json(expertsWithUsers);
+    } catch (error: any) {
+      res.status(500).json({ error: error.message });
+    }
+  });
+
+  app.get("/api/experts/:userId", async (req, res) => {
+    try {
+      const profile = await storage.getExpertProfile(req.params.userId);
+      if (!profile) {
+        return res.status(404).json({ error: "Expert profile not found" });
+      }
+      const user = await storage.getUser(profile.userId);
+      res.json({ ...profile, user: user ? { id: user.id, fullName: user.fullName, email: user.email } : null });
+    } catch (error: any) {
+      res.status(500).json({ error: error.message });
+    }
+  });
+
+  app.post("/api/experts", requireStaff, async (req, res) => {
+    try {
+      const result = insertExpertProfileSchema.safeParse(req.body);
+      if (!result.success) {
+        return res.status(400).json({ error: fromZodError(result.error).message });
+      }
+
+      const profile = await storage.createExpertProfile(result.data);
+      await createAudit(req.session.userId!, "create", "expert_profile", profile.id, "Created expert profile", req.ip);
+      res.json(profile);
+    } catch (error: any) {
+      res.status(500).json({ error: error.message });
+    }
+  });
+
+  app.patch("/api/experts/:userId", requireStaff, async (req, res) => {
+    try {
+      const profile = await storage.updateExpertProfile(req.params.userId, req.body);
+      if (!profile) {
+        return res.status(404).json({ error: "Expert profile not found" });
+      }
+      await createAudit(req.session.userId!, "update", "expert_profile", profile.id, "Updated expert profile", req.ip);
+      res.json(profile);
+    } catch (error: any) {
+      res.status(500).json({ error: error.message });
+    }
+  });
+
+  // ========== APPOINTMENTS ROUTES ==========
+
+  app.get("/api/appointments", requireAuth, async (req, res) => {
+    try {
+      const user = await storage.getUser(req.session.userId!);
+      if (!user) {
+        return res.status(404).json({ error: "User not found" });
+      }
+
+      let appointments: any[] = [];
+      if (user.userType === "beneficiary" && user.beneficiaryId) {
+        appointments = await storage.getAppointmentsByBeneficiary(user.beneficiaryId);
+      } else if (user.userType === "staff") {
+        appointments = await storage.getAllAppointments();
+      }
+
+      res.json(appointments);
+    } catch (error: any) {
+      res.status(500).json({ error: error.message });
+    }
+  });
+
+  app.get("/api/appointments/:id", requireAuth, async (req, res) => {
+    try {
+      const appointment = await storage.getAppointment(req.params.id);
+      if (!appointment) {
+        return res.status(404).json({ error: "Appointment not found" });
+      }
+      res.json(appointment);
+    } catch (error: any) {
+      res.status(500).json({ error: error.message });
+    }
+  });
+
+  app.post("/api/appointments", requireAuth, async (req, res) => {
+    try {
+      const user = await storage.getUser(req.session.userId!);
+      if (!user) {
+        return res.status(404).json({ error: "User not found" });
+      }
+
+      let beneficiaryId = req.body.beneficiaryId;
+      
+      // If beneficiary user, use their beneficiaryId
+      if (user.userType === "beneficiary" && user.beneficiaryId) {
+        beneficiaryId = user.beneficiaryId;
+      }
+
+      if (!beneficiaryId) {
+        return res.status(400).json({ error: "Beneficiary ID required" });
+      }
+
+      const appointment = await storage.createAppointment({
+        beneficiaryId,
+        expertId: req.body.expertId,
+        appointmentType: req.body.appointmentType,
+        scheduledDate: new Date(req.body.scheduledDate),
+        duration: req.body.duration || 60,
+        topic: req.body.topic,
+        notes: req.body.notes,
+        location: req.body.location,
+        status: "pending",
+      });
+
+      // Create notifications
+      await storage.createNotification({
+        userId: req.body.expertId,
+        type: "appointment_request",
+        title: "New Appointment Request",
+        message: `New appointment request for ${req.body.topic}`,
+        relatedEntityId: appointment.id,
+      });
+
+      if (user.userType === "beneficiary") {
+        await storage.createNotification({
+          userId: user.id,
+          type: "appointment_created",
+          title: "Appointment Requested",
+          message: "Your appointment request has been submitted",
+          relatedEntityId: appointment.id,
+        });
+      }
+
+      await createAudit(req.session.userId!, "create", "appointment", appointment.id, "Created appointment", req.ip);
+      res.json(appointment);
+    } catch (error: any) {
+      res.status(500).json({ error: error.message });
+    }
+  });
+
+  app.patch("/api/appointments/:id", requireAuth, async (req, res) => {
+    try {
+      const appointment = await storage.updateAppointment(req.params.id, req.body);
+      if (!appointment) {
+        return res.status(404).json({ error: "Appointment not found" });
+      }
+
+      // Notify beneficiary if status changed
+      if (req.body.status && req.body.status !== "pending") {
+        const beneficiary = await storage.getBeneficiary(appointment.beneficiaryId);
+        if (beneficiary) {
+          const user = await storage.getUser(req.session.userId!);
+          await storage.createNotification({
+            userId: appointment.beneficiaryId,
+            type: "appointment_updated",
+            title: "Appointment Status Updated",
+            message: `Your appointment has been ${req.body.status}`,
+            relatedEntityId: appointment.id,
+          });
+        }
+      }
+
+      await createAudit(req.session.userId!, "update", "appointment", appointment.id, "Updated appointment", req.ip);
+      res.json(appointment);
+    } catch (error: any) {
+      res.status(500).json({ error: error.message });
+    }
+  });
+
+  app.delete("/api/appointments/:id", requireAuth, async (req, res) => {
+    try {
+      const success = await storage.deleteAppointment(req.params.id);
+      if (!success) {
+        return res.status(404).json({ error: "Appointment not found" });
+      }
+      await createAudit(req.session.userId!, "delete", "appointment", req.params.id, "Deleted appointment", req.ip);
+      res.json({ success: true });
+    } catch (error: any) {
+      res.status(500).json({ error: error.message });
+    }
+  });
+
+  // ========== NOTIFICATIONS ROUTES ==========
+
+  app.get("/api/notifications", requireAuth, async (req, res) => {
+    try {
+      const notifications = await storage.getNotificationsByUser(req.session.userId!);
+      res.json(notifications);
+    } catch (error: any) {
+      res.status(500).json({ error: error.message });
+    }
+  });
+
+  app.get("/api/notifications/unread", requireAuth, async (req, res) => {
+    try {
+      const notifications = await storage.getUnreadNotifications(req.session.userId!);
+      res.json(notifications);
+    } catch (error: any) {
+      res.status(500).json({ error: error.message });
+    }
+  });
+
+  app.patch("/api/notifications/:id/read", requireAuth, async (req, res) => {
+    try {
+      const notification = await storage.markNotificationAsRead(req.params.id);
+      if (!notification) {
+        return res.status(404).json({ error: "Notification not found" });
+      }
+      res.json(notification);
+    } catch (error: any) {
+      res.status(500).json({ error: error.message });
+    }
+  });
+
+  app.post("/api/notifications/mark-all-read", requireAuth, async (req, res) => {
+    try {
+      await storage.markAllNotificationsAsRead(req.session.userId!);
+      res.json({ success: true });
+    } catch (error: any) {
+      res.status(500).json({ error: error.message });
+    }
+  });
+
   // ========== DASHBOARD & REPORTS ROUTES ==========
 
-  app.get("/api/dashboard/stats", requireAuth, async (req, res) => {
+  app.get("/api/dashboard/stats", requireStaff, async (req, res) => {
     try {
       const stats = await storage.getDashboardStats();
       res.json(stats);
@@ -380,7 +803,7 @@ export async function registerRoutes(
     }
   });
 
-  app.get("/api/audit-logs", requireAuth, async (req, res) => {
+  app.get("/api/audit-logs", requireStaff, async (req, res) => {
     try {
       const limit = req.query.limit ? parseInt(req.query.limit as string) : 50;
       const logs = await storage.getAuditLogs(limit);
@@ -390,7 +813,7 @@ export async function registerRoutes(
     }
   });
 
-  app.get("/api/users", requireAuth, async (req, res) => {
+  app.get("/api/users", requireStaff, async (req, res) => {
     try {
       const users = await storage.getAllUsers();
       const usersWithoutPasswords = users.map(({ password, ...user }) => user);

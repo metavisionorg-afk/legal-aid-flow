@@ -1,3 +1,4 @@
+import { useState } from "react";
 import { useTranslation } from "react-i18next";
 import { Layout } from "@/components/layout/Layout";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
@@ -8,18 +9,53 @@ import { Button } from "@/components/ui/button";
 import { Switch } from "@/components/ui/switch";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
 import { Badge } from "@/components/ui/badge";
-import { useQuery } from "@tanstack/react-query";
-import { auditAPI } from "@/lib/api";
+import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
+import { auditAPI, systemSettingsAPI } from "@/lib/api";
 import { Skeleton } from "@/components/ui/skeleton";
 import { format } from "date-fns";
+import { toast } from "sonner";
+import { Loader2, Upload } from "lucide-react";
+import { Link } from "wouter";
 
 export default function Settings() {
   const { t } = useTranslation();
+  const queryClient = useQueryClient();
+  const [vatRate, setVatRate] = useState("");
+  const [logoUrl, setLogoUrl] = useState("");
 
   const { data: auditLogs, isLoading } = useQuery({
     queryKey: ["audit-logs"],
     queryFn: () => auditAPI.getLogs(20),
   });
+
+  const { data: settings, isLoading: settingsLoading } = useQuery({
+    queryKey: ["system-settings"],
+    queryFn: systemSettingsAPI.get,
+    onSuccess: (data: any) => {
+      if (data) {
+        setVatRate(data.vatRate?.toString() || "");
+        setLogoUrl(data.organizationLogo || "");
+      }
+    },
+  });
+
+  const updateMutation = useMutation({
+    mutationFn: systemSettingsAPI.update,
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ["system-settings"] });
+      toast.success(t('settings.update_success'));
+    },
+    onError: (error: any) => {
+      toast.error(error.message || t('settings.update_error'));
+    },
+  });
+
+  const handleSave = () => {
+    const updates: any = {};
+    if (vatRate) updates.vatRate = parseFloat(vatRate);
+    if (logoUrl) updates.organizationLogo = logoUrl;
+    updateMutation.mutate(updates);
+  };
 
   return (
     <Layout>
@@ -40,19 +76,54 @@ export default function Settings() {
             </CardHeader>
             <CardContent className="space-y-4">
               <div className="grid gap-2">
-                <Label>{t('settings.org_name')}</Label>
-                <Input defaultValue="Adala Legal Aid" />
-              </div>
-              <div className="grid gap-2">
-                <Label>{t('settings.contact_email')}</Label>
-                <Input defaultValue="contact@adala.org" />
-              </div>
-              <div className="flex items-center justify-between">
-                <div className="space-y-0.5">
-                  <Label>{t('settings.rtl_default')}</Label>
-                  <p className="text-sm text-muted-foreground">{t('settings.rtl_default_desc')}</p>
+                <Label htmlFor="logo-url">{t('settings.logo_url')}</Label>
+                <div className="flex gap-2">
+                  <Input
+                    id="logo-url"
+                    data-testid="input-logo-url"
+                    value={logoUrl}
+                    onChange={(e) => setLogoUrl(e.target.value)}
+                    placeholder="https://example.com/logo.png"
+                  />
+                  <Button variant="outline" size="icon" data-testid="button-upload-logo">
+                    <Upload className="h-4 w-4" />
+                  </Button>
                 </div>
-                <Switch />
+                {logoUrl && (
+                  <div className="mt-2 p-4 border rounded-md bg-muted/50">
+                    <img src={logoUrl} alt="Logo preview" className="h-16 object-contain" />
+                  </div>
+                )}
+              </div>
+
+              <div className="grid gap-2">
+                <Label htmlFor="vat-rate">{t('settings.vat_rate')}</Label>
+                <div className="flex gap-2 items-center">
+                  <Input
+                    id="vat-rate"
+                    data-testid="input-vat-rate"
+                    type="number"
+                    step="0.01"
+                    min="0"
+                    max="100"
+                    value={vatRate}
+                    onChange={(e) => setVatRate(e.target.value)}
+                    placeholder="15.00"
+                    className="max-w-xs"
+                  />
+                  <span>%</span>
+                </div>
+              </div>
+
+              <div className="pt-4">
+                <Button
+                  onClick={handleSave}
+                  disabled={updateMutation.isPending || settingsLoading}
+                  data-testid="button-save-settings"
+                >
+                  {updateMutation.isPending && <Loader2 className="mr-2 rtl:ml-2 rtl:mr-0 h-4 w-4 animate-spin" />}
+                  {t('common.save')}
+                </Button>
               </div>
             </CardContent>
           </Card>
@@ -61,40 +132,22 @@ export default function Settings() {
         <TabsContent value="roles" className="space-y-4">
           <Card>
             <CardHeader>
-              <CardTitle>{t('settings.roles_permissions')}</CardTitle>
-              <CardDescription>{t('settings.roles_desc')}</CardDescription>
+              <div className="flex justify-between items-center">
+                <div>
+                  <CardTitle>{t('settings.roles_permissions')}</CardTitle>
+                  <CardDescription>{t('settings.roles_desc')}</CardDescription>
+                </div>
+                <Link href="/rules">
+                  <Button data-testid="button-manage-rules">
+                    {t('settings.manage_rules')}
+                  </Button>
+                </Link>
+              </div>
             </CardHeader>
             <CardContent>
-              <Table>
-                <TableHeader>
-                  <TableRow>
-                    <TableHead>{t('settings.role')}</TableHead>
-                    <TableHead>{t('settings.users')}</TableHead>
-                    <TableHead>{t('settings.permissions')}</TableHead>
-                    <TableHead className="text-right rtl:text-left">{t('settings.action')}</TableHead>
-                  </TableRow>
-                </TableHeader>
-                <TableBody>
-                  <TableRow>
-                    <TableCell className="font-medium">Administrator</TableCell>
-                    <TableCell>2</TableCell>
-                    <TableCell>All Access</TableCell>
-                    <TableCell className="text-right rtl:text-left"><Button variant="ghost" size="sm">Edit</Button></TableCell>
-                  </TableRow>
-                  <TableRow>
-                    <TableCell className="font-medium">Lawyer</TableCell>
-                    <TableCell>15</TableCell>
-                    <TableCell>Case Management</TableCell>
-                    <TableCell className="text-right rtl:text-left"><Button variant="ghost" size="sm">Edit</Button></TableCell>
-                  </TableRow>
-                  <TableRow>
-                    <TableCell className="font-medium">Intake Officer</TableCell>
-                    <TableCell>4</TableCell>
-                    <TableCell>Intake Only</TableCell>
-                    <TableCell className="text-right rtl:text-left"><Button variant="ghost" size="sm">Edit</Button></TableCell>
-                  </TableRow>
-                </TableBody>
-              </Table>
+              <p className="text-muted-foreground text-sm">
+                {t('settings.rules_redirect_note')}
+              </p>
             </CardContent>
           </Card>
         </TabsContent>

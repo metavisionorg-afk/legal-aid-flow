@@ -19,49 +19,62 @@ import {
   ResponsiveContainer 
 } from 'recharts';
 import { useQuery } from "@tanstack/react-query";
-import { dashboardAPI } from "@/lib/api";
+import { enhancedDashboardAPI } from "@/lib/api";
 import { Skeleton } from "@/components/ui/skeleton";
+import { Button } from "@/components/ui/button";
+import { Link } from "wouter";
+import { Plus, CheckSquare } from "lucide-react";
 
 export default function Dashboard() {
   const { t } = useTranslation();
 
   const { data: stats, isLoading } = useQuery({
-    queryKey: ["dashboard-stats"],
-    queryFn: dashboardAPI.getStats,
+    queryKey: ["enhanced-dashboard-stats"],
+    queryFn: enhancedDashboardAPI.getStats,
   });
 
   const statsConfig = [
     {
       title: t('dashboard.total_cases'),
       value: stats?.totalCases || 0,
-      change: "+12%",
-      trend: "up",
       icon: Briefcase,
       color: "text-blue-500",
+      link: "/cases",
     },
     {
       title: t('dashboard.active_cases'),
       value: stats?.activeCases || 0,
-      change: "+4%",
-      trend: "up",
       icon: FileText,
       color: "text-green-500",
+      link: "/cases",
+    },
+    {
+      title: t('dashboard.pending_tasks'),
+      value: stats?.pendingTasks || 0,
+      icon: CheckSquare,
+      color: "text-orange-500",
+      link: "/tasks",
+    },
+    {
+      title: t('dashboard.total_beneficiaries'),
+      value: stats?.totalBeneficiaries || 0,
+      icon: Users,
+      color: "text-purple-500",
+      link: "/beneficiaries",
     },
     {
       title: t('dashboard.pending_intake'),
       value: stats?.pendingIntake || 0,
-      change: "-2%",
-      trend: "down",
       icon: Users,
-      color: "text-orange-500",
+      color: "text-yellow-500",
+      link: "/intake",
     },
     {
       title: t('dashboard.upcoming_hearings'),
       value: stats?.upcomingHearings || 0,
-      change: "Today",
-      trend: "neutral",
       icon: CalendarDays,
-      color: "text-purple-500",
+      color: "text-indigo-500",
+      link: "/hearings",
     },
   ];
 
@@ -77,34 +90,47 @@ export default function Dashboard() {
 
   return (
     <Layout>
-      <div className="grid gap-4 md:grid-cols-2 lg:grid-cols-4">
+      {/* Quick Actions */}
+      <div className="flex gap-2 mb-4 flex-wrap">
+        <Link href="/intake">
+          <Button variant="default" size="sm" data-testid="button-new-intake">
+            <Plus className="h-4 w-4 mr-2 rtl:ml-2 rtl:mr-0" />
+            {t('dashboard.new_intake')}
+          </Button>
+        </Link>
+        <Link href="/cases">
+          <Button variant="outline" size="sm" data-testid="button-new-case">
+            <Plus className="h-4 w-4 mr-2 rtl:ml-2 rtl:mr-0" />
+            {t('dashboard.new_case')}
+          </Button>
+        </Link>
+        <Link href="/tasks">
+          <Button variant="outline" size="sm" data-testid="button-new-task">
+            <Plus className="h-4 w-4 mr-2 rtl:ml-2 rtl:mr-0" />
+            {t('dashboard.new_task')}
+          </Button>
+        </Link>
+      </div>
+
+      <div className="grid gap-4 md:grid-cols-2 lg:grid-cols-3">
         {statsConfig.map((stat, i) => (
-          <Card key={i} data-testid={`stat-card-${i}`}>
-            <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
-              <CardTitle className="text-sm font-medium">
-                {stat.title}
-              </CardTitle>
-              <stat.icon className={`h-4 w-4 ${stat.color}`} />
-            </CardHeader>
-            <CardContent>
-              {isLoading ? (
-                <Skeleton className="h-8 w-20" />
-              ) : (
-                <div className="text-2xl font-bold" data-testid={`stat-value-${i}`}>{stat.value}</div>
-              )}
-              <p className="text-xs text-muted-foreground flex items-center mt-1">
-                {stat.trend === "up" ? (
-                  <ArrowUpRight className="h-3 w-3 text-green-500 mr-1 rtl:ml-1 rtl:mr-0" />
-                ) : stat.trend === "down" ? (
-                  <ArrowDownRight className="h-3 w-3 text-red-500 mr-1 rtl:ml-1 rtl:mr-0" />
-                ) : null}
-                <span className={stat.trend === "up" ? "text-green-500" : stat.trend === "down" ? "text-red-500" : ""}>
-                  {stat.change}
-                </span>
-                <span className="ml-1 rtl:mr-1">from last month</span>
-              </p>
-            </CardContent>
-          </Card>
+          <Link key={i} href={stat.link}>
+            <Card className="cursor-pointer hover:bg-accent transition-colors" data-testid={`stat-card-${i}`}>
+              <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
+                <CardTitle className="text-sm font-medium">
+                  {stat.title}
+                </CardTitle>
+                <stat.icon className={`h-4 w-4 ${stat.color}`} />
+              </CardHeader>
+              <CardContent>
+                {isLoading ? (
+                  <Skeleton className="h-8 w-20" />
+                ) : (
+                  <div className="text-2xl font-bold" data-testid={`stat-value-${i}`}>{stat.value}</div>
+                )}
+              </CardContent>
+            </Card>
+          </Link>
         ))}
       </div>
 

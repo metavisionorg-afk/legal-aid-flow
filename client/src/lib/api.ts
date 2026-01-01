@@ -202,3 +202,64 @@ export const auditAPI = {
 export const usersAPI = {
   getAll: () => fetchAPI("/users"),
 };
+
+// System Settings API (Staff only)
+export const systemSettingsAPI = {
+  get: () => fetchAPI("/system-settings"),
+  update: (data: any) =>
+    fetchAPI("/system-settings", {
+      method: "PATCH",
+      body: JSON.stringify(data),
+    }),
+};
+
+// Rules API (Staff only)
+export const rulesAPI = {
+  getAll: () => fetchAPI("/rules"),
+  getOne: (id: string) => fetchAPI(`/rules/${id}`),
+  create: (data: any) =>
+    fetchAPI("/rules", {
+      method: "POST",
+      body: JSON.stringify(data),
+    }),
+  update: (id: string, data: any) =>
+    fetchAPI(`/rules/${id}`, {
+      method: "PATCH",
+      body: JSON.stringify(data),
+    }),
+  delete: (id: string) =>
+    fetchAPI(`/rules/${id}`, { method: "DELETE" }),
+  
+  // User Rules
+  getUserRules: (userId: string) => fetchAPI(`/users/${userId}/rules`),
+  assignToUser: (userId: string, ruleId: string) =>
+    fetchAPI(`/users/${userId}/rules/${ruleId}`, { method: "POST" }),
+  removeFromUser: (userId: string, ruleId: string) =>
+    fetchAPI(`/users/${userId}/rules/${ruleId}`, { method: "DELETE" }),
+  getUserPermissions: (userId: string) => fetchAPI(`/users/${userId}/permissions`),
+};
+
+// Tasks API (Staff only)
+export const tasksAPI = {
+  getAll: () => fetchAPI("/tasks"),
+  getOne: (id: string) => fetchAPI(`/tasks/${id}`),
+  getByUser: (userId: string) => fetchAPI(`/users/${userId}/tasks`),
+  getByCase: (caseId: string) => fetchAPI(`/cases/${caseId}/tasks`),
+  create: (data: any) =>
+    fetchAPI("/tasks", {
+      method: "POST",
+      body: JSON.stringify(data),
+    }),
+  update: (id: string, data: any) =>
+    fetchAPI(`/tasks/${id}`, {
+      method: "PATCH",
+      body: JSON.stringify(data),
+    }),
+  delete: (id: string) =>
+    fetchAPI(`/tasks/${id}`, { method: "DELETE" }),
+};
+
+// Enhanced Dashboard API (Staff only)
+export const enhancedDashboardAPI = {
+  getStats: () => fetchAPI("/dashboard/enhanced-stats"),
+};

@@ -19,26 +19,146 @@ import {
 import { Badge } from "@/components/ui/badge";
 import { MoreHorizontal, Plus, Search, Filter } from "lucide-react";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
-import { useQuery } from "@tanstack/react-query";
-import { casesAPI } from "@/lib/api";
+import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
+import { casesAPI, beneficiariesAPI } from "@/lib/api";
 import { Skeleton } from "@/components/ui/skeleton";
+import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogTrigger } from "@/components/ui/dialog";
+import { Label } from "@/components/ui/label";
+import { Textarea } from "@/components/ui/textarea";
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
+import { useToast } from "@/hooks/use-toast";
+import { useState } from "react";
 
 export default function Cases() {
   const { t } = useTranslation();
+  const { toast } = useToast();
+  const queryClient = useQueryClient();
+
+  const [createOpen, setCreateOpen] = useState(false);
+  const [caseNumber, setCaseNumber] = useState("");
+  const [title, setTitle] = useState("");
+  const [beneficiaryId, setBeneficiaryId] = useState<string>("");
+  const [caseType, setCaseType] = useState<string>("civil");
+  const [description, setDescription] = useState("");
 
   const { data: cases, isLoading } = useQuery({
     queryKey: ["cases"],
     queryFn: casesAPI.getAll,
   });
 
+  const { data: beneficiaries, isLoading: beneficiariesLoading } = useQuery({
+    queryKey: ["beneficiaries"],
+    queryFn: beneficiariesAPI.getAll,
+  });
+
+  const createCaseMutation = useMutation({
+    mutationFn: casesAPI.create,
+    onSuccess: async () => {
+      await queryClient.invalidateQueries({ queryKey: ["cases"] });
+      setCaseNumber("");
+      setTitle("");
+      setBeneficiaryId("");
+      setCaseType("civil");
+      setDescription("");
+      setCreateOpen(false);
+      toast({ title: t("cases.created") });
+    },
+    onError: () => {
+      toast({ title: t("cases.create_failed"), variant: "destructive" });
+    },
+  });
+
+  const handleCreate = () => {
+    if (!caseNumber.trim() || !title.trim() || !beneficiaryId || !description.trim()) {
+      toast({ title: t("common.error"), variant: "destructive" });
+      return;
+    }
+
+    createCaseMutation.mutate({
+      caseNumber: caseNumber.trim(),
+      title: title.trim(),
+      beneficiaryId,
+      caseType,
+      description: description.trim(),
+      status: "open",
+      priority: "medium",
+    });
+  };
+
   return (
     <Layout>
       <div className="flex flex-col sm:flex-row items-start sm:items-center justify-between gap-4">
         <h1 className="text-3xl font-bold tracking-tight">{t('app.cases')}</h1>
-        <Button data-testid="button-add-case">
-          <Plus className="mr-2 h-4 w-4 rtl:ml-2 rtl:mr-0" />
-          {t('app.add_new')}
-        </Button>
+        <Dialog open={createOpen} onOpenChange={setCreateOpen}>
+          <DialogTrigger asChild>
+            <Button data-testid="button-add-case">
+              <Plus className="mr-2 h-4 w-4 rtl:ml-2 rtl:mr-0" />
+              {t('app.add_new')}
+            </Button>
+          </DialogTrigger>
+          <DialogContent>
+            <DialogHeader>
+              <DialogTitle>{t("dashboard.new_case")}</DialogTitle>
+            </DialogHeader>
+
+            <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+              <div className="space-y-2">
+                <Label>{t("cases.case_number")}</Label>
+                <Input value={caseNumber} onChange={(e) => setCaseNumber(e.target.value)} />
+              </div>
+              <div className="space-y-2">
+                <Label>{t("cases.case_title")}</Label>
+                <Input value={title} onChange={(e) => setTitle(e.target.value)} />
+              </div>
+
+              <div className="space-y-2">
+                <Label>{t("consultations.beneficiary")}</Label>
+                <Select value={beneficiaryId} onValueChange={setBeneficiaryId}>
+                  <SelectTrigger data-testid="select-case-beneficiary">
+                    <SelectValue placeholder={beneficiariesLoading ? t("common.loading") : t("consultations.select_beneficiary")} />
+                  </SelectTrigger>
+                  <SelectContent>
+                    {(beneficiaries || []).map((b: any) => (
+                      <SelectItem key={b.id} value={b.id}>
+                        {b.fullName} ({b.idNumber})
+                      </SelectItem>
+                    ))}
+                  </SelectContent>
+                </Select>
+              </div>
+
+              <div className="space-y-2">
+                <Label>{t("intake.case_type")}</Label>
+                <Select value={caseType} onValueChange={setCaseType}>
+                  <SelectTrigger data-testid="select-case-type">
+                    <SelectValue placeholder={t("intake.case_type")} />
+                  </SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value="civil">Civil</SelectItem>
+                    <SelectItem value="criminal">Criminal</SelectItem>
+                    <SelectItem value="family">Family/Personal Status</SelectItem>
+                    <SelectItem value="labor">Labor</SelectItem>
+                    <SelectItem value="asylum">Asylum/Refugee</SelectItem>
+                  </SelectContent>
+                </Select>
+              </div>
+
+              <div className="space-y-2 md:col-span-2">
+                <Label>{t("intake.description")}</Label>
+                <Textarea value={description} onChange={(e) => setDescription(e.target.value)} />
+              </div>
+            </div>
+
+            <div className="flex items-center justify-end gap-2">
+              <Button variant="outline" onClick={() => setCreateOpen(false)}>
+                {t("common.cancel")}
+              </Button>
+              <Button onClick={handleCreate} disabled={createCaseMutation.isPending}>
+                {createCaseMutation.isPending ? t("common.loading") : t("cases.create")}
+              </Button>
+            </div>
+          </DialogContent>
+        </Dialog>
       </div>
 
       <Tabs defaultValue="all" className="w-full">
@@ -133,7 +253,7 @@ export default function Cases() {
                 ) : (
                   <TableRow>
                     <TableCell colSpan={6} className="text-center text-muted-foreground py-8">
-                      No cases found
+                      {t("cases.no_cases")}
                     </TableCell>
                   </TableRow>
                 )}

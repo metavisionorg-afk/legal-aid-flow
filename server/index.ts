@@ -3,6 +3,7 @@ import session from "express-session";
 import { registerRoutes } from "./routes";
 import { serveStatic } from "./static";
 import { createServer } from "http";
+import path from "path";
 
 const app = express();
 const httpServer = createServer(app);
@@ -29,6 +30,9 @@ app.use(
 );
 
 app.use(express.urlencoded({ extended: false }));
+
+// Serve uploaded files (used by public registration uploads)
+app.use("/uploads", express.static(path.resolve(process.cwd(), "uploads")));
 
 // Session middleware
 app.use(
@@ -85,6 +89,9 @@ app.use((req, res, next) => {
 (async () => {
   await registerRoutes(httpServer, app);
 
+  // Serve uploaded files (used by public registration)
+  app.use("/uploads", express.static(path.resolve(process.cwd(), "uploads")));
+
   app.use((err: any, _req: Request, res: Response, _next: NextFunction) => {
     const status = err.status || err.statusCode || 500;
     const message = err.message || "Internal Server Error";
@@ -108,14 +115,49 @@ app.use((req, res, next) => {
   // this serves both the API and the client.
   // It is the only port that is not firewalled.
   const port = parseInt(process.env.PORT || "5000", 10);
-  httpServer.listen(
-    {
-      port,
-      host: "0.0.0.0",
-      reusePort: true,
-    },
-    () => {
-      log(`serving on port ${port}`);
-    },
-  );
+
+  const primaryListenOptions = {
+    port,
+    host: process.env.HOST || "0.0.0.0",
+    reusePort: true,
+  };
+
+  const listenOnce = (options: { port: number; host: string; reusePort?: boolean }) =>
+    new Promise<void>((resolve, reject) => {
+      const onError = (error: any) => {
+        httpServer.off("listening", onListening);
+        reject(error);
+      };
+
+      const onListening = () => {
+        httpServer.off("error", onError);
+        resolve();
+      };
+
+      httpServer.once("error", onError);
+      httpServer.once("listening", onListening);
+      httpServer.listen(options);
+    });
+
+  try {
+    await listenOnce(primaryListenOptions);
+  } catch (error: any) {
+    if (error?.code === "ENOTSUP") {
+      log("listen() reusePort not supported; retrying without reusePort");
+      try {
+        await listenOnce({ port, host: primaryListenOptions.host });
+      } catch (retryError: any) {
+        if (retryError?.code === "ENOTSUP" && primaryListenOptions.host === "0.0.0.0") {
+          log("listen() on 0.0.0.0 not supported; retrying on 127.0.0.1");
+          await listenOnce({ port, host: "127.0.0.1" });
+        } else {
+          throw retryError;
+        }
+      }
+    } else {
+      throw error;
+    }
+  }
+
+  log(`serving on port ${port}`);
 })();

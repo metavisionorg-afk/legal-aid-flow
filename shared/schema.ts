@@ -18,6 +18,27 @@ export const taskTypeEnum = pgEnum("task_type", ["follow_up", "document_preparat
 export const paymentMethodEnum = pgEnum("payment_method", ["cash", "transfer", "sadad", "cheque"]);
 export const voucherTypeEnum = pgEnum("voucher_type", ["receipt", "disbursement"]);
 export const templateTypeEnum = pgEnum("template_type", ["settlement", "voucher", "acknowledgement", "invoice", "contract"]);
+export const genderEnum = pgEnum("gender", ["male", "female"]);
+export const preferredContactEnum = pgEnum("preferred_contact", ["whatsapp", "phone", "email"]);
+export const preferredLanguageEnum = pgEnum("preferred_language", ["ar", "en"]);
+export const serviceTypeEnum = pgEnum("service_type", [
+  "legal_consultation",
+  "court_representation",
+  "contract_drafting_review",
+  "complaint_drafting",
+  "family_case",
+  "labor_case",
+  "criminal_case",
+  "commercial_case",
+  "civil_compensation_case",
+  "administrative_case",
+  "judgment_enforcement",
+  "rental_disputes",
+  "inheritance_estates",
+  "other",
+]);
+export const serviceRequestStatusEnum = pgEnum("service_request_status", ["new", "in_review", "accepted", "rejected"]);
+export const documentOwnerTypeEnum = pgEnum("document_owner_type", ["beneficiary"]);
 export const permissionEnum = pgEnum("permission", [
   "view_dashboard", "manage_users", "manage_beneficiaries", "manage_cases",
   "manage_intake", "manage_tasks", "manage_finance", "manage_documents",
@@ -68,10 +89,23 @@ export const beneficiaries = pgTable("beneficiaries", {
   idNumber: text("id_number").notNull().unique(),
   phone: text("phone").notNull(),
   email: text("email"),
+  city: text("city"),
+  region: text("region"),
   address: text("address"),
   dateOfBirth: timestamp("date_of_birth"),
   nationality: text("nationality"),
-  gender: text("gender"),
+  gender: genderEnum("gender"),
+  maritalStatus: text("marital_status"),
+  dependentsCount: integer("dependents_count"),
+  employmentStatus: text("employment_status"),
+  monthlyIncomeRange: text("monthly_income_range"),
+  educationLevel: text("education_level"),
+  specialNeeds: boolean("special_needs").notNull().default(false),
+  specialNeedsDetails: text("special_needs_details"),
+  hasLawyerBefore: boolean("has_lawyer_before").notNull().default(false),
+  hasLawyerBeforeDetails: text("has_lawyer_before_details"),
+  preferredContact: preferredContactEnum("preferred_contact"),
+  preferredLanguage: preferredLanguageEnum("preferred_language"),
   roleCapacity: text("role_capacity"),
   attachments: text("attachments").array(),
   status: beneficiaryStatusEnum("status").notNull().default("pending"),
@@ -82,6 +116,25 @@ export const beneficiaries = pgTable("beneficiaries", {
 export const insertBeneficiarySchema = createInsertSchema(beneficiaries).omit({ id: true, createdAt: true, updatedAt: true });
 export type InsertBeneficiary = z.infer<typeof insertBeneficiarySchema>;
 export type Beneficiary = typeof beneficiaries.$inferSelect;
+
+// Service Requests table (Beneficiary self-service requests)
+export const serviceRequests = pgTable("service_requests", {
+  id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
+  beneficiaryId: varchar("beneficiary_id").notNull().references(() => beneficiaries.id),
+  serviceType: serviceTypeEnum("service_type").notNull(),
+  serviceTypeOther: text("service_type_other"),
+  issueSummary: text("issue_summary").notNull(),
+  issueDetails: text("issue_details"),
+  urgent: boolean("urgent").notNull().default(false),
+  urgentDate: timestamp("urgent_date"),
+  status: serviceRequestStatusEnum("status").notNull().default("new"),
+  createdAt: timestamp("created_at").notNull().defaultNow(),
+  updatedAt: timestamp("updated_at").notNull().defaultNow(),
+});
+
+export const insertServiceRequestSchema = createInsertSchema(serviceRequests).omit({ id: true, createdAt: true, updatedAt: true });
+export type InsertServiceRequest = z.infer<typeof insertServiceRequestSchema>;
+export type ServiceRequest = typeof serviceRequests.$inferSelect;
 
 // Intake Requests table
 export const intakeRequests = pgTable("intake_requests", {
@@ -407,6 +460,13 @@ export const documents = pgTable("documents", {
   uploadedBy: varchar("uploaded_by").notNull().references(() => users.id),
   beneficiaryId: varchar("beneficiary_id").references(() => beneficiaries.id),
   caseId: varchar("case_id").references(() => cases.id),
+  ownerType: documentOwnerTypeEnum("owner_type"),
+  ownerId: varchar("owner_id"),
+  requestId: varchar("request_id").references(() => serviceRequests.id),
+  storageKey: text("storage_key"),
+  fileName: text("file_name"),
+  mimeType: text("mime_type"),
+  size: integer("size"),
   isPublic: boolean("is_public").notNull().default(false),
   createdAt: timestamp("created_at").notNull().defaultNow(),
 });
@@ -414,6 +474,114 @@ export const documents = pgTable("documents", {
 export const insertDocumentSchema = createInsertSchema(documents).omit({ id: true, createdAt: true });
 export type InsertDocument = z.infer<typeof insertDocumentSchema>;
 export type Document = typeof documents.$inferSelect;
+
+// ====== Shared payload schemas (client + server) ======
+
+export const uploadedFileMetadataSchema = z.object({
+  storageKey: z.string().min(1),
+  fileUrl: z.string().min(1),
+  fileName: z.string().min(1),
+  mimeType: z.string().min(1),
+  size: z.number().int().nonnegative(),
+});
+
+export const registerBeneficiarySchema = z
+  .object({
+    account: z.object({
+      fullName: z.string().min(1),
+      phone: z.string().min(1),
+      email: z.string().email(),
+      password: z.string().min(8),
+      confirmPassword: z.string().min(8),
+    }),
+    profile: z.object({
+      idNumber: z.string().min(1),
+      dateOfBirth: z.string().optional().nullable(),
+      gender: z.enum(["male", "female"]).optional().nullable(),
+      nationality: z.string().optional().nullable(),
+      city: z.string().optional().nullable(),
+      region: z.string().optional().nullable(),
+      address: z.string().optional().nullable(),
+      maritalStatus: z.string().optional().nullable(),
+      dependentsCount: z.number().int().min(0).optional().nullable(),
+      employmentStatus: z.string().optional().nullable(),
+      monthlyIncomeRange: z.string().optional().nullable(),
+      educationLevel: z.string().optional().nullable(),
+      specialNeeds: z.boolean().optional().default(false),
+      specialNeedsDetails: z.string().optional().nullable(),
+      hasLawyerBefore: z.boolean().optional().default(false),
+      hasLawyerBeforeDetails: z.string().optional().nullable(),
+      preferredContact: z.enum(["whatsapp", "phone", "email"]).optional().nullable(),
+      preferredLanguage: z.enum(["ar", "en"]).optional().nullable(),
+    }),
+    serviceRequest: z.object({
+      serviceType: z.enum([
+        "legal_consultation",
+        "court_representation",
+        "contract_drafting_review",
+        "complaint_drafting",
+        "family_case",
+        "labor_case",
+        "criminal_case",
+        "commercial_case",
+        "civil_compensation_case",
+        "administrative_case",
+        "judgment_enforcement",
+        "rental_disputes",
+        "inheritance_estates",
+        "other",
+      ]),
+      serviceTypeOther: z.string().optional().nullable(),
+      issueSummary: z.string().min(1),
+      issueDetails: z.string().optional().nullable(),
+      urgent: z.boolean().optional().default(false),
+      urgentDate: z.string().optional().nullable(),
+      documents: z.array(uploadedFileMetadataSchema).optional().default([]),
+    }),
+  })
+  .superRefine((data, ctx) => {
+    if (data.account.password !== data.account.confirmPassword) {
+      ctx.addIssue({
+        code: z.ZodIssueCode.custom,
+        path: ["account", "confirmPassword"],
+        message: "Passwords do not match",
+      });
+    }
+
+    if (data.profile.specialNeeds && !data.profile.specialNeedsDetails?.trim()) {
+      ctx.addIssue({
+        code: z.ZodIssueCode.custom,
+        path: ["profile", "specialNeedsDetails"],
+        message: "Details are required",
+      });
+    }
+
+    if (data.profile.hasLawyerBefore && !data.profile.hasLawyerBeforeDetails?.trim()) {
+      ctx.addIssue({
+        code: z.ZodIssueCode.custom,
+        path: ["profile", "hasLawyerBeforeDetails"],
+        message: "Details are required",
+      });
+    }
+
+    if (data.serviceRequest.serviceType === "other" && !data.serviceRequest.serviceTypeOther?.trim()) {
+      ctx.addIssue({
+        code: z.ZodIssueCode.custom,
+        path: ["serviceRequest", "serviceTypeOther"],
+        message: "Please specify",
+      });
+    }
+
+    if (data.serviceRequest.urgent && !data.serviceRequest.urgentDate) {
+      ctx.addIssue({
+        code: z.ZodIssueCode.custom,
+        path: ["serviceRequest", "urgentDate"],
+        message: "Urgent date is required",
+      });
+    }
+  });
+
+export type RegisterBeneficiaryPayload = z.infer<typeof registerBeneficiarySchema>;
 
 // Templates table
 export const templates = pgTable("templates", {

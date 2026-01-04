@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import { useTranslation } from "react-i18next";
 import { Layout } from "@/components/layout/Layout";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
@@ -31,13 +31,13 @@ export default function Settings() {
   const { data: settings, isLoading: settingsLoading } = useQuery({
     queryKey: ["system-settings"],
     queryFn: systemSettingsAPI.get,
-    onSuccess: (data: any) => {
-      if (data) {
-        setVatRate(data.vatRate?.toString() || "");
-        setLogoUrl(data.organizationLogo || "");
-      }
-    },
   });
+
+  useEffect(() => {
+    if (!settings) return;
+    setVatRate(settings.vatRate?.toString() || "");
+    setLogoUrl(settings.organizationLogo || "");
+  }, [settings]);
 
   const updateMutation = useMutation({
     mutationFn: systemSettingsAPI.update,
@@ -91,7 +91,7 @@ export default function Settings() {
                 </div>
                 {logoUrl && (
                   <div className="mt-2 p-4 border rounded-md bg-muted/50">
-                    <img src={logoUrl} alt="Logo preview" className="h-16 object-contain" />
+                    <img src={logoUrl} alt={t("settings.logo_preview")} className="h-16 object-contain" />
                   </div>
                 )}
               </div>
@@ -187,7 +187,7 @@ export default function Settings() {
                 </div>
               ) : (
                 <div className="p-8 text-center text-muted-foreground">
-                  No audit logs available
+                  {t("settings.no_audit_logs")}
                 </div>
               )}
             </CardContent>

@@ -8,6 +8,10 @@ import type {
   InsertUser,
   Beneficiary,
   InsertBeneficiary,
+  ServiceRequest,
+  InsertServiceRequest,
+  Document,
+  InsertDocument,
   IntakeRequest,
   InsertIntakeRequest,
   Case,
@@ -32,9 +36,18 @@ import type {
   InsertUserRule,
   Task,
   InsertTask,
+  Session,
+  InsertSession,
 } from "@shared/schema";
 
-const pool = new Pool({ connectionString: process.env.DATABASE_URL });
+const connectionString =
+  process.env.DATABASE_URL || (process.env.NODE_ENV === "production" ? "" : "postgresql:///legal_aidflow");
+
+if (!connectionString) {
+  throw new Error("DATABASE_URL is required in production");
+}
+
+const pool = new Pool({ connectionString });
 const db = drizzle(pool, { schema });
 
 export interface IStorage {
@@ -61,6 +74,21 @@ export interface IStorage {
   createBeneficiary(beneficiary: InsertBeneficiary): Promise<Beneficiary>;
   updateBeneficiary(id: string, beneficiary: Partial<InsertBeneficiary>): Promise<Beneficiary | undefined>;
   deleteBeneficiary(id: string): Promise<boolean>;
+
+  // Service Requests (self-service)
+  createServiceRequest(request: InsertServiceRequest): Promise<ServiceRequest>;
+  attachDocumentsToServiceRequest(input: {
+    uploadedBy: string;
+    beneficiaryId: string;
+    requestId: string;
+    documents: Array<{
+      storageKey: string;
+      fileUrl: string;
+      fileName: string;
+      mimeType: string;
+      size: number;
+    }>;
+  }): Promise<Document[]>;
 
   // Intake Requests
   getIntakeRequest(id: string): Promise<IntakeRequest | undefined>;
@@ -154,6 +182,22 @@ export interface IStorage {
   createTask(task: InsertTask): Promise<Task>;
   updateTask(id: string, updates: Partial<InsertTask>): Promise<Task | undefined>;
   deleteTask(id: string): Promise<boolean>;
+
+  // Sessions
+  getSession(id: string): Promise<Session | undefined>;
+  getAllSessions(): Promise<Session[]>;
+  getSessionsByCase(caseId: string): Promise<Session[]>;
+  createSession(session: InsertSession): Promise<Session>;
+  updateSession(id: string, updates: Partial<InsertSession>): Promise<Session | undefined>;
+  deleteSession(id: string): Promise<boolean>;
+
+  // Consultations
+  getConsultation(id: string): Promise<schema.Consultation | undefined>;
+  getAllConsultations(): Promise<schema.Consultation[]>;
+  getConsultationsByBeneficiary(beneficiaryId: string): Promise<schema.Consultation[]>;
+  createConsultation(consultation: schema.InsertConsultation): Promise<schema.Consultation>;
+  updateConsultation(id: string, updates: Partial<schema.InsertConsultation>): Promise<schema.Consultation | undefined>;
+  deleteConsultation(id: string): Promise<boolean>;
 
   // Enhanced Dashboard Stats
   getEnhancedDashboardStats(): Promise<{
@@ -271,6 +315,49 @@ export class DatabaseStorage implements IStorage {
     return result.rowCount ? result.rowCount > 0 : false;
   }
 
+  // Service Requests
+  async createServiceRequest(insertRequest: InsertServiceRequest): Promise<ServiceRequest> {
+    const [request] = await db.insert(schema.serviceRequests).values(insertRequest).returning();
+    return request;
+  }
+
+  async attachDocumentsToServiceRequest(input: {
+    uploadedBy: string;
+    beneficiaryId: string;
+    requestId: string;
+    documents: Array<{
+      storageKey: string;
+      fileUrl: string;
+      fileName: string;
+      mimeType: string;
+      size: number;
+    }>;
+  }): Promise<Document[]> {
+    const rows: InsertDocument[] = input.documents.map((d) => ({
+      title: d.fileName,
+      description: null,
+      fileUrl: d.fileUrl,
+      fileType: d.mimeType,
+      fileSize: d.size,
+      uploadedBy: input.uploadedBy,
+      beneficiaryId: input.beneficiaryId,
+      caseId: null,
+      ownerType: "beneficiary",
+      ownerId: input.beneficiaryId,
+      requestId: input.requestId,
+      storageKey: d.storageKey,
+      fileName: d.fileName,
+      mimeType: d.mimeType,
+      size: d.size,
+      isPublic: false,
+      category: null,
+      tags: null,
+    } as any));
+
+    if (!rows.length) return [];
+    return db.insert(schema.documents).values(rows).returning();
+  }
+
   // Intake Requests
   async getIntakeRequest(id: string): Promise<IntakeRequest | undefined> {
     const [request] = await db.select().from(schema.intakeRequests).where(eq(schema.intakeRequests.id, id));
@@ -337,6 +424,85 @@ export class DatabaseStorage implements IStorage {
   }
 
   // Hearings
+
+  // Sessions
+  async getSession(id: string): Promise<Session | undefined> {
+    const [session] = await db.select().from(schema.sessions).where(eq(schema.sessions.id, id));
+    return session;
+  }
+
+  async getAllSessions(): Promise<Session[]> {
+    return db.select().from(schema.sessions).orderBy(desc(schema.sessions.gregorianDate));
+  }
+
+  async getSessionsByCase(caseId: string): Promise<Session[]> {
+    return db
+      .select()
+      .from(schema.sessions)
+      .where(eq(schema.sessions.caseId, caseId))
+      .orderBy(desc(schema.sessions.gregorianDate));
+  }
+
+  async createSession(session: InsertSession): Promise<Session> {
+    const [created] = await db.insert(schema.sessions).values(session).returning();
+    return created;
+  }
+
+  async updateSession(id: string, updates: Partial<InsertSession>): Promise<Session | undefined> {
+    const [updated] = await db
+      .update(schema.sessions)
+      .set({ ...updates, updatedAt: new Date() as any })
+      .where(eq(schema.sessions.id, id))
+      .returning();
+    return updated;
+  }
+
+  async deleteSession(id: string): Promise<boolean> {
+    const result = await db.delete(schema.sessions).where(eq(schema.sessions.id, id));
+    // @ts-ignore
+    return Boolean(result?.rowCount);
+  }
+
+  // Consultations
+  async getConsultation(id: string): Promise<schema.Consultation | undefined> {
+    const [consultation] = await db.select().from(schema.consultations).where(eq(schema.consultations.id, id));
+    return consultation;
+  }
+
+  async getAllConsultations(): Promise<schema.Consultation[]> {
+    return db.select().from(schema.consultations).orderBy(desc(schema.consultations.createdAt));
+  }
+
+  async getConsultationsByBeneficiary(beneficiaryId: string): Promise<schema.Consultation[]> {
+    return db
+      .select()
+      .from(schema.consultations)
+      .where(eq(schema.consultations.beneficiaryId, beneficiaryId))
+      .orderBy(desc(schema.consultations.createdAt));
+  }
+
+  async createConsultation(consultation: schema.InsertConsultation): Promise<schema.Consultation> {
+    const [created] = await db.insert(schema.consultations).values(consultation).returning();
+    return created;
+  }
+
+  async updateConsultation(
+    id: string,
+    updates: Partial<schema.InsertConsultation>
+  ): Promise<schema.Consultation | undefined> {
+    const [updated] = await db
+      .update(schema.consultations)
+      .set({ ...updates, updatedAt: new Date() as any })
+      .where(eq(schema.consultations.id, id))
+      .returning();
+    return updated;
+  }
+
+  async deleteConsultation(id: string): Promise<boolean> {
+    const result = await db.delete(schema.consultations).where(eq(schema.consultations.id, id));
+    // @ts-ignore
+    return Boolean(result?.rowCount);
+  }
   async getHearing(id: string): Promise<Hearing | undefined> {
     const [hearing] = await db.select().from(schema.hearings).where(eq(schema.hearings.id, id));
     return hearing;

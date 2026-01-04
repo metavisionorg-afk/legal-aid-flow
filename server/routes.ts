@@ -1,5 +1,8 @@
 import type { Express, Request } from "express";
 import { type Server } from "http";
+import fs from "fs";
+import path from "path";
+import { randomUUID } from "crypto";
 import { storage } from "./storage";
 import type { User } from "@shared/schema";
 import { 
@@ -14,7 +17,11 @@ import {
   insertNotificationSchema,
   insertSystemSettingsSchema,
   insertRuleSchema,
-  insertTaskSchema
+  insertTaskSchema,
+  insertSessionSchema,
+  insertConsultationSchema,
+  registerBeneficiarySchema,
+  uploadedFileMetadataSchema
 } from "@shared/schema";
 import { fromZodError } from "zod-validation-error";
 import bcrypt from "bcrypt";
@@ -164,6 +171,163 @@ export async function registerRoutes(
       res.json(userWithoutPassword);
     } catch (error: any) {
       res.status(500).json({ error: error.message });
+    }
+  });
+
+  // ========== PUBLIC UPLOADS (REGISTRATION) ==========
+
+  const UPLOAD_MAX_BYTES = 10 * 1024 * 1024;
+  const UPLOAD_ALLOWED_MIME = new Set(["image/jpeg", "image/png", "application/pdf"]);
+  const uploadsDir = path.resolve(process.cwd(), "uploads");
+  if (!fs.existsSync(uploadsDir)) fs.mkdirSync(uploadsDir, { recursive: true });
+
+  app.post("/api/uploads", async (req, res) => {
+    try {
+      const contentTypeHeader = req.headers["content-type"] || "";
+      const mimeType = String(contentTypeHeader).split(";")[0].trim().toLowerCase();
+      if (!UPLOAD_ALLOWED_MIME.has(mimeType)) {
+        return res.status(400).json({ error: "Unsupported file type" });
+      }
+
+      const sizeHeader = req.headers["content-length"];
+      const declaredSize = typeof sizeHeader === "string" ? Number(sizeHeader) : undefined;
+      if (declaredSize != null && Number.isFinite(declaredSize) && declaredSize > UPLOAD_MAX_BYTES) {
+        return res.status(413).json({ error: "File too large" });
+      }
+
+      const fileNameHeader = req.headers["x-file-name"];
+      const originalFileName = typeof fileNameHeader === "string" && fileNameHeader.trim() ? fileNameHeader.trim() : "upload";
+      const fileName = originalFileName.replace(/[^a-zA-Z0-9._-]/g, "_").slice(0, 120);
+
+      const ext = mimeType === "application/pdf" ? ".pdf" : mimeType === "image/png" ? ".png" : ".jpg";
+      const storageKey = `${randomUUID()}${ext}`;
+      const fullPath = path.join(uploadsDir, storageKey);
+
+      let received = 0;
+      const writeStream = fs.createWriteStream(fullPath, { flags: "wx" });
+
+      req.on("data", (chunk: any) => {
+        received += chunk.length || 0;
+        if (received > UPLOAD_MAX_BYTES) {
+          writeStream.destroy(new Error("MAX_SIZE"));
+          req.destroy();
+        }
+      });
+
+      await new Promise<void>((resolve, reject) => {
+        req.pipe(writeStream);
+        writeStream.on("finish", () => resolve());
+        writeStream.on("error", reject);
+        req.on("error", reject);
+      });
+
+      const fileUrl = `/uploads/${storageKey}`;
+      const response = uploadedFileMetadataSchema.parse({
+        storageKey,
+        fileUrl,
+        fileName,
+        mimeType,
+        size: received,
+      });
+
+      return res.status(201).json(response);
+    } catch (error: any) {
+      if (error?.message === "MAX_SIZE") {
+        return res.status(413).json({ error: "File too large" });
+      }
+      return res.status(400).json({ error: "Upload failed" });
+    }
+  });
+
+  // ========== PUBLIC BENEFICIARY SELF-REGISTRATION ==========
+
+  app.post("/api/auth/register-beneficiary", async (req, res) => {
+    try {
+      const parsed = registerBeneficiarySchema.safeParse(req.body);
+      if (!parsed.success) {
+        return res.status(400).json({ error: fromZodError(parsed.error).message });
+      }
+
+      const payload = parsed.data;
+
+      const existingEmail = await storage.getUserByEmail(payload.account.email);
+      if (existingEmail) {
+        return res.status(409).json({ error: "Email already exists" });
+      }
+
+      const existingId = await storage.getBeneficiaryByIdNumber(payload.profile.idNumber);
+      if (existingId) {
+        return res.status(409).json({ error: "ID number already exists" });
+      }
+
+      const hashedPassword = await bcrypt.hash(payload.account.password, 10);
+
+      const beneficiary = await storage.createBeneficiary({
+        fullName: payload.account.fullName,
+        phone: payload.account.phone,
+        email: payload.account.email,
+        idNumber: payload.profile.idNumber,
+        dateOfBirth: payload.profile.dateOfBirth ? new Date(payload.profile.dateOfBirth) : undefined,
+        gender: payload.profile.gender ?? undefined,
+        nationality: payload.profile.nationality ?? undefined,
+        city: payload.profile.city ?? undefined,
+        region: payload.profile.region ?? undefined,
+        address: payload.profile.address ?? undefined,
+        maritalStatus: payload.profile.maritalStatus ?? undefined,
+        dependentsCount: payload.profile.dependentsCount ?? undefined,
+        employmentStatus: payload.profile.employmentStatus ?? undefined,
+        monthlyIncomeRange: payload.profile.monthlyIncomeRange ?? undefined,
+        educationLevel: payload.profile.educationLevel ?? undefined,
+        specialNeeds: payload.profile.specialNeeds ?? false,
+        specialNeedsDetails: payload.profile.specialNeedsDetails ?? undefined,
+        hasLawyerBefore: payload.profile.hasLawyerBefore ?? false,
+        hasLawyerBeforeDetails: payload.profile.hasLawyerBeforeDetails ?? undefined,
+        preferredContact: payload.profile.preferredContact ?? undefined,
+        preferredLanguage: payload.profile.preferredLanguage ?? undefined,
+        status: "pending",
+      } as any);
+
+      const user = await storage.createUser({
+        username: payload.account.email,
+        email: payload.account.email,
+        password: hashedPassword,
+        fullName: payload.account.fullName,
+        role: "viewer",
+        userType: "beneficiary",
+        emailVerified: false,
+        beneficiaryId: beneficiary.id,
+      } as any);
+
+      const request = await storage.createServiceRequest({
+        beneficiaryId: beneficiary.id,
+        serviceType: payload.serviceRequest.serviceType,
+        serviceTypeOther: payload.serviceRequest.serviceTypeOther ?? undefined,
+        issueSummary: payload.serviceRequest.issueSummary,
+        issueDetails: payload.serviceRequest.issueDetails ?? undefined,
+        urgent: payload.serviceRequest.urgent ?? false,
+        urgentDate: payload.serviceRequest.urgentDate ? new Date(payload.serviceRequest.urgentDate) : undefined,
+        status: "new",
+      } as any);
+
+      if (payload.serviceRequest.documents?.length) {
+        await storage.attachDocumentsToServiceRequest({
+          uploadedBy: user.id,
+          beneficiaryId: beneficiary.id,
+          requestId: request.id,
+          documents: payload.serviceRequest.documents,
+        });
+      }
+
+      req.session.userId = user.id;
+
+      const { password: _, ...userWithoutPassword } = user as any;
+      return res.status(201).json({
+        user: userWithoutPassword,
+        beneficiary,
+        serviceRequest: request,
+      });
+    } catch (error: any) {
+      return res.status(500).json({ error: error.message || "Registration failed" });
     }
   });
 
@@ -1061,6 +1225,144 @@ export async function registerRoutes(
     try {
       const stats = await storage.getEnhancedDashboardStats();
       res.json(stats);
+    } catch (error: any) {
+      res.status(500).json({ error: error.message });
+    }
+  });
+
+  // ========== SESSIONS ROUTES ==========
+
+  app.get("/api/sessions", requireStaff, async (req, res) => {
+    try {
+      const sessions = await storage.getAllSessions();
+      res.json(sessions);
+    } catch (error: any) {
+      res.status(500).json({ error: error.message });
+    }
+  });
+
+  app.get("/api/cases/:caseId/sessions", requireStaff, async (req, res) => {
+    try {
+      const sessions = await storage.getSessionsByCase(req.params.caseId);
+      res.json(sessions);
+    } catch (error: any) {
+      res.status(500).json({ error: error.message });
+    }
+  });
+
+  app.post("/api/sessions", requireStaff, async (req: AuthRequest, res) => {
+    try {
+      const result = insertSessionSchema.safeParse(req.body);
+      if (!result.success) {
+        return res.status(400).json({ error: fromZodError(result.error).message });
+      }
+
+      const user = req.user as User;
+      const session = await storage.createSession(result.data);
+      await createAudit(user.id, "create", "session", session.id, `Created session: ${session.title}`, req.ip);
+      res.json(session);
+    } catch (error: any) {
+      res.status(500).json({ error: error.message });
+    }
+  });
+
+  app.patch("/api/sessions/:id", requireStaff, async (req: AuthRequest, res) => {
+    try {
+      const user = req.user as User;
+      const session = await storage.updateSession(req.params.id, req.body);
+      if (!session) {
+        return res.status(404).json({ error: "Session not found" });
+      }
+      await createAudit(user.id, "update", "session", session.id, `Updated session: ${session.title}`, req.ip);
+      res.json(session);
+    } catch (error: any) {
+      res.status(500).json({ error: error.message });
+    }
+  });
+
+  app.delete("/api/sessions/:id", requireStaff, async (req: AuthRequest, res) => {
+    try {
+      const user = req.user as User;
+      const success = await storage.deleteSession(req.params.id);
+      if (!success) {
+        return res.status(404).json({ error: "Session not found" });
+      }
+      await createAudit(user.id, "delete", "session", req.params.id, "Deleted session", req.ip);
+      res.json({ success: true });
+    } catch (error: any) {
+      res.status(500).json({ error: error.message });
+    }
+  });
+
+  // ========== CONSULTATIONS ROUTES ==========
+
+  app.get("/api/consultations", requireStaff, async (req, res) => {
+    try {
+      const consultations = await storage.getAllConsultations();
+      res.json(consultations);
+    } catch (error: any) {
+      res.status(500).json({ error: error.message });
+    }
+  });
+
+  app.get("/api/beneficiaries/:beneficiaryId/consultations", requireStaff, async (req, res) => {
+    try {
+      const consultations = await storage.getConsultationsByBeneficiary(req.params.beneficiaryId);
+      res.json(consultations);
+    } catch (error: any) {
+      res.status(500).json({ error: error.message });
+    }
+  });
+
+  app.post("/api/consultations", requireStaff, async (req: AuthRequest, res) => {
+    try {
+      const createSchema = insertConsultationSchema.omit({ consultationNumber: true });
+      const result = createSchema.safeParse(req.body);
+      if (!result.success) {
+        return res.status(400).json({ error: fromZodError(result.error).message });
+      }
+
+      const user = req.user as User;
+
+      // Generate a readable unique consultation number
+      const consultationNumber = `CONS-${Date.now()}`;
+
+      const consultation = await storage.createConsultation({
+        ...(result.data as any),
+        consultationNumber,
+        lawyerId: result.data.lawyerId ?? user.id,
+      });
+
+      await createAudit(user.id, "create", "consultation", consultation.id, `Created consultation: ${consultation.consultationNumber}`, req.ip);
+      res.json(consultation);
+    } catch (error: any) {
+      res.status(500).json({ error: error.message });
+    }
+  });
+
+  app.patch("/api/consultations/:id", requireStaff, async (req: AuthRequest, res) => {
+    try {
+      const user = req.user as User;
+      const consultation = await storage.updateConsultation(req.params.id, req.body);
+      if (!consultation) {
+        return res.status(404).json({ error: "Consultation not found" });
+      }
+      await createAudit(user.id, "update", "consultation", consultation.id, `Updated consultation: ${consultation.consultationNumber}`, req.ip);
+      res.json(consultation);
+    } catch (error: any) {
+      res.status(500).json({ error: error.message });
+    }
+  });
+
+  app.delete("/api/consultations/:id", requireStaff, async (req: AuthRequest, res) => {
+    try {
+      const user = req.user as User;
+      const success = await storage.deleteConsultation(req.params.id);
+      if (!success) {
+        return res.status(404).json({ error: "Consultation not found" });
+      }
+      await createAudit(user.id, "delete", "consultation", req.params.id, "Deleted consultation", req.ip);
+      res.json({ success: true });
     } catch (error: any) {
       res.status(500).json({ error: error.message });
     }

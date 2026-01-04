@@ -259,6 +259,41 @@ export const tasksAPI = {
     fetchAPI(`/tasks/${id}`, { method: "DELETE" }),
 };
 
+// Consultations API (Staff only)
+export const consultationsAPI = {
+  getAll: () => fetchAPI("/consultations"),
+  getByBeneficiary: (beneficiaryId: string) =>
+    fetchAPI(`/beneficiaries/${beneficiaryId}/consultations`),
+  create: (data: any) =>
+    fetchAPI("/consultations", {
+      method: "POST",
+      body: JSON.stringify(data),
+    }),
+  update: (id: string, data: any) =>
+    fetchAPI(`/consultations/${id}`, {
+      method: "PATCH",
+      body: JSON.stringify(data),
+    }),
+  delete: (id: string) => fetchAPI(`/consultations/${id}`, { method: "DELETE" }),
+};
+
+// Sessions API (Staff only)
+export const sessionsAPI = {
+  getAll: () => fetchAPI("/sessions"),
+  getByCase: (caseId: string) => fetchAPI(`/cases/${caseId}/sessions`),
+  create: (data: any) =>
+    fetchAPI("/sessions", {
+      method: "POST",
+      body: JSON.stringify(data),
+    }),
+  update: (id: string, data: any) =>
+    fetchAPI(`/sessions/${id}`, {
+      method: "PATCH",
+      body: JSON.stringify(data),
+    }),
+  delete: (id: string) => fetchAPI(`/sessions/${id}`, { method: "DELETE" }),
+};
+
 // Enhanced Dashboard API (Staff only)
 export const enhancedDashboardAPI = {
   getStats: () => fetchAPI("/dashboard/enhanced-stats"),

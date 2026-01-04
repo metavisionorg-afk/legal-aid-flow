@@ -4,7 +4,6 @@ import { QueryClientProvider } from "@tanstack/react-query";
 import { Toaster } from "@/components/ui/toaster";
 import { TooltipProvider } from "@/components/ui/tooltip";
 import { AuthProvider, useAuth } from "./contexts/AuthContext";
-import { Layout } from "@/components/layout/Layout";
 import { PortalLayout } from "@/components/layout/PortalLayout";
 import NotFound from "@/pages/not-found";
 import Login from "@/pages/Login";
@@ -15,6 +14,10 @@ import Cases from "@/pages/Cases";
 import CalendarPage from "@/pages/Calendar";
 import Reports from "@/pages/Reports";
 import Settings from "@/pages/Settings";
+import Tasks from "@/pages/Tasks";
+import Rules from "@/pages/Rules";
+import Consultations from "@/pages/Consultations";
+import Sessions from "@/pages/Sessions";
 import PortalLogin from "@/pages/portal/PortalLogin";
 import PortalRegister from "@/pages/portal/PortalRegister";
 import PortalDashboard from "@/pages/portal/PortalDashboard";
@@ -44,11 +47,7 @@ function StaffRoute({ component: Component }: any) {
     return null;
   }
 
-  return (
-    <Layout>
-      <Component />
-    </Layout>
-  );
+  return <Component />;
 }
 
 function PortalRoute({ component: Component }: any) {
@@ -102,6 +101,18 @@ function Router() {
       </Route>
       <Route path="/reports">
         {() => <StaffRoute component={Reports} />}
+      </Route>
+      <Route path="/tasks">
+        {() => <StaffRoute component={Tasks} />}
+      </Route>
+      <Route path="/rules">
+        {() => <StaffRoute component={Rules} />}
+      </Route>
+      <Route path="/consultations">
+        {() => <StaffRoute component={Consultations} />}
+      </Route>
+      <Route path="/sessions">
+        {() => <StaffRoute component={Sessions} />}
       </Route>
       <Route path="/settings">
         {() => <StaffRoute component={Settings} />}

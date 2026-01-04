@@ -62,7 +62,7 @@ async function seed() {
       address: "Amman, Jordan",
       dateOfBirth: new Date("1985-05-15"),
       nationality: "Jordanian",
-      gender: "Male",
+      gender: "male",
       status: "active",
     });
 
@@ -74,7 +74,7 @@ async function seed() {
       address: "Zarqa, Jordan",
       dateOfBirth: new Date("1990-03-22"),
       nationality: "Syrian",
-      gender: "Female",
+      gender: "female",
       status: "active",
     });
 
@@ -86,7 +86,7 @@ async function seed() {
       address: "Irbid, Jordan",
       dateOfBirth: new Date("1988-11-08"),
       nationality: "Jordanian",
-      gender: "Female",
+      gender: "female",
       status: "active",
     });
 

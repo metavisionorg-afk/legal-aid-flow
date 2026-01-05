@@ -1,5 +1,7 @@
 import express, { type Request, Response, NextFunction } from "express";
 import session from "express-session";
+import { createClient } from "redis";
+import { RedisStore } from "connect-redis";
 import { registerRoutes } from "./routes";
 import { serveStatic } from "./static";
 import { createServer } from "http";
@@ -7,6 +9,20 @@ import path from "path";
 
 const app = express();
 const httpServer = createServer(app);
+
+// Railway runs behind a reverse proxy.
+// Must be set before session middleware (and before reading req.ip/req.secure).
+app.set("trust proxy", 1);
+
+const isProd = process.env.NODE_ENV === "production";
+const sessionDebug = process.env.SESSION_DEBUG === "1";
+const sessionSecret =
+  process.env.SESSION_SECRET ||
+  (isProd ? undefined : "adala-legal-aid-secret-change-in-production");
+
+if (!sessionSecret) {
+  throw new Error("SESSION_SECRET is required when NODE_ENV=production");
+}
 
 // Session types
 declare module "express-session" {
@@ -34,20 +50,8 @@ app.use(express.urlencoded({ extended: false }));
 // Serve uploaded files (used by public registration uploads)
 app.use("/uploads", express.static(path.resolve(process.cwd(), "uploads")));
 
-// Session middleware
-app.use(
-  session({
-    secret: process.env.SESSION_SECRET || "adala-legal-aid-secret-change-in-production",
-    resave: false,
-    saveUninitialized: false,
-    cookie: {
-      maxAge: 1000 * 60 * 60 * 24 * 7, // 1 week
-      httpOnly: true,
-      secure: process.env.NODE_ENV === "production",
-      sameSite: "lax",
-    },
-  })
-);
+// Session middleware is initialized inside main() after Redis connects,
+// and before any routes are registered.
 
 export function log(message: string, source = "express") {
   const formattedTime = new Date().toLocaleTimeString("en-US", {
@@ -87,6 +91,52 @@ app.use((req, res, next) => {
 });
 
 (async () => {
+  const redisUrl = process.env.REDIS_URL || process.env.REDIS_PUBLIC_URL || "";
+  let redisStore: RedisStore | undefined;
+
+  if (!redisUrl) {
+    if (isProd) {
+      throw new Error("REDIS_URL (or REDIS_PUBLIC_URL) is required in production");
+    }
+    console.warn("[redis] REDIS_URL not set; using MemoryStore (development only)");
+  } else {
+    const redisClient = createClient({ url: redisUrl });
+    redisClient.on("error", (err) => console.error("[redis] client error:", err));
+    await redisClient.connect();
+    redisStore = new RedisStore({ client: redisClient, prefix: "aidflow:sess:" });
+  }
+
+  app.use(
+    session({
+      store: redisStore,
+      secret: sessionSecret,
+      resave: false,
+      saveUninitialized: false,
+      proxy: isProd,
+      name: "connect.sid",
+      cookie: {
+        httpOnly: true,
+        secure: isProd,
+        sameSite: "lax",
+        maxAge: 7 * 24 * 60 * 60 * 1000,
+      },
+    }),
+  );
+
+  if (sessionDebug) {
+    app.get("/api/auth/me", (req, res) => {
+      const user = (req as any).user ?? null;
+      res.json({
+        ok: true,
+        session: Boolean((req as any).session),
+        sessionID: (req as any).sessionID ?? null,
+        hasCookieHeader: Boolean(req.headers.cookie),
+        cookieHeaderSample: req.headers.cookie ? req.headers.cookie.slice(0, 120) : null,
+        user,
+      });
+    });
+  }
+
   await registerRoutes(httpServer, app);
 
   // Serve uploaded files (used by public registration)

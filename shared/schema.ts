@@ -1,11 +1,11 @@
 import { sql } from "drizzle-orm";
-import { pgTable, text, varchar, timestamp, integer, pgEnum, boolean } from "drizzle-orm/pg-core";
+import { pgTable, text, varchar, timestamp, integer, pgEnum, boolean, date } from "drizzle-orm/pg-core";
 import { createInsertSchema } from "drizzle-zod";
 import { z } from "zod";
 
 // Enums
 export const userTypeEnum = pgEnum("user_type", ["staff", "beneficiary"]);
-export const roleEnum = pgEnum("role", ["super_admin", "admin", "lawyer", "intake_officer", "viewer", "expert"]);
+export const roleEnum = pgEnum("role", ["super_admin", "admin", "lawyer", "intake_officer", "viewer", "expert", "beneficiary"]);
 export const caseTypeEnum = pgEnum("case_type", ["civil", "criminal", "family", "labor", "asylum"]);
 export const caseStatusEnum = pgEnum("case_status", ["open", "in_progress", "pending", "closed", "urgent"]);
 export const priorityEnum = pgEnum("priority", ["low", "medium", "high", "urgent"]);
@@ -36,6 +36,11 @@ export const serviceTypeEnum = pgEnum("service_type", [
   "rental_disputes",
   "inheritance_estates",
   "other",
+  // Stage 2 (UI-friendly service types)
+  "case_filing",
+  "contract_review",
+  "representation",
+  "mediation",
 ]);
 export const serviceRequestStatusEnum = pgEnum("service_request_status", ["new", "in_review", "accepted", "rejected"]);
 export const documentOwnerTypeEnum = pgEnum("document_owner_type", ["beneficiary"]);
@@ -43,7 +48,13 @@ export const permissionEnum = pgEnum("permission", [
   "view_dashboard", "manage_users", "manage_beneficiaries", "manage_cases",
   "manage_intake", "manage_tasks", "manage_finance", "manage_documents",
   "manage_templates", "manage_settings", "view_reports", "manage_consultations",
-  "manage_power_of_attorney", "manage_sessions"
+  "manage_power_of_attorney", "manage_sessions",
+  "beneficiary:self:read",
+  "beneficiary:self:update",
+  "cases:self:read",
+  "cases:self:create",
+  "documents:self:create",
+  "intake:self:create"
 ]);
 
 // Users table
@@ -57,7 +68,6 @@ export const users = pgTable("users", {
   role: roleEnum("role").notNull().default("viewer"),
   emailVerified: boolean("email_verified").notNull().default(false),
   verificationToken: text("verification_token"),
-  beneficiaryId: varchar("beneficiary_id").references(() => beneficiaries.id),
   createdAt: timestamp("created_at").notNull().defaultNow(),
 });
 
@@ -85,16 +95,22 @@ export type ExpertProfile = typeof expertProfiles.$inferSelect;
 // Beneficiaries table
 export const beneficiaries = pgTable("beneficiaries", {
   id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
+  userId: varchar("user_id").references(() => users.id).unique(),
   fullName: text("full_name").notNull(),
+  // Stage 2: optional national id (system-dependent)
+  nationalId: text("national_id"),
   idNumber: text("id_number").notNull().unique(),
   phone: text("phone").notNull(),
   email: text("email"),
   city: text("city"),
   region: text("region"),
   address: text("address"),
-  dateOfBirth: timestamp("date_of_birth"),
+  dateOfBirth: date("date_of_birth"),
+  // Stage 2: birth date alias (kept separate for backwards compatibility)
+  birthDate: date("birth_date"),
   nationality: text("nationality"),
   gender: genderEnum("gender"),
+  serviceType: serviceTypeEnum("service_type"),
   maritalStatus: text("marital_status"),
   dependentsCount: integer("dependents_count"),
   employmentStatus: text("employment_status"),
@@ -485,6 +501,32 @@ export const uploadedFileMetadataSchema = z.object({
   size: z.number().int().nonnegative(),
 });
 
+// Stage 3: simple public beneficiary self-registration payload (flat fields)
+export const registerBeneficiarySimpleSchema = z.object({
+  username: z.string().min(1).optional().nullable(),
+  email: z.string().email(),
+  password: z.string().min(8),
+  fullName: z.string().min(1),
+  phone: z.string().min(1),
+  city: z.string().min(1),
+  preferredLanguage: z.enum(["ar", "en"]),
+  serviceType: z.enum([
+    "legal_consultation",
+    "case_filing",
+    "contract_review",
+    "representation",
+    "mediation",
+    "other",
+  ]),
+  nationalId: z.string().optional().nullable(),
+  address: z.string().optional().nullable(),
+  birthDate: z.string().optional().nullable(),
+  gender: z.enum(["male", "female"]).optional().nullable(),
+  nationality: z.string().optional().nullable(),
+  notes: z.string().optional().nullable(),
+  details: z.string().optional().nullable(),
+});
+
 export const registerBeneficiarySchema = z
   .object({
     account: z.object({
@@ -530,6 +572,11 @@ export const registerBeneficiarySchema = z
         "rental_disputes",
         "inheritance_estates",
         "other",
+        // Stage 2 (UI-friendly service types)
+        "case_filing",
+        "contract_review",
+        "representation",
+        "mediation",
       ]),
       serviceTypeOther: z.string().optional().nullable(),
       issueSummary: z.string().min(1),

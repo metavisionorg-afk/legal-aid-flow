@@ -94,7 +94,7 @@ export default function PortalLogin() {
             </div>
             <p className="text-xs text-muted-foreground text-center">
               {t('portal.no_account')}{' '}
-              <a href="/portal/register" className="text-primary hover:underline">
+              <a href="/beneficiary/register" className="text-primary hover:underline">
                 {t('portal.register_now')}
               </a>
             </p>

@@ -53,6 +53,86 @@
     "phone": "Phone Number",
     "create_account": "Create Account"
   },
+  "errors": {
+    "email_exists": "This email is already registered",
+    "username_exists": "This username is already taken",
+    "forbidden": "Forbidden",
+    "rate_limited": "Too many requests, please try again later",
+    "unknown": "Unknown error"
+  },
+  "beneficiary_register": {
+    "title": "Create Beneficiary Account",
+    "subtitle": "Access legal aid services",
+    "full_name": "Full Name",
+    "email": "Email",
+    "password": "Password",
+    "confirm_password": "Confirm Password",
+    "phone": "Phone Number",
+    "city": "City",
+    "preferred_language": "Preferred Language",
+    "select_language": "Select language",
+    "language_ar": "Arabic",
+    "language_en": "English",
+    "service_type": "Requested Service",
+    "select_service": "Select service",
+    "details": "Additional details (optional)",
+    "national_id": "National ID (optional)",
+    "address": "Address (optional)",
+    "submit": "Create Account",
+    "have_account": "Already have an account?",
+    "success": "Account created successfully",
+    "error": "Registration failed",
+    "validation": {
+      "full_name_required": "Full name is required",
+      "email_invalid": "Please enter a valid email",
+      "password_min": "Password must be at least 8 characters",
+      "password_strong": "Password must include uppercase, lowercase, and a number",
+      "password_mismatch": "Passwords do not match",
+      "phone_required": "Phone number is required",
+      "city_required": "City is required",
+      "language_required": "Preferred language is required",
+      "service_required": "Service type is required"
+    }
+  },
+  "service_types": {
+    "legal_consultation": "Legal consultation",
+    "case_filing": "Case filing",
+    "contract_review": "Contract review",
+    "representation": "Representation",
+    "mediation": "Mediation",
+    "other": "Other"
+  },
+  "beneficiary_portal": {
+    "title": "Beneficiary Portal",
+    "subtitle": "Self access to your data",
+    "profile": "My profile",
+    "edit": "Edit",
+    "cancel": "Cancel",
+    "updated": "Profile updated",
+    "update_failed": "Failed to update profile",
+    "full_name": "Full name",
+    "phone": "Phone",
+    "city": "City",
+    "preferred_language": "Preferred language",
+    "address": "Address",
+    "national_id": "National ID",
+    "my_cases": "My cases",
+    "no_cases": "No cases found",
+    "case_number": "Case #",
+    "case_title": "Title",
+    "case_status": "Status",
+    "upload_document": "Upload document",
+    "upload": "Upload",
+    "document_uploaded": "Document uploaded",
+    "document_upload_failed": "Failed to upload document",
+    "my_documents": "My documents",
+    "no_documents": "No documents found",
+    "document_name": "File",
+    "document_type": "Type",
+    "document_size": "Size",
+    "document_actions": "Actions",
+    "open": "Open"
+  },
   "rules": {
     "name": "Name",
     "name_placeholder": "Rule name",
@@ -78,7 +158,21 @@
     "manage_documents": "Manage documents",
     "manage_intake": "Manage intake requests",
     "manage_tasks": "Manage tasks",
-    "manage_finance": "Manage finance"
+    "manage_finance": "Manage finance",
+    "beneficiary:self:read": "View own profile",
+    "beneficiary:self:update": "Update own profile",
+    "cases:self:read": "View own cases",
+    "cases:self:create": "Create own cases",
+    "documents:self:create": "Upload own documents",
+    "intake:self:create": "Create own intake requests"
+  },
+  "service_types": {
+    "legal_consultation": "Legal consultation",
+    "case_filing": "Case filing",
+    "contract_review": "Contract review",
+    "representation": "Representation",
+    "mediation": "Mediation",
+    "other": "Other"
   },
   "consultations": {
     "title": "Consultations",
@@ -304,6 +398,9 @@
     "back": "Back",
     "next": "Next",
     "submit": "Submit",
-    "view": "View"
+    "view": "View",
+    "forbidden_title": "Forbidden",
+    "forbidden_description": "You don't have permission to access this page.",
+    "go_to_portal": "Go to portal"
   }
 }

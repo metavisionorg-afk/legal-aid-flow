@@ -28,6 +28,7 @@ import { Badge } from "@/components/ui/badge";
 import { Skeleton } from "@/components/ui/skeleton";
 
 import { rulesAPI, usersAPI } from "@/lib/api";
+import { getErrorMessage } from "@/lib/errors";
 import { toast } from "sonner";
 import type { Rule, User } from "@shared/schema";
 
@@ -43,23 +44,16 @@ const PERMISSIONS = [
   "manage_intake",
   "manage_tasks",
   "manage_finance",
+  "beneficiary:self:read",
+  "beneficiary:self:update",
+  "cases:self:read",
+  "cases:self:create",
+  "documents:self:create",
+  "intake:self:create",
 ] as const;
 
 function permissionLabel(t: (key: string, options?: any) => string, permission: string): string {
   return t(`permissions.${permission}`, { defaultValue: permission });
-}
-
-function getApiErrorMessage(err: unknown): string {
-  if (err && typeof err === "object") {
-    const anyErr = err as any;
-    return (
-      anyErr?.message ||
-      anyErr?.response?.data?.error ||
-      anyErr?.response?.data?.message ||
-      "Request failed"
-    );
-  }
-  return "Request failed";
 }
 
 export default function Rules() {
@@ -108,7 +102,7 @@ export default function Rules() {
       setSelectedPermissions(["view_dashboard"]);
       await queryClient.invalidateQueries({ queryKey: ["rules"] });
     },
-    onError: (err) => toast.error(getApiErrorMessage(err)),
+    onError: (err) => toast.error(getErrorMessage(err, t)),
   });
 
   const deleteRuleMutation = useMutation({
@@ -117,7 +111,7 @@ export default function Rules() {
       toast.success("Rule deleted");
       await queryClient.invalidateQueries({ queryKey: ["rules"] });
     },
-    onError: (err) => toast.error(getApiErrorMessage(err)),
+    onError: (err) => toast.error(getErrorMessage(err, t)),
   });
 
   const assignRuleMutation = useMutation({
@@ -130,7 +124,7 @@ export default function Rules() {
       toast.success("Rule assigned");
       setSelectedRuleId("");
     },
-    onError: (err) => toast.error(getApiErrorMessage(err)),
+    onError: (err) => toast.error(getErrorMessage(err, t)),
   });
 
   return (

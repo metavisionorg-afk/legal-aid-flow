@@ -1,6 +1,16 @@
 // API Client
 const API_BASE = "/api";
 
+function pickErrorMessage(data: any, fallback: string) {
+  if (typeof data === "string" && data.trim()) return data;
+  if (data && typeof data === "object") {
+    if (typeof (data as any).error === "string" && (data as any).error.trim()) return (data as any).error;
+    if (typeof (data as any).message === "string" && (data as any).message.trim()) return (data as any).message;
+    if (typeof (data as any).msg === "string" && (data as any).msg.trim()) return (data as any).msg;
+  }
+  return fallback;
+}
+
 async function fetchAPI(endpoint: string, options?: RequestInit) {
   const res = await fetch(`${API_BASE}${endpoint}`, {
     ...options,
@@ -12,8 +22,40 @@ async function fetchAPI(endpoint: string, options?: RequestInit) {
   });
 
   if (!res.ok) {
-    const error = await res.json().catch(() => ({ error: "Request failed" }));
-    throw new Error(error.error || "Request failed");
+    const contentType = res.headers.get("content-type") || "";
+    const data = contentType.includes("application/json")
+      ? await res.json().catch(() => ({ error: "Request failed" }))
+      : await res.text().catch(() => "Request failed");
+    const message = pickErrorMessage(data, res.statusText || "Request failed");
+
+    const error: any = new Error(message);
+    error.response = { status: res.status, statusText: res.statusText, data };
+    throw error;
+  }
+
+  return res.json();
+}
+
+async function fetchUpload(file: File) {
+  const res = await fetch(`${API_BASE}/uploads`, {
+    method: "POST",
+    body: file,
+    headers: {
+      "Content-Type": file.type || "application/octet-stream",
+      "x-file-name": file.name,
+    },
+    credentials: "include",
+  });
+
+  if (!res.ok) {
+    const contentType = res.headers.get("content-type") || "";
+    const data = contentType.includes("application/json")
+      ? await res.json().catch(() => ({ error: "Upload failed" }))
+      : await res.text().catch(() => "Upload failed");
+    const message = pickErrorMessage(data, res.statusText || "Upload failed");
+    const error: any = new Error(message);
+    error.response = { status: res.status, statusText: res.statusText, data };
+    throw error;
   }
 
   return res.json();
@@ -35,6 +77,12 @@ export const authAPI = {
   
   register: (data: any) =>
     fetchAPI("/auth/register", {
+      method: "POST",
+      body: JSON.stringify(data),
+    }),
+
+  registerBeneficiary: (data: any) =>
+    fetchAPI("/auth/register-beneficiary", {
       method: "POST",
       body: JSON.stringify(data),
     }),
@@ -71,6 +119,29 @@ export const portalAPI = {
   
   getDashboardStats: () =>
     fetchAPI("/portal/dashboard-stats"),
+};
+
+// Beneficiary Self API
+export const beneficiaryAPI = {
+  me: () => fetchAPI("/beneficiary/me"),
+  updateMe: (data: any) =>
+    fetchAPI("/beneficiary/me", {
+      method: "PATCH",
+      body: JSON.stringify(data),
+    }),
+};
+
+export const uploadsAPI = {
+  upload: (file: File) => fetchUpload(file),
+};
+
+export const documentsAPI = {
+  uploadMy: (data: { requestId?: string; documents: any[] }) =>
+    fetchAPI("/documents/my", {
+      method: "POST",
+      body: JSON.stringify(data),
+    }),
+  listMy: () => fetchAPI("/documents/my"),
 };
 
 // Beneficiaries API (Staff only)
@@ -111,6 +182,7 @@ export const intakeAPI = {
 export const casesAPI = {
   getAll: () => fetchAPI("/cases"),
   getOne: (id: string) => fetchAPI(`/cases/${id}`),
+  getMy: () => fetchAPI("/cases/my"),
   create: (data: any) =>
     fetchAPI("/cases", {
       method: "POST",

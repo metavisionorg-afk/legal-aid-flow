@@ -4,7 +4,7 @@ import fs from "fs";
 import path from "path";
 import { randomUUID } from "crypto";
 import { storage } from "./storage";
-import type { User } from "@shared/schema";
+import type { Beneficiary, Rule, User } from "@shared/schema";
 import { 
   insertUserSchema, 
   insertBeneficiarySchema, 
@@ -21,19 +21,89 @@ import {
   insertSessionSchema,
   insertConsultationSchema,
   registerBeneficiarySchema,
+  registerBeneficiarySimpleSchema,
   uploadedFileMetadataSchema
 } from "@shared/schema";
 import { fromZodError } from "zod-validation-error";
 import bcrypt from "bcrypt";
+import { z } from "zod";
 
 interface AuthRequest extends Request {
   user?: User;
+  beneficiary?: Beneficiary;
 }
 
 export async function registerRoutes(
   httpServer: Server,
   app: Express
 ): Promise<Server> {
+
+  function getErrorMessage(err: unknown): string {
+    if (err instanceof Error && err.message) return err.message;
+    if (err && typeof err === "object") {
+      const anyErr = err as any;
+      return (
+        anyErr?.response?.data?.error ||
+        anyErr?.response?.data?.message ||
+        anyErr?.message ||
+        anyErr?.error ||
+        "Request failed"
+      );
+    }
+    if (typeof err === "string" && err.trim()) return err;
+    return "Request failed";
+  }
+
+  function createInMemoryRateLimiter(options: { windowMs: number; max: number }) {
+    const hits = new Map<string, { count: number; resetAt: number }>();
+
+    return (req: any, res: any, next: any) => {
+      const key = String(req.ip || "unknown");
+      const now = Date.now();
+      const existing = hits.get(key);
+
+      if (!existing || now > existing.resetAt) {
+        hits.set(key, { count: 1, resetAt: now + options.windowMs });
+        return next();
+      }
+
+      existing.count += 1;
+      if (existing.count > options.max) {
+        return res.status(429).json({ error: "Too many requests, please try again later" });
+      }
+
+      return next();
+    };
+  }
+
+  const registerBeneficiaryRateLimit = createInMemoryRateLimiter({ windowMs: 10 * 60 * 1000, max: 10 });
+
+  const BENEFICIARY_DEFAULT_RULE_NAME = "beneficiary";
+  const BENEFICIARY_DEFAULT_PERMISSIONS = [
+    "beneficiary:self:read",
+    "beneficiary:self:update",
+    "cases:self:read",
+    "cases:self:create",
+    "documents:self:create",
+    "intake:self:create",
+  ] as const;
+
+  async function ensureBeneficiaryDefaultRule(): Promise<Rule> {
+    const existing = await storage.getRuleByName(BENEFICIARY_DEFAULT_RULE_NAME);
+    if (existing) return existing;
+    return storage.createRule({
+      name: BENEFICIARY_DEFAULT_RULE_NAME,
+      description: "Default permissions for beneficiary users",
+      permissions: [...BENEFICIARY_DEFAULT_PERMISSIONS],
+    } as any);
+  }
+
+  async function assignBeneficiaryDefaultRule(userId: string): Promise<void> {
+    const rule = await ensureBeneficiaryDefaultRule();
+    const current = await storage.getUserRules(userId);
+    if (current.some((r) => r.id === rule.id)) return;
+    await storage.assignRuleToUser(userId, rule.id);
+  }
   
   // Authentication Middleware
   function requireAuth(req: any, res: any, next: any) {
@@ -65,7 +135,12 @@ export async function registerRoutes(
     if (!user || user.userType !== "beneficiary") {
       return res.status(403).json({ error: "Beneficiary access required" });
     }
+    const beneficiary = await storage.getBeneficiaryByUserId(user.id);
+    if (!beneficiary) {
+      return res.status(404).json({ error: "Beneficiary profile not found" });
+    }
     req.user = user;
+    req.beneficiary = beneficiary;
     next();
   }
 
@@ -241,8 +316,84 @@ export async function registerRoutes(
 
   // ========== PUBLIC BENEFICIARY SELF-REGISTRATION ==========
 
-  app.post("/api/auth/register-beneficiary", async (req, res) => {
+  app.post("/api/auth/register-beneficiary", registerBeneficiaryRateLimit, async (req, res) => {
     try {
+      const isLegacyPayload = Boolean(req.body && typeof req.body === "object" && (req.body as any).account);
+
+      // Stage 3 (flat) payload
+      if (!isLegacyPayload) {
+        const parsed = registerBeneficiarySimpleSchema.safeParse(req.body);
+        if (!parsed.success) {
+          return res.status(400).json({ error: fromZodError(parsed.error).message });
+        }
+
+        const input = parsed.data;
+        const username = (input.username && String(input.username).trim()) || input.email;
+
+        const existingEmail = await storage.getUserByEmail(input.email);
+        if (existingEmail) {
+          return res.status(409).json({ error: "Email already exists" });
+        }
+
+        const existingUsername = await storage.getUserByUsername(username);
+        if (existingUsername) {
+          return res.status(409).json({ error: "Username already exists" });
+        }
+
+        const hashedPassword = await bcrypt.hash(input.password, 10);
+
+        const user = await storage.createUser({
+          username,
+          email: input.email,
+          password: hashedPassword,
+          fullName: input.fullName,
+          role: "beneficiary",
+          userType: "beneficiary",
+          emailVerified: false,
+        } as any);
+
+        const generatedIdNumber = (input.nationalId && input.nationalId.trim()) || `AUTO-${randomUUID()}`;
+        const beneficiary = await storage.createBeneficiary({
+          userId: user.id,
+          fullName: input.fullName,
+          phone: input.phone,
+          email: input.email,
+          city: input.city,
+          address: input.address ?? undefined,
+          preferredLanguage: input.preferredLanguage,
+          gender: input.gender ?? undefined,
+          nationality: input.nationality ?? undefined,
+          nationalId: input.nationalId ?? undefined,
+          idNumber: generatedIdNumber,
+          birthDate: input.birthDate ? new Date(input.birthDate) : undefined,
+          serviceType: input.serviceType,
+          status: "pending",
+        } as any);
+
+        await assignBeneficiaryDefaultRule(user.id);
+
+        const request = await storage.createServiceRequest({
+          beneficiaryId: beneficiary.id,
+          serviceType: input.serviceType as any,
+          issueSummary: (input.details || input.notes || "New request").trim(),
+          issueDetails: (input.notes || input.details) ?? undefined,
+          urgent: false,
+          status: "new",
+        } as any);
+
+        req.session.userId = user.id;
+
+        const { password: _, ...userWithoutPassword } = user as any;
+        return res.status(201).json({
+          success: true,
+          user: userWithoutPassword,
+          beneficiary,
+          serviceRequest: request,
+          auth: { type: "session" },
+        });
+      }
+
+      // Legacy (nested) payload
       const parsed = registerBeneficiarySchema.safeParse(req.body);
       if (!parsed.success) {
         return res.status(400).json({ error: fromZodError(parsed.error).message });
@@ -292,11 +443,17 @@ export async function registerRoutes(
         email: payload.account.email,
         password: hashedPassword,
         fullName: payload.account.fullName,
-        role: "viewer",
+        role: "beneficiary",
         userType: "beneficiary",
         emailVerified: false,
-        beneficiaryId: beneficiary.id,
       } as any);
+
+      await storage.updateBeneficiary(beneficiary.id, {
+        userId: user.id,
+        serviceType: payload.serviceRequest.serviceType,
+      } as any);
+
+      await assignBeneficiaryDefaultRule(user.id);
 
       const request = await storage.createServiceRequest({
         beneficiaryId: beneficiary.id,
@@ -322,12 +479,14 @@ export async function registerRoutes(
 
       const { password: _, ...userWithoutPassword } = user as any;
       return res.status(201).json({
+        success: true,
         user: userWithoutPassword,
         beneficiary,
         serviceRequest: request,
+        auth: { type: "session" },
       });
     } catch (error: any) {
-      return res.status(500).json({ error: error.message || "Registration failed" });
+      return res.status(500).json({ error: getErrorMessage(error) || "Registration failed" });
     }
   });
 
@@ -368,11 +527,16 @@ export async function registerRoutes(
         email,
         password: hashedPassword,
         fullName,
-        role: "viewer",
+        role: "beneficiary",
         userType: "beneficiary",
         emailVerified: false,
-        beneficiaryId: beneficiary.id,
       });
+
+      await storage.updateBeneficiary(beneficiary.id, {
+        userId: user.id,
+      } as any);
+
+      await assignBeneficiaryDefaultRule(user.id);
 
       const { password: _, ...userWithoutPassword } = user;
       res.json({ user: userWithoutPassword, beneficiary });
@@ -449,12 +613,7 @@ export async function registerRoutes(
 
   app.get("/api/portal/profile", requireBeneficiary, async (req: AuthRequest, res) => {
     try {
-      const user = req.user!;
-      if (!user.beneficiaryId) {
-        return res.status(404).json({ error: "Beneficiary profile not found" });
-      }
-      const beneficiary = await storage.getBeneficiary(user.beneficiaryId);
-      res.json(beneficiary);
+      res.json(req.beneficiary);
     } catch (error: any) {
       res.status(500).json({ error: error.message });
     }
@@ -462,11 +621,24 @@ export async function registerRoutes(
 
   app.patch("/api/portal/profile", requireBeneficiary, async (req: AuthRequest, res) => {
     try {
-      const user = req.user!;
-      if (!user.beneficiaryId) {
-        return res.status(404).json({ error: "Beneficiary profile not found" });
+      const body = (req.body || {}) as any;
+      const updates: any = {};
+      const allowed = [
+        "fullName",
+        "phone",
+        "city",
+        "address",
+        "preferredLanguage",
+        "nationalId",
+        "nationality",
+        "gender",
+        "birthDate",
+      ];
+      for (const key of allowed) {
+        if (key in body) updates[key] = body[key];
       }
-      const beneficiary = await storage.updateBeneficiary(user.beneficiaryId, req.body);
+
+      const beneficiary = await storage.updateBeneficiary(req.beneficiary!.id, updates);
       res.json(beneficiary);
     } catch (error: any) {
       res.status(500).json({ error: error.message });
@@ -475,11 +647,7 @@ export async function registerRoutes(
 
   app.get("/api/portal/my-cases", requireBeneficiary, async (req: AuthRequest, res) => {
     try {
-      const user = req.user!;
-      if (!user.beneficiaryId) {
-        return res.json([]);
-      }
-      const cases = await storage.getCasesByBeneficiary(user.beneficiaryId);
+      const cases = await storage.getCasesByBeneficiary(req.beneficiary!.id);
       // Remove internal notes for beneficiary view
       const publicCases = cases.map(({ internalNotes, ...caseData }) => caseData);
       res.json(publicCases);
@@ -488,13 +656,110 @@ export async function registerRoutes(
     }
   });
 
+  // ========== STAGE 5: BENEFICIARY SELF ENDPOINTS ==========
+
+  app.get("/api/beneficiary/me", requireBeneficiary, async (req: AuthRequest, res) => {
+    try {
+      res.json(req.beneficiary);
+    } catch (error: any) {
+      res.status(500).json({ error: error.message });
+    }
+  });
+
+  app.patch("/api/beneficiary/me", requireBeneficiary, async (req: AuthRequest, res) => {
+    try {
+      const body = (req.body || {}) as any;
+      const updates: any = {};
+      const allowed = [
+        "fullName",
+        "phone",
+        "city",
+        "address",
+        "preferredLanguage",
+        "nationalId",
+        "nationality",
+        "gender",
+        "birthDate",
+      ];
+      for (const key of allowed) {
+        if (key in body) updates[key] = body[key];
+      }
+
+      const updated = await storage.updateBeneficiary(req.beneficiary!.id, updates);
+      res.json(updated);
+    } catch (error: any) {
+      res.status(500).json({ error: error.message });
+    }
+  });
+
+  app.get("/api/cases/my", requireBeneficiary, async (req: AuthRequest, res) => {
+    try {
+      const cases = await storage.getCasesByBeneficiary(req.beneficiary!.id);
+      const publicCases = cases.map(({ internalNotes, ...caseData }) => caseData);
+      res.json(publicCases);
+    } catch (error: any) {
+      res.status(500).json({ error: error.message });
+    }
+  });
+
+  app.post("/api/documents/my", requireBeneficiary, async (req: AuthRequest, res) => {
+    try {
+      const bodySchema = z.object({
+        requestId: z.string().optional().nullable(),
+        documents: z.array(uploadedFileMetadataSchema).min(1),
+      });
+
+      const parsed = bodySchema.safeParse(req.body);
+      if (!parsed.success) {
+        return res.status(400).json({ error: fromZodError(parsed.error).message });
+      }
+
+      const user = req.user!;
+      const beneficiary = req.beneficiary!;
+
+      const requestId = parsed.data.requestId ? String(parsed.data.requestId) : undefined;
+      if (requestId) {
+        const sr = await storage.getServiceRequest(requestId);
+        if (!sr) {
+          return res.status(404).json({ error: "Service request not found" });
+        }
+        if (sr.beneficiaryId !== beneficiary.id) {
+          return res.status(403).json({ error: "Forbidden" });
+        }
+
+        const docs = await storage.attachDocumentsToServiceRequest({
+          uploadedBy: user.id,
+          beneficiaryId: beneficiary.id,
+          requestId,
+          documents: parsed.data.documents,
+        });
+        return res.status(201).json({ success: true, documents: docs });
+      }
+
+      const docs = await storage.createDocumentsForBeneficiary({
+        uploadedBy: user.id,
+        beneficiaryId: beneficiary.id,
+        documents: parsed.data.documents,
+      });
+      return res.status(201).json({ success: true, documents: docs });
+    } catch (error: any) {
+      res.status(500).json({ error: error.message });
+    }
+  });
+
+  app.get("/api/documents/my", requireBeneficiary, async (req: AuthRequest, res) => {
+    try {
+      const beneficiary = req.beneficiary!;
+      const docs = await storage.getDocumentsByBeneficiary(beneficiary.id);
+      res.json(docs);
+    } catch (error: any) {
+      res.status(500).json({ error: error.message });
+    }
+  });
+
   app.get("/api/portal/my-intake-requests", requireBeneficiary, async (req: AuthRequest, res) => {
     try {
-      const user = req.user!;
-      if (!user.beneficiaryId) {
-        return res.json([]);
-      }
-      const requests = await storage.getIntakeRequestsByBeneficiary(user.beneficiaryId);
+      const requests = await storage.getIntakeRequestsByBeneficiary(req.beneficiary!.id);
       // Remove review notes for beneficiary view
       const publicRequests = requests.map(({ reviewNotes, ...request }) => request);
       res.json(publicRequests);
@@ -506,12 +771,9 @@ export async function registerRoutes(
   app.post("/api/portal/intake-requests", requireBeneficiary, async (req: AuthRequest, res) => {
     try {
       const user = req.user!;
-      if (!user.beneficiaryId) {
-        return res.status(400).json({ error: "Beneficiary profile not found" });
-      }
 
       const request = await storage.createIntakeRequest({
-        beneficiaryId: user.beneficiaryId,
+        beneficiaryId: req.beneficiary!.id,
         caseType: req.body.caseType,
         description: req.body.description,
         documents: req.body.documents || [],
@@ -535,11 +797,7 @@ export async function registerRoutes(
 
   app.get("/api/portal/dashboard-stats", requireBeneficiary, async (req: AuthRequest, res) => {
     try {
-      const user = req.user!;
-      if (!user.beneficiaryId) {
-        return res.json({ totalCases: 0, activeCases: 0, pendingIntake: 0, upcomingAppointments: 0 });
-      }
-      const stats = await storage.getBeneficiaryDashboardStats(user.beneficiaryId);
+      const stats = await storage.getBeneficiaryDashboardStats(req.beneficiary!.id);
       res.json(stats);
     } catch (error: any) {
       res.status(500).json({ error: error.message });
@@ -796,8 +1054,11 @@ export async function registerRoutes(
       }
 
       let appointments: any[] = [];
-      if (user.userType === "beneficiary" && user.beneficiaryId) {
-        appointments = await storage.getAppointmentsByBeneficiary(user.beneficiaryId);
+      if (user.userType === "beneficiary") {
+        const beneficiary = await storage.getBeneficiaryByUserId(user.id);
+        if (beneficiary) {
+          appointments = await storage.getAppointmentsByBeneficiary(beneficiary.id);
+        }
       } else if (user.userType === "staff") {
         appointments = await storage.getAllAppointments();
       }
@@ -830,8 +1091,11 @@ export async function registerRoutes(
       let beneficiaryId = req.body.beneficiaryId;
       
       // If beneficiary user, use their beneficiaryId
-      if (user.userType === "beneficiary" && user.beneficiaryId) {
-        beneficiaryId = user.beneficiaryId;
+      if (user.userType === "beneficiary") {
+        const beneficiary = await storage.getBeneficiaryByUserId(user.id);
+        if (beneficiary) {
+          beneficiaryId = beneficiary.id;
+        }
       }
 
       if (!beneficiaryId) {

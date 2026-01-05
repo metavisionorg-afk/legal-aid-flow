@@ -53,6 +53,86 @@
     "phone": "رقم الهاتف",
     "create_account": "إنشاء حساب"
   },
+  "beneficiary_register": {
+    "title": "إنشاء حساب مستفيد",
+    "subtitle": "الوصول إلى خدمات المساعدة القانونية",
+    "full_name": "الاسم الكامل",
+    "email": "البريد الإلكتروني",
+    "password": "كلمة المرور",
+    "confirm_password": "تأكيد كلمة المرور",
+    "phone": "رقم الجوال",
+    "city": "المدينة",
+    "preferred_language": "اللغة المفضلة",
+    "select_language": "اختر اللغة",
+    "language_ar": "العربية",
+    "language_en": "الإنجليزية",
+    "service_type": "نوع الخدمة المطلوبة",
+    "select_service": "اختر الخدمة",
+    "details": "تفاصيل إضافية (اختياري)",
+    "national_id": "رقم الهوية (اختياري)",
+    "address": "العنوان (اختياري)",
+    "submit": "إنشاء حساب",
+    "have_account": "لديك حساب بالفعل؟",
+    "success": "تم إنشاء الحساب بنجاح",
+    "error": "تعذر إنشاء الحساب",
+    "validation": {
+      "full_name_required": "الاسم الكامل مطلوب",
+      "email_invalid": "يرجى إدخال بريد إلكتروني صحيح",
+      "password_min": "يجب أن تكون كلمة المرور 8 أحرف على الأقل",
+      "password_strong": "يجب أن تحتوي كلمة المرور على حرف كبير وصغير ورقم",
+      "password_mismatch": "كلمتا المرور غير متطابقتين",
+      "phone_required": "رقم الجوال مطلوب",
+      "city_required": "المدينة مطلوبة",
+      "language_required": "اللغة المفضلة مطلوبة",
+      "service_required": "نوع الخدمة مطلوب"
+    }
+  },
+  "service_types": {
+    "legal_consultation": "استشارة قانونية",
+    "case_filing": "رفع/تسجيل قضية",
+    "contract_review": "مراجعة عقد",
+    "representation": "تمثيل/توكيل",
+    "mediation": "صلح/وساطة",
+    "other": "أخرى"
+  },
+  "beneficiary_portal": {
+    "title": "بوابة المستفيد",
+    "subtitle": "الوصول الذاتي لبياناتك",
+    "profile": "بياناتي",
+    "edit": "تعديل",
+    "cancel": "إلغاء",
+    "updated": "تم تحديث البيانات",
+    "update_failed": "تعذر تحديث البيانات",
+    "full_name": "الاسم الكامل",
+    "phone": "رقم الجوال",
+    "city": "المدينة",
+    "preferred_language": "اللغة المفضلة",
+    "address": "العنوان",
+    "national_id": "رقم الهوية",
+    "my_cases": "قضاياي",
+    "no_cases": "لا توجد قضايا",
+    "case_number": "رقم القضية",
+    "case_title": "العنوان",
+    "case_status": "الحالة",
+    "upload_document": "رفع وثيقة",
+    "upload": "رفع",
+    "document_uploaded": "تم رفع الوثيقة",
+    "document_upload_failed": "تعذر رفع الوثيقة",
+    "my_documents": "وثائقي",
+    "no_documents": "لا توجد وثائق",
+    "document_name": "الملف",
+    "document_type": "النوع",
+    "document_size": "الحجم",
+    "document_actions": "إجراءات",
+    "open": "فتح"
+  },
+  "errors": {
+    "email_exists": "هذا البريد مستخدم بالفعل",
+    "username_exists": "اسم المستخدم مستخدم بالفعل",
+    "forbidden": "غير مصرح",
+    "rate_limited": "عدد محاولات كبير، حاول لاحقاً",
+    "unknown": "خطأ غير معروف"
+  },
   "rules": {
     "name": "الاسم",
     "name_placeholder": "اسم القاعدة",
@@ -78,7 +158,21 @@
     "manage_documents": "إدارة المستندات",
     "manage_intake": "إدارة طلبات الاستقبال",
     "manage_tasks": "إدارة المهام",
-    "manage_finance": "إدارة الشؤون المالية"
+    "manage_finance": "إدارة الشؤون المالية",
+    "beneficiary:self:read": "عرض الملف الشخصي",
+    "beneficiary:self:update": "تحديث الملف الشخصي",
+    "cases:self:read": "عرض قضاياي",
+    "cases:self:create": "إنشاء قضية لنفسي",
+    "documents:self:create": "رفع مستنداتي",
+    "intake:self:create": "إنشاء طلب استقبال"
+  },
+  "service_types": {
+    "legal_consultation": "استشارة قانونية",
+    "case_filing": "رفع/تسجيل قضية",
+    "contract_review": "مراجعة عقد",
+    "representation": "تمثيل/توكيل",
+    "mediation": "صلح/وساطة",
+    "other": "أخرى"
   },
   "consultations": {
     "title": "الاستشارات",
@@ -304,6 +398,9 @@
     "back": "رجوع",
     "next": "التالي",
     "submit": "إرسال",
-    "view": "عرض"
+    "view": "عرض",
+    "forbidden_title": "غير مصرح",
+    "forbidden_description": "ليس لديك صلاحية للوصول إلى هذه الصفحة.",
+    "go_to_portal": "الذهاب للبوابة"
   }
 }

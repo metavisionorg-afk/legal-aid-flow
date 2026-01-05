@@ -60,7 +60,7 @@ async function seed() {
       phone: "+962 79 123 4567",
       email: "ahmed.salem@example.com",
       address: "Amman, Jordan",
-      dateOfBirth: new Date("1985-05-15"),
+      dateOfBirth: "1985-05-15",
       nationality: "Jordanian",
       gender: "male",
       status: "active",
@@ -72,7 +72,7 @@ async function seed() {
       phone: "+962 78 987 6543",
       email: "layla.mahmoud@example.com",
       address: "Zarqa, Jordan",
-      dateOfBirth: new Date("1990-03-22"),
+      dateOfBirth: "1990-03-22",
       nationality: "Syrian",
       gender: "female",
       status: "active",
@@ -84,7 +84,7 @@ async function seed() {
       phone: "+962 77 654 3210",
       email: "fatima.hassan@example.com",
       address: "Irbid, Jordan",
-      dateOfBirth: new Date("1988-11-08"),
+      dateOfBirth: "1988-11-08",
       nationality: "Jordanian",
       gender: "female",
       status: "active",
@@ -100,22 +100,24 @@ async function seed() {
       email: "ahmed.salem@example.com",
       password: beneficiary1Password,
       fullName: "Ahmed Salem",
-      role: "viewer",
+      role: "beneficiary",
       userType: "beneficiary",
       emailVerified: true,
-      beneficiaryId: beneficiary1.id,
     });
+
+    await storage.updateBeneficiary(beneficiary1.id, { userId: beneficiary1User.id } as any);
 
     const beneficiary2User = await storage.createUser({
       username: "layla.mahmoud",
       email: "layla.mahmoud@example.com",
       password: beneficiary1Password,
       fullName: "Layla Mahmoud",
-      role: "viewer",
+      role: "beneficiary",
       userType: "beneficiary",
       emailVerified: true,
-      beneficiaryId: beneficiary2.id,
     });
+
+    await storage.updateBeneficiary(beneficiary2.id, { userId: beneficiary2User.id } as any);
 
     console.log("✅ Created beneficiary user accounts");
 

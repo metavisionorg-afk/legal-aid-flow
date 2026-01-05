@@ -21,6 +21,9 @@ import Sessions from "@/pages/Sessions";
 import PortalLogin from "@/pages/portal/PortalLogin";
 import PortalRegister from "@/pages/portal/PortalRegister";
 import PortalDashboard from "@/pages/portal/PortalDashboard";
+import BeneficiaryRegister from "@/pages/BeneficiaryRegister";
+import BeneficiaryPortal from "@/pages/BeneficiaryPortal";
+import Forbidden from "@/pages/Forbidden";
 
 // Initialize i18n
 import "./i18n";
@@ -43,8 +46,7 @@ function StaffRoute({ component: Component }: any) {
   }
 
   if (user.userType !== "staff") {
-    setLocation("/portal");
-    return null;
+    return <Forbidden redirectTo={user.userType === "beneficiary" ? "/beneficiary/portal" : "/portal"} />;
   }
 
   return <Component />;
@@ -82,6 +84,8 @@ function PortalRoute({ component: Component }: any) {
 function Router() {
   return (
     <Switch>
+      <Route path="/beneficiary/register" component={BeneficiaryRegister} />
+
       {/* Staff Routes */}
       <Route path="/login" component={Login} />
       <Route path="/">
@@ -121,6 +125,9 @@ function Router() {
       {/* Portal Routes */}
       <Route path="/portal/login" component={PortalLogin} />
       <Route path="/portal/register" component={PortalRegister} />
+      <Route path="/beneficiary/portal">
+        {() => <PortalRoute component={BeneficiaryPortal} />}
+      </Route>
       <Route path="/portal">
         {() => <PortalRoute component={PortalDashboard} />}
       </Route>

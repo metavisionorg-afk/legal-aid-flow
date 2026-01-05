@@ -69,6 +69,7 @@ export interface IStorage {
 
   // Beneficiaries
   getBeneficiary(id: string): Promise<Beneficiary | undefined>;
+  getBeneficiaryByUserId(userId: string): Promise<Beneficiary | undefined>;
   getBeneficiaryByIdNumber(idNumber: string): Promise<Beneficiary | undefined>;
   getAllBeneficiaries(): Promise<Beneficiary[]>;
   createBeneficiary(beneficiary: InsertBeneficiary): Promise<Beneficiary>;
@@ -76,6 +77,7 @@ export interface IStorage {
   deleteBeneficiary(id: string): Promise<boolean>;
 
   // Service Requests (self-service)
+  getServiceRequest(id: string): Promise<ServiceRequest | undefined>;
   createServiceRequest(request: InsertServiceRequest): Promise<ServiceRequest>;
   attachDocumentsToServiceRequest(input: {
     uploadedBy: string;
@@ -89,6 +91,20 @@ export interface IStorage {
       size: number;
     }>;
   }): Promise<Document[]>;
+
+  createDocumentsForBeneficiary(input: {
+    uploadedBy: string;
+    beneficiaryId: string;
+    documents: Array<{
+      storageKey: string;
+      fileUrl: string;
+      fileName: string;
+      mimeType: string;
+      size: number;
+    }>;
+  }): Promise<Document[]>;
+
+  getDocumentsByBeneficiary(beneficiaryId: string): Promise<Document[]>;
 
   // Intake Requests
   getIntakeRequest(id: string): Promise<IntakeRequest | undefined>;
@@ -163,6 +179,7 @@ export interface IStorage {
 
   // Rules (Permission bundles)
   getRule(id: string): Promise<Rule | undefined>;
+  getRuleByName(name: string): Promise<Rule | undefined>;
   getAllRules(): Promise<Rule[]>;
   createRule(rule: InsertRule): Promise<Rule>;
   updateRule(id: string, updates: Partial<InsertRule>): Promise<Rule | undefined>;
@@ -287,6 +304,14 @@ export class DatabaseStorage implements IStorage {
     return beneficiary;
   }
 
+  async getBeneficiaryByUserId(userId: string): Promise<Beneficiary | undefined> {
+    const [beneficiary] = await db
+      .select()
+      .from(schema.beneficiaries)
+      .where(eq(schema.beneficiaries.userId, userId));
+    return beneficiary;
+  }
+
   async getBeneficiaryByIdNumber(idNumber: string): Promise<Beneficiary | undefined> {
     const [beneficiary] = await db.select().from(schema.beneficiaries).where(eq(schema.beneficiaries.idNumber, idNumber));
     return beneficiary;
@@ -316,6 +341,11 @@ export class DatabaseStorage implements IStorage {
   }
 
   // Service Requests
+  async getServiceRequest(id: string): Promise<ServiceRequest | undefined> {
+    const [request] = await db.select().from(schema.serviceRequests).where(eq(schema.serviceRequests.id, id));
+    return request;
+  }
+
   async createServiceRequest(insertRequest: InsertServiceRequest): Promise<ServiceRequest> {
     const [request] = await db.insert(schema.serviceRequests).values(insertRequest).returning();
     return request;
@@ -356,6 +386,50 @@ export class DatabaseStorage implements IStorage {
 
     if (!rows.length) return [];
     return db.insert(schema.documents).values(rows).returning();
+  }
+
+  async createDocumentsForBeneficiary(input: {
+    uploadedBy: string;
+    beneficiaryId: string;
+    documents: Array<{
+      storageKey: string;
+      fileUrl: string;
+      fileName: string;
+      mimeType: string;
+      size: number;
+    }>;
+  }): Promise<Document[]> {
+    const rows: InsertDocument[] = input.documents.map((d) => ({
+      title: d.fileName,
+      description: null,
+      fileUrl: d.fileUrl,
+      fileType: d.mimeType,
+      fileSize: d.size,
+      uploadedBy: input.uploadedBy,
+      beneficiaryId: input.beneficiaryId,
+      caseId: null,
+      ownerType: "beneficiary",
+      ownerId: input.beneficiaryId,
+      requestId: null,
+      storageKey: d.storageKey,
+      fileName: d.fileName,
+      mimeType: d.mimeType,
+      size: d.size,
+      isPublic: false,
+      category: null,
+      tags: null,
+    } as any));
+
+    if (!rows.length) return [];
+    return db.insert(schema.documents).values(rows).returning();
+  }
+
+  async getDocumentsByBeneficiary(beneficiaryId: string): Promise<Document[]> {
+    return db
+      .select()
+      .from(schema.documents)
+      .where(eq(schema.documents.beneficiaryId, beneficiaryId))
+      .orderBy(desc(schema.documents.createdAt));
   }
 
   // Intake Requests
@@ -755,6 +829,11 @@ export class DatabaseStorage implements IStorage {
   // Rules (Permission bundles)
   async getRule(id: string): Promise<Rule | undefined> {
     const [rule] = await db.select().from(schema.rules).where(eq(schema.rules.id, id));
+    return rule;
+  }
+
+  async getRuleByName(name: string): Promise<Rule | undefined> {
+    const [rule] = await db.select().from(schema.rules).where(eq(schema.rules.name, name));
     return rule;
   }
 

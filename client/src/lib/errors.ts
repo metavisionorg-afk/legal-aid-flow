@@ -1,12 +1,41 @@
-export function getErrorMessage(error: unknown): string {
+type TFn = (key: string, options?: any) => string;
+
+function extractResponse(error: any): { status?: number; data?: any } {
+  if (!error || typeof error !== "object") return {};
+  const res = (error as any).response;
+  if (!res || typeof res !== "object") return {};
+  return { status: typeof res.status === "number" ? res.status : undefined, data: res.data };
+}
+
+function extractMessage(error: unknown): string | undefined {
   if (error && typeof error === "object" && "message" in error) {
     const msg = (error as any).message;
     if (typeof msg === "string" && msg.trim()) return msg;
   }
   if (typeof error === "string" && error.trim()) return error;
+  return undefined;
+}
+
+export function getErrorMessage(error: unknown, t?: TFn): string {
+  const msg = extractMessage(error);
+  const { status, data } = extractResponse(error as any);
+
+  const serverMsg =
+    (data && typeof data === "object" && typeof (data as any).error === "string" && (data as any).error.trim()
+      ? (data as any).error
+      : undefined) || msg;
+
+  if (t) {
+    if (status === 403 || serverMsg === "Forbidden") return t("errors.forbidden");
+    if (status === 429 || /too many requests/i.test(serverMsg || "")) return t("errors.rate_limited");
+    if (status === 409 && /email already exists/i.test(serverMsg || "")) return t("errors.email_exists");
+    if (status === 409 && /username already exists/i.test(serverMsg || "")) return t("errors.username_exists");
+  }
+
+  if (serverMsg && serverMsg.trim()) return serverMsg;
   try {
     return JSON.stringify(error);
   } catch {
-    return "Unknown error";
+    return t ? t("errors.unknown") : "Unknown error";
   }
 }

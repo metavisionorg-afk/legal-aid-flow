@@ -29,6 +29,7 @@ import { Skeleton } from "@/components/ui/skeleton";
 import { tasksAPI, usersAPI } from "@/lib/api";
 import { toast } from "sonner";
 import { useAuth } from "@/contexts/AuthContext";
+import { getErrorMessage } from "@/lib/errors";
 import type { Task, User } from "@shared/schema";
 
 const TASK_TYPES = [
@@ -41,19 +42,6 @@ const TASK_TYPES = [
 ] as const;
 
 const PRIORITIES = ["low", "medium", "high", "urgent"] as const;
-
-function getApiErrorMessage(err: unknown): string {
-  if (err && typeof err === "object") {
-    const anyErr = err as any;
-    return (
-      anyErr?.message ||
-      anyErr?.response?.data?.error ||
-      anyErr?.response?.data?.message ||
-      "Request failed"
-    );
-  }
-  return "Request failed";
-}
 
 export default function Tasks() {
   const { t } = useTranslation();
@@ -110,7 +98,7 @@ export default function Tasks() {
       setDueDate("");
       await queryClient.invalidateQueries({ queryKey: ["tasks"] });
     },
-    onError: (err) => toast.error(getApiErrorMessage(err)),
+    onError: (err) => toast.error(getErrorMessage(err, t)),
   });
 
   const updateTaskMutation = useMutation({
@@ -119,7 +107,7 @@ export default function Tasks() {
     onSuccess: async () => {
       await queryClient.invalidateQueries({ queryKey: ["tasks"] });
     },
-    onError: (err) => toast.error(getApiErrorMessage(err)),
+    onError: (err) => toast.error(getErrorMessage(err, t)),
   });
 
   const deleteTaskMutation = useMutation({
@@ -128,7 +116,7 @@ export default function Tasks() {
       toast.success("Task deleted");
       await queryClient.invalidateQueries({ queryKey: ["tasks"] });
     },
-    onError: (err) => toast.error(getApiErrorMessage(err)),
+    onError: (err) => toast.error(getErrorMessage(err, t)),
   });
 
   return (

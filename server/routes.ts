@@ -702,6 +702,24 @@ export async function registerRoutes(
     }
   });
 
+  app.get("/api/cases/my/:caseId/documents", requireBeneficiary, async (req: AuthRequest, res) => {
+    try {
+      const beneficiary = req.beneficiary!;
+      const caseData = await storage.getCase(req.params.caseId);
+      if (!caseData) {
+        return res.status(404).json({ error: "Case not found" });
+      }
+      if (caseData.beneficiaryId !== beneficiary.id) {
+        return res.status(403).json({ error: "Forbidden" });
+      }
+
+      const docs = await storage.getDocumentsByCaseForBeneficiary(beneficiary.id, caseData.id);
+      res.json(docs);
+    } catch (error: any) {
+      res.status(500).json({ error: error.message });
+    }
+  });
+
   app.post("/api/documents/my", requireBeneficiary, async (req: AuthRequest, res) => {
     try {
       const bodySchema = z.object({
@@ -750,7 +768,7 @@ export async function registerRoutes(
   app.get("/api/documents/my", requireBeneficiary, async (req: AuthRequest, res) => {
     try {
       const beneficiary = req.beneficiary!;
-      const docs = await storage.getDocumentsByBeneficiary(beneficiary.id);
+      const docs = await storage.getDocumentsVisibleToBeneficiary(beneficiary.id);
       res.json(docs);
     } catch (error: any) {
       res.status(500).json({ error: error.message });
@@ -873,6 +891,51 @@ export async function registerRoutes(
         return res.status(404).json({ error: "Case not found" });
       }
       res.json(caseData);
+    } catch (error: any) {
+      res.status(500).json({ error: error.message });
+    }
+  });
+
+  app.get("/api/cases/:caseId/documents", requireStaff, async (req: AuthRequest, res) => {
+    try {
+      const caseData = await storage.getCase(req.params.caseId);
+      if (!caseData) {
+        return res.status(404).json({ error: "Case not found" });
+      }
+      const docs = await storage.getDocumentsByCase(caseData.id);
+      res.json(docs);
+    } catch (error: any) {
+      res.status(500).json({ error: error.message });
+    }
+  });
+
+  app.post("/api/cases/:caseId/documents", requireStaff, async (req: AuthRequest, res) => {
+    try {
+      const bodySchema = z.object({
+        isPublic: z.boolean().optional().default(false),
+        documents: z.array(uploadedFileMetadataSchema).min(1),
+      });
+
+      const parsed = bodySchema.safeParse(req.body);
+      if (!parsed.success) {
+        return res.status(400).json({ error: fromZodError(parsed.error).message });
+      }
+
+      const user = req.user!;
+      const caseData = await storage.getCase(req.params.caseId);
+      if (!caseData) {
+        return res.status(404).json({ error: "Case not found" });
+      }
+
+      const docs = await storage.createDocumentsForCase({
+        uploadedBy: user.id,
+        beneficiaryId: caseData.beneficiaryId,
+        caseId: caseData.id,
+        isPublic: parsed.data.isPublic,
+        documents: parsed.data.documents,
+      });
+
+      return res.status(201).json({ success: true, documents: docs });
     } catch (error: any) {
       res.status(500).json({ error: error.message });
     }

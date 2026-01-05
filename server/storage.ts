@@ -104,6 +104,26 @@ export interface IStorage {
     }>;
   }): Promise<Document[]>;
 
+  createDocumentsForCase(input: {
+    uploadedBy: string;
+    beneficiaryId: string;
+    caseId: string;
+    isPublic: boolean;
+    documents: Array<{
+      storageKey: string;
+      fileUrl: string;
+      fileName: string;
+      mimeType: string;
+      size: number;
+    }>;
+  }): Promise<Document[]>;
+
+  getDocumentsByCase(caseId: string): Promise<Document[]>;
+
+  getDocumentsByCaseForBeneficiary(beneficiaryId: string, caseId: string): Promise<Document[]>;
+
+  getDocumentsVisibleToBeneficiary(beneficiaryId: string): Promise<Document[]>;
+
   getDocumentsByBeneficiary(beneficiaryId: string): Promise<Document[]>;
 
   // Intake Requests
@@ -379,7 +399,8 @@ export class DatabaseStorage implements IStorage {
       fileName: d.fileName,
       mimeType: d.mimeType,
       size: d.size,
-      isPublic: false,
+      // Beneficiary uploaded docs should be visible to the beneficiary.
+      isPublic: true,
       category: null,
       tags: null,
     } as any));
@@ -415,13 +436,76 @@ export class DatabaseStorage implements IStorage {
       fileName: d.fileName,
       mimeType: d.mimeType,
       size: d.size,
-      isPublic: false,
+      // Beneficiary uploaded docs should be visible to the beneficiary.
+      isPublic: true,
       category: null,
       tags: null,
     } as any));
 
     if (!rows.length) return [];
     return db.insert(schema.documents).values(rows).returning();
+  }
+
+  async createDocumentsForCase(input: {
+    uploadedBy: string;
+    beneficiaryId: string;
+    caseId: string;
+    isPublic: boolean;
+    documents: Array<{
+      storageKey: string;
+      fileUrl: string;
+      fileName: string;
+      mimeType: string;
+      size: number;
+    }>;
+  }): Promise<Document[]> {
+    const rows: InsertDocument[] = input.documents.map((d) => ({
+      title: d.fileName,
+      description: null,
+      fileUrl: d.fileUrl,
+      fileType: d.mimeType,
+      fileSize: d.size,
+      uploadedBy: input.uploadedBy,
+      beneficiaryId: input.beneficiaryId,
+      caseId: input.caseId,
+      ownerType: "beneficiary",
+      ownerId: input.beneficiaryId,
+      requestId: null,
+      storageKey: d.storageKey,
+      fileName: d.fileName,
+      mimeType: d.mimeType,
+      size: d.size,
+      isPublic: input.isPublic,
+      category: null,
+      tags: null,
+    } as any));
+
+    if (!rows.length) return [];
+    return db.insert(schema.documents).values(rows).returning();
+  }
+
+  async getDocumentsByCase(caseId: string): Promise<Document[]> {
+    return db
+      .select()
+      .from(schema.documents)
+      .where(eq(schema.documents.caseId, caseId))
+      .orderBy(desc(schema.documents.createdAt));
+  }
+
+  async getDocumentsByCaseForBeneficiary(beneficiaryId: string, caseId: string): Promise<Document[]> {
+    return db
+      .select()
+      .from(schema.documents)
+      .where(and(eq(schema.documents.beneficiaryId, beneficiaryId), eq(schema.documents.caseId, caseId), eq(schema.documents.isPublic, true)))
+      .orderBy(desc(schema.documents.createdAt));
+  }
+
+  async getDocumentsVisibleToBeneficiary(beneficiaryId: string): Promise<Document[]> {
+    return db
+      .select()
+      .from(schema.documents)
+      .where(and(eq(schema.documents.beneficiaryId, beneficiaryId), eq(schema.documents.isPublic, true)))
+      .orderBy(desc(schema.documents.createdAt));
   }
 
   async getDocumentsByBeneficiary(beneficiaryId: string): Promise<Document[]> {

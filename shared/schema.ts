@@ -502,30 +502,44 @@ export const uploadedFileMetadataSchema = z.object({
 });
 
 // Stage 3: simple public beneficiary self-registration payload (flat fields)
-export const registerBeneficiarySimpleSchema = z.object({
-  username: z.string().min(1).optional().nullable(),
-  email: z.string().email(),
-  password: z.string().min(8),
-  fullName: z.string().min(1),
-  phone: z.string().min(1),
-  city: z.string().min(1),
-  preferredLanguage: z.enum(["ar", "en"]),
-  serviceType: z.enum([
-    "legal_consultation",
-    "case_filing",
-    "contract_review",
-    "representation",
-    "mediation",
-    "other",
-  ]),
-  nationalId: z.string().optional().nullable(),
-  address: z.string().optional().nullable(),
-  birthDate: z.string().optional().nullable(),
-  gender: z.enum(["male", "female"]).optional().nullable(),
-  nationality: z.string().optional().nullable(),
-  notes: z.string().optional().nullable(),
-  details: z.string().optional().nullable(),
-});
+export const registerBeneficiarySimpleSchema = z
+  .object({
+    username: z.string().min(1).optional().nullable(),
+    email: z.string().email(),
+    password: z
+      .string()
+      .min(8)
+      .regex(/^(?=.*[a-z])(?=.*[A-Z])(?=.*\d).{8,}$/, "Password must include uppercase, lowercase, and a number"),
+    confirmPassword: z.string().min(8),
+    fullName: z.string().min(1),
+    phone: z.string().min(1),
+    city: z.string().min(1),
+    preferredLanguage: z.enum(["ar", "en"]),
+    serviceType: z.enum([
+      "legal_consultation",
+      "case_filing",
+      "contract_review",
+      "representation",
+      "mediation",
+      "other",
+    ]),
+    nationalId: z.string().optional().nullable(),
+    address: z.string().optional().nullable(),
+    birthDate: z.string().optional().nullable(),
+    gender: z.enum(["male", "female"]).optional().nullable(),
+    nationality: z.string().optional().nullable(),
+    notes: z.string().optional().nullable(),
+    details: z.string().optional().nullable(),
+  })
+  .superRefine((data, ctx) => {
+    if (data.password !== data.confirmPassword) {
+      ctx.addIssue({
+        code: z.ZodIssueCode.custom,
+        path: ["confirmPassword"],
+        message: "Passwords do not match",
+      });
+    }
+  });
 
 export const registerBeneficiarySchema = z
   .object({

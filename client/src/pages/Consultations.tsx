@@ -1,9 +1,10 @@
-import { useEffect, useMemo, useState } from "react";
+import { useMemo, useState } from "react";
 import { useTranslation } from "react-i18next";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { useLocation } from "wouter";
 
 import { Layout } from "@/components/layout/Layout";
+import { PortalLayout } from "@/components/layout/PortalLayout";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
@@ -27,60 +28,74 @@ import {
 } from "@/components/ui/table";
 import { Skeleton } from "@/components/ui/skeleton";
 
-import { beneficiariesAPI, consultationsAPI, usersAPI } from "@/lib/api";
+import { beneficiariesAPI, serviceRequestsAPI } from "@/lib/api";
 import { getErrorMessage } from "@/lib/errors";
 import { toast } from "sonner";
-import type { User } from "@shared/schema";
+import { useAuth } from "@/contexts/AuthContext";
+import { isAdmin, isBeneficiary, isLawyer } from "@/lib/authz";
 
-const UNASSIGNED_LAWYER = "__unassigned__";
+const SERVICE_TYPES = [
+  "legal_consultation",
+  "court_representation",
+  "contract_drafting_review",
+  "complaint_drafting",
+  "other",
+] as const;
 
-const STATUSES = ["pending", "scheduled", "completed", "cancelled"] as const;
+const STATUSES = ["new", "in_review", "accepted", "rejected"] as const;
 
 export default function Consultations() {
   const { t } = useTranslation();
   const queryClient = useQueryClient();
+  const { user, loading } = useAuth();
+  const [, setLocation] = useLocation();
+
+  const serviceTypeLabel = (value: string) => t(`service_types.${value}`, value);
+  const statusLabel = (value: string) => t(`serviceRequests.statuses.${value}`, value);
+
+  if (loading) {
+    return (
+      <div className="min-h-screen flex items-center justify-center">
+        <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-primary" />
+      </div>
+    );
+  }
+
+  if (!user) {
+    setLocation("/login");
+    return null;
+  }
+
+  const allowed = isBeneficiary(user) || isAdmin(user) || isLawyer(user);
+  if (!allowed) {
+    setLocation("/unauthorized");
+    return null;
+  }
+
+  const isBen = isBeneficiary(user);
 
   const [path] = useLocation();
   const initialBeneficiaryId = useMemo(() => {
     const params = new URLSearchParams(window.location.search);
     return params.get("beneficiaryId") || "";
   }, [path]);
+  const { data: myRequests, isLoading: myLoading } = useQuery({
+    queryKey: ["serviceRequests", "my"],
+    queryFn: serviceRequestsAPI.listMy,
+    enabled: isBen,
+  });
 
-  const [beneficiaryId, setBeneficiaryId] = useState<string>(initialBeneficiaryId);
-  const [lawyerId, setLawyerId] = useState<string | null>(null);
-  const [topic, setTopic] = useState<string>("");
-  const [description, setDescription] = useState<string>("");
-  const [consultationType, setConsultationType] = useState<string>("");
-  const [status, setStatus] = useState<(typeof STATUSES)[number]>("pending");
-  const [scheduledDate, setScheduledDate] = useState<string>("");
-  const [notes, setNotes] = useState<string>("");
-  const [followUpRequired, setFollowUpRequired] = useState<boolean>(false);
-
-  useEffect(() => {
-    setBeneficiaryId(initialBeneficiaryId);
-  }, [initialBeneficiaryId]);
-
-  const { data: consultations, isLoading: consultationsLoading } = useQuery({
-    queryKey: ["consultations", { beneficiaryId }],
-    queryFn: () =>
-      beneficiaryId ? consultationsAPI.getByBeneficiary(beneficiaryId) : consultationsAPI.getAll(),
+  const { data: allRequests, isLoading: allLoading } = useQuery({
+    queryKey: ["serviceRequests", "all"],
+    queryFn: serviceRequestsAPI.listAll,
+    enabled: !isBen,
   });
 
   const { data: beneficiaries, isLoading: beneficiariesLoading } = useQuery({
     queryKey: ["beneficiaries"],
     queryFn: beneficiariesAPI.getAll,
+    enabled: !isBen,
   });
-
-  const { data: users, isLoading: usersLoading } = useQuery({
-    queryKey: ["users"],
-    queryFn: usersAPI.getAll,
-  });
-
-  const userMap = useMemo(() => {
-    const map = new Map<string, User>();
-    (users || []).forEach((u: any) => map.set(u.id, u));
-    return map;
-  }, [users]);
 
   const beneficiaryMap = useMemo(() => {
     const map = new Map<string, any>();
@@ -88,29 +103,33 @@ export default function Consultations() {
     return map;
   }, [beneficiaries]);
 
-  const createConsultationMutation = useMutation({
-    mutationFn: consultationsAPI.create,
+  const [serviceType, setServiceType] = useState<(typeof SERVICE_TYPES)[number]>("legal_consultation");
+  const [serviceTypeOther, setServiceTypeOther] = useState<string>("");
+  const [issueSummary, setIssueSummary] = useState<string>("");
+  const [issueDetails, setIssueDetails] = useState<string>("");
+  const [urgent, setUrgent] = useState<boolean>(false);
+
+  const createRequestMutation = useMutation({
+    mutationFn: serviceRequestsAPI.create,
     onSuccess: () => {
-      queryClient.invalidateQueries({ queryKey: ["consultations"] });
-      setLawyerId(null);
-      setTopic("");
-      setDescription("");
-      setConsultationType("");
-      setStatus("pending");
-      setScheduledDate("");
-      setNotes("");
-      setFollowUpRequired(false);
-      toast.success(t("consultations.created"));
+      queryClient.invalidateQueries({ queryKey: ["serviceRequests", "my"] });
+      setServiceType("legal_consultation");
+      setServiceTypeOther("");
+      setIssueSummary("");
+      setIssueDetails("");
+      setUrgent(false);
+      toast.success(t("common.success"));
     },
     onError: (err: unknown) => {
       toast.error(getErrorMessage(err));
     },
   });
 
-  const updateConsultationMutation = useMutation({
-    mutationFn: ({ id, data }: { id: string; data: any }) => consultationsAPI.update(id, data),
+  const updateStatusMutation = useMutation({
+    mutationFn: ({ id, status }: { id: string; status: (typeof STATUSES)[number] }) =>
+      serviceRequestsAPI.updateStatus(id, status),
     onSuccess: () => {
-      queryClient.invalidateQueries({ queryKey: ["consultations"] });
+      queryClient.invalidateQueries({ queryKey: ["serviceRequests", "all"] });
     },
     onError: (err: unknown) => {
       toast.error(getErrorMessage(err));
@@ -118,264 +137,161 @@ export default function Consultations() {
   });
 
   const handleCreate = () => {
-    if (!beneficiaryId) {
-      toast.error(t("consultations.beneficiary_required"));
-      return;
-    }
-    if (!topic.trim()) {
-      toast.error(t("consultations.topic_required"));
-      return;
-    }
-    if (!description.trim()) {
-      toast.error(t("consultations.description_required"));
+    if (!issueSummary.trim()) {
+      toast.error(t("serviceRequests.issue_summary_required"));
       return;
     }
 
-    createConsultationMutation.mutate({
-      beneficiaryId,
-      lawyerId: lawyerId ?? null,
-      topic: topic.trim(),
-      description: description.trim(),
-      consultationType: consultationType.trim() || null,
-      status,
-      scheduledDate: scheduledDate ? new Date(scheduledDate).toISOString() : null,
-      notes: notes.trim() || null,
-      followUpRequired,
+    createRequestMutation.mutate({
+      serviceType,
+      serviceTypeOther: serviceType === "other" ? serviceTypeOther.trim() || null : null,
+      issueSummary: issueSummary.trim(),
+      issueDetails: issueDetails.trim() || null,
+      urgent,
     });
   };
 
-  useEffect(() => {
-    if (typeof window !== "undefined" && window.location.hash === "#new") {
-      setTimeout(() => {
-        document.getElementById("new-consultation")?.scrollIntoView({ behavior: "smooth", block: "start" });
-      }, 0);
-    }
-  }, [path]);
-
-  return (
-    <Layout>
+  const page = (
+    <>
       <div className="flex flex-col sm:flex-row items-start sm:items-center justify-between gap-4">
         <h1 className="text-3xl font-bold tracking-tight">{t("app.consultations")}</h1>
       </div>
 
-      <Card className="mt-4">
-        <CardHeader>
-          <CardTitle>{t("consultations.new_consultation")}</CardTitle>
-        </CardHeader>
-        <CardContent className="grid gap-4" id="new-consultation">
-          <div className="grid gap-4 md:grid-cols-2">
+      {isBen ? (
+        <Card className="mt-4">
+          <CardHeader>
+            <CardTitle>{t("serviceRequests.new_request")}</CardTitle>
+          </CardHeader>
+          <CardContent className="grid gap-4">
             <div className="grid gap-2">
-              <Label>{t("consultations.beneficiary")}</Label>
-              <Select value={beneficiaryId} onValueChange={setBeneficiaryId}>
-                <SelectTrigger data-testid="select-consultation-beneficiary">
-                  <SelectValue
-                    placeholder={beneficiariesLoading ? t("common.loading") : t("consultations.select_beneficiary")}
-                  />
-                </SelectTrigger>
-                <SelectContent>
-                  {(beneficiaries || []).map((b: any) => (
-                    <SelectItem key={b.id} value={b.id}>
-                      {b.fullName} ({b.idNumber})
-                    </SelectItem>
-                  ))}
-                </SelectContent>
-              </Select>
-            </div>
-
-            <div className="grid gap-2">
-              <Label>{t("consultations.lawyer")}</Label>
-              <Select
-                value={lawyerId ?? UNASSIGNED_LAWYER}
-                onValueChange={(val) => setLawyerId(val === UNASSIGNED_LAWYER ? null : val)}
-              >
-                <SelectTrigger data-testid="select-consultation-lawyer">
-                  <SelectValue placeholder={usersLoading ? t("common.loading") : t("consultations.select_lawyer")} />
-                </SelectTrigger>
-                <SelectContent>
-                  <SelectItem value={UNASSIGNED_LAWYER}>{t("consultations.unassigned")}</SelectItem>
-                  {(users || []).map((u: any) => (
-                    <SelectItem key={u.id} value={u.id}>
-                      {u.fullName} ({u.role})
-                    </SelectItem>
-                  ))}
-                </SelectContent>
-              </Select>
-            </div>
-          </div>
-
-          <div className="grid gap-2">
-            <Label htmlFor="consultation-topic">{t("consultations.topic")}</Label>
-            <Input
-              id="consultation-topic"
-              value={topic}
-              onChange={(e) => setTopic(e.target.value)}
-              placeholder={t("consultations.topic_placeholder")}
-              data-testid="input-consultation-topic"
-            />
-          </div>
-
-          <div className="grid gap-2">
-            <Label htmlFor="consultation-description">{t("consultations.description")}</Label>
-            <Textarea
-              id="consultation-description"
-              value={description}
-              onChange={(e) => setDescription(e.target.value)}
-              placeholder={t("consultations.description_placeholder")}
-              data-testid="input-consultation-description"
-            />
-          </div>
-
-          <div className="grid gap-4 md:grid-cols-2">
-            <div className="grid gap-2">
-              <Label htmlFor="consultation-type">{t("consultations.type")}</Label>
-              <Input
-                id="consultation-type"
-                value={consultationType}
-                onChange={(e) => setConsultationType(e.target.value)}
-                placeholder={t("consultations.type_placeholder")}
-                data-testid="input-consultation-type"
-              />
-            </div>
-
-            <div className="grid gap-2">
-              <Label>{t("consultations.status")}</Label>
-              <Select value={status} onValueChange={(v: any) => setStatus(v)}>
-                <SelectTrigger data-testid="select-consultation-status">
+              <Label>{t("serviceRequests.service_type")}</Label>
+              <Select value={serviceType} onValueChange={(v: any) => setServiceType(v)}>
+                <SelectTrigger data-testid="select-service-request-type">
                   <SelectValue />
                 </SelectTrigger>
                 <SelectContent>
-                  {STATUSES.map((s) => (
+                  {SERVICE_TYPES.map((s) => (
                     <SelectItem key={s} value={s}>
-                      {t(`consultations.statuses.${s}`)}
+                      {serviceTypeLabel(s)}
                     </SelectItem>
                   ))}
                 </SelectContent>
               </Select>
             </div>
 
+            {serviceType === "other" ? (
+              <div className="grid gap-2">
+                <Label>{t("serviceRequests.service_type_other")}</Label>
+                <Input value={serviceTypeOther} onChange={(e) => setServiceTypeOther(e.target.value)} />
+              </div>
+            ) : null}
+
             <div className="grid gap-2">
-              <Label>{t("consultations.scheduled_date")}</Label>
+              <Label>{t("serviceRequests.issue_summary")}</Label>
               <Input
-                type="datetime-local"
-                value={scheduledDate}
-                onChange={(e) => setScheduledDate(e.target.value)}
-                data-testid="input-consultation-scheduled-date"
+                value={issueSummary}
+                onChange={(e) => setIssueSummary(e.target.value)}
+                data-testid="input-service-request-summary"
               />
             </div>
 
             <div className="grid gap-2">
-              <Label htmlFor="consultation-notes">{t("consultations.notes")}</Label>
-              <Input
-                id="consultation-notes"
-                value={notes}
-                onChange={(e) => setNotes(e.target.value)}
-                placeholder={t("consultations.notes_placeholder")}
-                data-testid="input-consultation-notes"
+              <Label>{t("serviceRequests.issue_details")}</Label>
+              <Textarea
+                value={issueDetails}
+                onChange={(e) => setIssueDetails(e.target.value)}
+                data-testid="input-service-request-details"
               />
             </div>
-          </div>
 
-          <div className="flex items-center gap-2">
-            <Checkbox
-              id="follow-up-required"
-              checked={followUpRequired}
-              onCheckedChange={(v) => setFollowUpRequired(Boolean(v))}
-              data-testid="checkbox-consultation-followup"
-            />
-            <Label htmlFor="follow-up-required">{t("consultations.follow_up_required")}</Label>
-          </div>
+            <div className="flex items-center gap-2">
+              <Checkbox checked={urgent} onCheckedChange={(v: any) => setUrgent(Boolean(v))} />
+              <Label>{t("serviceRequests.urgent")}</Label>
+            </div>
 
-          <div className="pt-2">
-            <Button
-              onClick={handleCreate}
-              disabled={createConsultationMutation.isPending}
-              data-testid="button-create-consultation"
-            >
-              {t("common.submit")}
-            </Button>
-          </div>
-        </CardContent>
-      </Card>
+            <div className="flex items-center justify-end">
+              <Button
+                onClick={handleCreate}
+                disabled={createRequestMutation.isPending}
+                data-testid="button-create-service-request"
+              >
+                {createRequestMutation.isPending ? t("common.loading") : t("serviceRequests.submit")}
+              </Button>
+            </div>
+          </CardContent>
+        </Card>
+      ) : null}
 
-      <div className="mt-6 rounded-md border bg-card">
-        <Table>
-          <TableHeader>
-            <TableRow>
-              <TableHead>{t("consultations.number")}</TableHead>
-              <TableHead>{t("consultations.beneficiary")}</TableHead>
-              <TableHead>{t("consultations.topic")}</TableHead>
-              <TableHead>{t("consultations.status")}</TableHead>
-              <TableHead>{t("consultations.lawyer")}</TableHead>
-              <TableHead>{t("consultations.scheduled_date")}</TableHead>
-            </TableRow>
-          </TableHeader>
-          <TableBody>
-            {consultationsLoading ? (
-              Array.from({ length: 4 }).map((_, i) => (
-                <TableRow key={i}>
-                  <TableCell>
-                    <Skeleton className="h-4 w-32" />
-                  </TableCell>
-                  <TableCell>
-                    <Skeleton className="h-4 w-44" />
-                  </TableCell>
-                  <TableCell>
-                    <Skeleton className="h-4 w-56" />
-                  </TableCell>
-                  <TableCell>
-                    <Skeleton className="h-4 w-28" />
-                  </TableCell>
-                  <TableCell>
-                    <Skeleton className="h-4 w-44" />
-                  </TableCell>
-                  <TableCell>
-                    <Skeleton className="h-4 w-44" />
+      <Card className="mt-4">
+        <CardHeader>
+          <CardTitle>{isBen ? t("serviceRequests.my_requests") : t("serviceRequests.management")}</CardTitle>
+        </CardHeader>
+        <CardContent>
+          <Table>
+            <TableHeader>
+              <TableRow>
+                <TableHead>{t("serviceRequests.status")}</TableHead>
+                {!isBen ? <TableHead>{t("serviceRequests.beneficiary")}</TableHead> : null}
+                <TableHead>{t("serviceRequests.service_type")}</TableHead>
+                <TableHead>{t("serviceRequests.issue_summary")}</TableHead>
+                <TableHead>{t("serviceRequests.created_at")}</TableHead>
+              </TableRow>
+            </TableHeader>
+            <TableBody>
+              {(isBen ? myLoading : allLoading) ? (
+                Array.from({ length: 6 }).map((_, idx) => (
+                  <TableRow key={idx}>
+                    <TableCell colSpan={isBen ? 4 : 5}>
+                      <Skeleton className="h-6 w-full" />
+                    </TableCell>
+                  </TableRow>
+                ))
+              ) : (isBen ? myRequests : allRequests) && (isBen ? myRequests : allRequests).length > 0 ? (
+                (isBen ? myRequests : allRequests).map((r: any) => {
+                  const ben = !isBen ? beneficiaryMap.get(r.beneficiaryId) : null;
+                  return (
+                    <TableRow key={r.id} data-testid={`row-service-request-${r.id}`}>
+                      <TableCell className="font-medium">
+                        {!isBen ? (
+                          <Select
+                            value={r.status}
+                            onValueChange={(v: any) => updateStatusMutation.mutate({ id: r.id, status: v })}
+                          >
+                            <SelectTrigger className="h-8" data-testid={`select-service-request-status-${r.id}`}>
+                              <SelectValue />
+                            </SelectTrigger>
+                            <SelectContent>
+                              {STATUSES.map((s) => (
+                                <SelectItem key={s} value={s}>
+                                  {statusLabel(s)}
+                                </SelectItem>
+                              ))}
+                            </SelectContent>
+                          </Select>
+                        ) : (
+                          statusLabel(r.status)
+                        )}
+                      </TableCell>
+                      {!isBen ? <TableCell>{ben ? ben.fullName : r.beneficiaryId}</TableCell> : null}
+                      <TableCell>{serviceTypeLabel(r.serviceType)}</TableCell>
+                      <TableCell>{r.issueSummary}</TableCell>
+                      <TableCell>{r.createdAt ? new Date(r.createdAt).toLocaleString() : ""}</TableCell>
+                    </TableRow>
+                  );
+                })
+              ) : (
+                <TableRow>
+                  <TableCell colSpan={isBen ? 4 : 5} className="text-center text-muted-foreground">
+                    {t("serviceRequests.empty")}
                   </TableCell>
                 </TableRow>
-              ))
-            ) : consultations && consultations.length > 0 ? (
-              consultations.map((c: any) => {
-                const b = beneficiaryMap.get(c.beneficiaryId);
-                const lawyer = c.lawyerId ? userMap.get(c.lawyerId) : undefined;
-                return (
-                  <TableRow key={c.id} data-testid={`row-consultation-${c.id}`}>
-                    <TableCell className="font-medium">{c.consultationNumber}</TableCell>
-                    <TableCell>{b ? b.fullName : c.beneficiaryId}</TableCell>
-                    <TableCell>{c.topic}</TableCell>
-                    <TableCell>
-                      <Select
-                        value={c.status}
-                        onValueChange={(v: any) =>
-                          updateConsultationMutation.mutate({ id: c.id, data: { status: v } })
-                        }
-                      >
-                        <SelectTrigger className="h-8" data-testid={`select-consultation-status-${c.id}`}>
-                          <SelectValue />
-                        </SelectTrigger>
-                        <SelectContent>
-                          {STATUSES.map((s) => (
-                            <SelectItem key={s} value={s}>
-                              {t(`consultations.statuses.${s}`)}
-                            </SelectItem>
-                          ))}
-                        </SelectContent>
-                      </Select>
-                    </TableCell>
-                    <TableCell>{lawyer ? lawyer.fullName : t("consultations.unassigned")}</TableCell>
-                    <TableCell>{c.scheduledDate ? new Date(c.scheduledDate).toLocaleString() : "—"}</TableCell>
-                  </TableRow>
-                );
-              })
-            ) : (
-              <TableRow>
-                <TableCell colSpan={6} className="text-center text-muted-foreground py-10">
-                  {t("consultations.empty")}
-                </TableCell>
-              </TableRow>
-            )}
-          </TableBody>
-        </Table>
-      </div>
-    </Layout>
+              )}
+            </TableBody>
+          </Table>
+        </CardContent>
+      </Card>
+    </>
   );
+
+  return isBen ? <PortalLayout>{page}</PortalLayout> : <Layout>{page}</Layout>;
 }

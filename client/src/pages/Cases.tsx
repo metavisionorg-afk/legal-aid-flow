@@ -20,7 +20,7 @@ import { Badge } from "@/components/ui/badge";
 import { MoreHorizontal, Plus, Search, Filter } from "lucide-react";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
-import { casesAPI, beneficiariesAPI } from "@/lib/api";
+import { casesAPI, beneficiariesAPI, uploadsAPI } from "@/lib/api";
 import { Skeleton } from "@/components/ui/skeleton";
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogTrigger } from "@/components/ui/dialog";
 import { Label } from "@/components/ui/label";
@@ -28,13 +28,47 @@ import { Textarea } from "@/components/ui/textarea";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { useToast } from "@/hooks/use-toast";
 import { useState } from "react";
+import { useLocation } from "wouter";
+import { useAuth } from "@/contexts/AuthContext";
+import { canCreateCase, isAdmin, isBeneficiary, isLawyer } from "@/lib/authz";
+import { PortalLayout } from "@/components/layout/PortalLayout";
+import { Switch as ToggleSwitch } from "@/components/ui/switch";
+import { getErrorMessage } from "@/lib/errors";
 
 export default function Cases() {
   const { t } = useTranslation();
   const { toast } = useToast();
   const queryClient = useQueryClient();
+  const { user, loading } = useAuth();
+  const [, setLocation] = useLocation();
+
+  if (loading) {
+    return (
+      <div className="min-h-screen flex items-center justify-center">
+        <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-primary" />
+      </div>
+    );
+  }
+
+  if (!user) {
+    setLocation("/login");
+    return null;
+  }
+
+  const allowed = isBeneficiary(user) || isAdmin(user) || isLawyer(user);
+  if (!allowed) {
+    setLocation("/unauthorized");
+    return null;
+  }
+
+  const isBen = isBeneficiary(user);
+  const canCreate = canCreateCase(user);
 
   const [createOpen, setCreateOpen] = useState(false);
+  const [docsOpen, setDocsOpen] = useState(false);
+  const [selectedCase, setSelectedCase] = useState<any>(null);
+  const [docFile, setDocFile] = useState<File | null>(null);
+  const [docIsPublic, setDocIsPublic] = useState<boolean>(false);
   const [caseNumber, setCaseNumber] = useState("");
   const [title, setTitle] = useState("");
   const [beneficiaryId, setBeneficiaryId] = useState<string>("");
@@ -42,13 +76,14 @@ export default function Cases() {
   const [description, setDescription] = useState("");
 
   const { data: cases, isLoading } = useQuery({
-    queryKey: ["cases"],
-    queryFn: casesAPI.getAll,
+    queryKey: ["cases", isBen ? "my" : "all"],
+    queryFn: isBen ? casesAPI.getMy : casesAPI.getAll,
   });
 
   const { data: beneficiaries, isLoading: beneficiariesLoading } = useQuery({
     queryKey: ["beneficiaries"],
     queryFn: beneficiariesAPI.getAll,
+    enabled: canCreate,
   });
 
   const createCaseMutation = useMutation({
@@ -65,6 +100,37 @@ export default function Cases() {
     },
     onError: () => {
       toast({ title: t("cases.create_failed"), variant: "destructive" });
+    },
+  });
+
+  const { data: caseDocuments, isLoading: loadingDocs } = useQuery({
+    queryKey: ["case-documents", selectedCase?.id],
+    queryFn: () => casesAPI.listDocuments(String(selectedCase.id)),
+    enabled: Boolean(docsOpen && selectedCase?.id),
+  });
+
+  const uploadDocsMutation = useMutation({
+    mutationFn: async () => {
+      if (!selectedCase?.id) throw new Error("No case selected");
+      if (!docFile) throw new Error("No file");
+
+      const meta = await uploadsAPI.upload(docFile);
+      return casesAPI.uploadDocuments(String(selectedCase.id), {
+        isPublic: isBen ? true : docIsPublic,
+        documents: [meta],
+      });
+    },
+    onSuccess: async () => {
+      setDocFile(null);
+      await queryClient.invalidateQueries({ queryKey: ["case-documents", selectedCase?.id] });
+      toast({ title: t("common.success") });
+    },
+    onError: (err: any) => {
+      toast({
+        title: t("common.error"),
+        description: getErrorMessage(err, t) || t("common.error"),
+        variant: "destructive",
+      });
     },
   });
 
@@ -85,80 +151,82 @@ export default function Cases() {
     });
   };
 
-  return (
-    <Layout>
+  const page = (
+    <>
       <div className="flex flex-col sm:flex-row items-start sm:items-center justify-between gap-4">
         <h1 className="text-3xl font-bold tracking-tight">{t('app.cases')}</h1>
-        <Dialog open={createOpen} onOpenChange={setCreateOpen}>
-          <DialogTrigger asChild>
-            <Button data-testid="button-add-case">
-              <Plus className="mr-2 h-4 w-4 rtl:ml-2 rtl:mr-0" />
-              {t('app.add_new')}
-            </Button>
-          </DialogTrigger>
-          <DialogContent>
-            <DialogHeader>
-              <DialogTitle>{t("dashboard.new_case")}</DialogTitle>
-            </DialogHeader>
-
-            <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-              <div className="space-y-2">
-                <Label>{t("cases.case_number")}</Label>
-                <Input value={caseNumber} onChange={(e) => setCaseNumber(e.target.value)} />
-              </div>
-              <div className="space-y-2">
-                <Label>{t("cases.case_title")}</Label>
-                <Input value={title} onChange={(e) => setTitle(e.target.value)} />
-              </div>
-
-              <div className="space-y-2">
-                <Label>{t("consultations.beneficiary")}</Label>
-                <Select value={beneficiaryId} onValueChange={setBeneficiaryId}>
-                  <SelectTrigger data-testid="select-case-beneficiary">
-                    <SelectValue placeholder={beneficiariesLoading ? t("common.loading") : t("consultations.select_beneficiary")} />
-                  </SelectTrigger>
-                  <SelectContent>
-                    {(beneficiaries || []).map((b: any) => (
-                      <SelectItem key={b.id} value={b.id}>
-                        {b.fullName} ({b.idNumber})
-                      </SelectItem>
-                    ))}
-                  </SelectContent>
-                </Select>
-              </div>
-
-              <div className="space-y-2">
-                <Label>{t("intake.case_type")}</Label>
-                <Select value={caseType} onValueChange={setCaseType}>
-                  <SelectTrigger data-testid="select-case-type">
-                    <SelectValue placeholder={t("intake.case_type")} />
-                  </SelectTrigger>
-                  <SelectContent>
-                    <SelectItem value="civil">Civil</SelectItem>
-                    <SelectItem value="criminal">Criminal</SelectItem>
-                    <SelectItem value="family">Family/Personal Status</SelectItem>
-                    <SelectItem value="labor">Labor</SelectItem>
-                    <SelectItem value="asylum">Asylum/Refugee</SelectItem>
-                  </SelectContent>
-                </Select>
-              </div>
-
-              <div className="space-y-2 md:col-span-2">
-                <Label>{t("intake.description")}</Label>
-                <Textarea value={description} onChange={(e) => setDescription(e.target.value)} />
-              </div>
-            </div>
-
-            <div className="flex items-center justify-end gap-2">
-              <Button variant="outline" onClick={() => setCreateOpen(false)}>
-                {t("common.cancel")}
+        {canCreate ? (
+          <Dialog open={createOpen} onOpenChange={setCreateOpen}>
+            <DialogTrigger asChild>
+              <Button data-testid="button-add-case">
+                <Plus className="mr-2 h-4 w-4 rtl:ml-2 rtl:mr-0" />
+                {t('app.add_new')}
               </Button>
-              <Button onClick={handleCreate} disabled={createCaseMutation.isPending}>
-                {createCaseMutation.isPending ? t("common.loading") : t("cases.create")}
-              </Button>
-            </div>
-          </DialogContent>
-        </Dialog>
+            </DialogTrigger>
+            <DialogContent>
+              <DialogHeader>
+                <DialogTitle>{t("dashboard.new_case")}</DialogTitle>
+              </DialogHeader>
+
+              <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                <div className="space-y-2">
+                  <Label>{t("cases.case_number")}</Label>
+                  <Input value={caseNumber} onChange={(e) => setCaseNumber(e.target.value)} />
+                </div>
+                <div className="space-y-2">
+                  <Label>{t("cases.case_title")}</Label>
+                  <Input value={title} onChange={(e) => setTitle(e.target.value)} />
+                </div>
+
+                <div className="space-y-2">
+                  <Label>{t("consultations.beneficiary")}</Label>
+                  <Select value={beneficiaryId} onValueChange={setBeneficiaryId}>
+                    <SelectTrigger data-testid="select-case-beneficiary">
+                      <SelectValue placeholder={beneficiariesLoading ? t("common.loading") : t("consultations.select_beneficiary")} />
+                    </SelectTrigger>
+                    <SelectContent>
+                      {(beneficiaries || []).map((b: any) => (
+                        <SelectItem key={b.id} value={b.id}>
+                          {b.fullName} ({b.idNumber})
+                        </SelectItem>
+                      ))}
+                    </SelectContent>
+                  </Select>
+                </div>
+
+                <div className="space-y-2">
+                  <Label>{t("intake.case_type")}</Label>
+                  <Select value={caseType} onValueChange={setCaseType}>
+                    <SelectTrigger data-testid="select-case-type">
+                      <SelectValue placeholder={t("intake.case_type")} />
+                    </SelectTrigger>
+                    <SelectContent>
+                      <SelectItem value="civil">Civil</SelectItem>
+                      <SelectItem value="criminal">Criminal</SelectItem>
+                      <SelectItem value="family">Family/Personal Status</SelectItem>
+                      <SelectItem value="labor">Labor</SelectItem>
+                      <SelectItem value="asylum">Asylum/Refugee</SelectItem>
+                    </SelectContent>
+                  </Select>
+                </div>
+
+                <div className="space-y-2 md:col-span-2">
+                  <Label>{t("intake.description")}</Label>
+                  <Textarea value={description} onChange={(e) => setDescription(e.target.value)} />
+                </div>
+              </div>
+
+              <div className="flex items-center justify-end gap-2">
+                <Button variant="outline" onClick={() => setCreateOpen(false)}>
+                  {t("common.cancel")}
+                </Button>
+                <Button onClick={handleCreate} disabled={createCaseMutation.isPending}>
+                  {createCaseMutation.isPending ? t("common.loading") : t("cases.create")}
+                </Button>
+              </div>
+            </DialogContent>
+          </Dialog>
+        ) : null}
       </div>
 
       <Tabs defaultValue="all" className="w-full">
@@ -242,9 +310,20 @@ export default function Cases() {
                             </Button>
                           </DropdownMenuTrigger>
                           <DropdownMenuContent align="end">
-                            <DropdownMenuItem>View Details</DropdownMenuItem>
-                            <DropdownMenuItem>Edit Case</DropdownMenuItem>
-                            <DropdownMenuItem>Assign Lawyer</DropdownMenuItem>
+                            <DropdownMenuItem
+                              onClick={() => {
+                                setSelectedCase(c);
+                                setDocsOpen(true);
+                              }}
+                            >
+                              View Details
+                            </DropdownMenuItem>
+                            {canCreate ? (
+                              <>
+                                <DropdownMenuItem>Edit Case</DropdownMenuItem>
+                                <DropdownMenuItem>Assign Lawyer</DropdownMenuItem>
+                              </>
+                            ) : null}
                           </DropdownMenuContent>
                         </DropdownMenu>
                       </TableCell>
@@ -271,6 +350,105 @@ export default function Cases() {
           <div className="p-4 text-center text-muted-foreground">Closed cases view</div>
         </TabsContent>
       </Tabs>
-    </Layout>
+
+      <Dialog
+        open={docsOpen}
+        onOpenChange={(open) => {
+          setDocsOpen(open);
+          if (!open) {
+            setSelectedCase(null);
+            setDocFile(null);
+            setDocIsPublic(false);
+          }
+        }}
+      >
+        <DialogContent className="max-w-2xl">
+          <DialogHeader>
+            <DialogTitle>Case Documents</DialogTitle>
+          </DialogHeader>
+
+          <div className="space-y-4">
+            <div className="text-sm text-muted-foreground">
+              {selectedCase?.caseNumber} — {selectedCase?.title}
+            </div>
+
+            <div className="rounded-md border">
+              <Table>
+                <TableHeader>
+                  <TableRow>
+                    <TableHead>File</TableHead>
+                    <TableHead>Type</TableHead>
+                    <TableHead className="text-right rtl:text-left">{t("app.actions")}</TableHead>
+                  </TableRow>
+                </TableHeader>
+                <TableBody>
+                  {loadingDocs ? (
+                    <TableRow>
+                      <TableCell colSpan={3}>
+                        <Skeleton className="h-4 w-full" />
+                      </TableCell>
+                    </TableRow>
+                  ) : caseDocuments && caseDocuments.length ? (
+                    caseDocuments.map((d: any) => (
+                      <TableRow key={d.id}>
+                        <TableCell className="font-medium">{d.fileName || d.title || "Document"}</TableCell>
+                        <TableCell>{d.mimeType || d.fileType || "-"}</TableCell>
+                        <TableCell className="text-right rtl:text-left">
+                          <Button variant="outline" size="sm" asChild>
+                            <a href={d.fileUrl} target="_blank" rel="noreferrer">
+                              View
+                            </a>
+                          </Button>
+                        </TableCell>
+                      </TableRow>
+                    ))
+                  ) : (
+                    <TableRow>
+                      <TableCell colSpan={3} className="text-center text-muted-foreground py-6">
+                        {t("beneficiary_portal.no_documents")}
+                      </TableCell>
+                    </TableRow>
+                  )}
+                </TableBody>
+              </Table>
+            </div>
+
+            <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+              <div className="space-y-2">
+                <Label>Upload file</Label>
+                <Input
+                  type="file"
+                  onChange={(e) => setDocFile(e.target.files?.[0] ?? null)}
+                />
+              </div>
+
+              {!isBen ? (
+                <div className="space-y-2">
+                  <Label>Visible to beneficiary (public)</Label>
+                  <div className="flex items-center gap-2">
+                    <ToggleSwitch checked={docIsPublic} onCheckedChange={setDocIsPublic} />
+                    <span className="text-sm text-muted-foreground">{docIsPublic ? "Public" : "Private"}</span>
+                  </div>
+                </div>
+              ) : null}
+            </div>
+
+            <div className="flex items-center justify-end gap-2">
+              <Button variant="outline" onClick={() => setDocsOpen(false)}>
+                {t("common.cancel")}
+              </Button>
+              <Button
+                onClick={() => uploadDocsMutation.mutate()}
+                disabled={!docFile || uploadDocsMutation.isPending}
+              >
+                {uploadDocsMutation.isPending ? t("common.loading") : "Upload"}
+              </Button>
+            </div>
+          </div>
+        </DialogContent>
+      </Dialog>
+    </>
   );
+
+  return isBen ? <PortalLayout>{page}</PortalLayout> : <Layout>{page}</Layout>;
 }

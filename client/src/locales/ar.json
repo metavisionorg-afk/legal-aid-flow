@@ -46,6 +46,7 @@
     "have_account": "لديك حساب بالفعل؟",
     "no_account": "ليس لديك حساب؟",
     "register_now": "سجل الآن",
+    "create_new_account": "إنشاء حساب جديد",
     "username": "اسم المستخدم",
     "confirm_password": "تأكيد كلمة المرور",
     "full_name": "الاسم الكامل",
@@ -57,10 +58,15 @@
     "title": "إنشاء حساب مستفيد",
     "subtitle": "الوصول إلى خدمات المساعدة القانونية",
     "full_name": "الاسم الكامل",
+    "username": "اسم المستخدم",
     "email": "البريد الإلكتروني",
     "password": "كلمة المرور",
     "confirm_password": "تأكيد كلمة المرور",
     "phone": "رقم الجوال",
+    "gender": "الجنس (اختياري)",
+    "select_gender": "اختر الجنس",
+    "gender_male": "ذكر",
+    "gender_female": "أنثى",
     "city": "المدينة",
     "preferred_language": "اللغة المفضلة",
     "select_language": "اختر اللغة",
@@ -77,6 +83,7 @@
     "error": "تعذر إنشاء الحساب",
     "validation": {
       "full_name_required": "الاسم الكامل مطلوب",
+      "username_required": "اسم المستخدم مطلوب",
       "email_invalid": "يرجى إدخال بريد إلكتروني صحيح",
       "password_min": "يجب أن تكون كلمة المرور 8 أحرف على الأقل",
       "password_strong": "يجب أن تحتوي كلمة المرور على حرف كبير وصغير ورقم",
@@ -89,6 +96,9 @@
   },
   "service_types": {
     "legal_consultation": "استشارة قانونية",
+    "court_representation": "تمثيل أمام المحكمة",
+    "contract_drafting_review": "صياغة/مراجعة عقد",
+    "complaint_drafting": "صياغة شكوى",
     "case_filing": "رفع/تسجيل قضية",
     "contract_review": "مراجعة عقد",
     "representation": "تمثيل/توكيل",
@@ -166,14 +176,6 @@
     "documents:self:create": "رفع مستنداتي",
     "intake:self:create": "إنشاء طلب استقبال"
   },
-  "service_types": {
-    "legal_consultation": "استشارة قانونية",
-    "case_filing": "رفع/تسجيل قضية",
-    "contract_review": "مراجعة عقد",
-    "representation": "تمثيل/توكيل",
-    "mediation": "صلح/وساطة",
-    "other": "أخرى"
-  },
   "consultations": {
     "title": "الاستشارات",
     "new_title": "إضافة استشارة",
@@ -208,6 +210,28 @@
     "create": "إنشاء",
     "created": "تم إنشاء الاستشارة",
     "create_failed": "تعذر إنشاء الاستشارة"
+  },
+  "serviceRequests": {
+    "new_request": "طلب خدمة قانونية",
+    "my_requests": "طلباتي",
+    "management": "لوحة إدارة الطلبات",
+    "service_type": "نوع الخدمة",
+    "service_type_other": "تفاصيل نوع الخدمة",
+    "issue_summary": "ملخص المشكلة",
+    "issue_details": "تفاصيل إضافية (اختياري)",
+    "urgent": "عاجل",
+    "submit": "إرسال الطلب",
+    "status": "الحالة",
+    "statuses": {
+      "new": "جديد",
+      "in_review": "قيد المراجعة",
+      "accepted": "مقبول",
+      "rejected": "مرفوض"
+    },
+    "beneficiary": "المستفيد",
+    "created_at": "تاريخ الإنشاء",
+    "empty": "لا توجد طلبات",
+    "issue_summary_required": "ملخص المشكلة مطلوب"
   },
   "beneficiaries": {
     "add_title": "إضافة مستفيد",

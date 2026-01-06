@@ -99,9 +99,20 @@ export default function Login() {
             </div>
           </CardContent>
           <CardFooter>
-            <Button type="submit" className="w-full" disabled={loading} data-testid="button-login">
-              {loading ? "Signing in..." : t('app.sign_in')}
-            </Button>
+            <div className="w-full space-y-2">
+              <Button type="submit" className="w-full" disabled={loading} data-testid="button-login">
+                {loading ? "Signing in..." : t('app.sign_in')}
+              </Button>
+              <Button
+                type="button"
+                variant="secondary"
+                className="w-full"
+                onClick={() => setLocation("/register")}
+                data-testid="button-create-account"
+              >
+                {t("portal.create_new_account")}
+              </Button>
+            </div>
           </CardFooter>
         </form>
       </Card>

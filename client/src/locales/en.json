@@ -46,6 +46,7 @@
     "have_account": "Already have an account?",
     "no_account": "Don't have an account?",
     "register_now": "Register now",
+    "create_new_account": "Create new account",
     "username": "Username",
     "confirm_password": "Confirm Password",
     "full_name": "Full Name",
@@ -64,10 +65,15 @@
     "title": "Create Beneficiary Account",
     "subtitle": "Access legal aid services",
     "full_name": "Full Name",
+    "username": "Username",
     "email": "Email",
     "password": "Password",
     "confirm_password": "Confirm Password",
     "phone": "Phone Number",
+    "gender": "Gender (optional)",
+    "select_gender": "Select gender",
+    "gender_male": "Male",
+    "gender_female": "Female",
     "city": "City",
     "preferred_language": "Preferred Language",
     "select_language": "Select language",
@@ -84,6 +90,7 @@
     "error": "Registration failed",
     "validation": {
       "full_name_required": "Full name is required",
+      "username_required": "Username is required",
       "email_invalid": "Please enter a valid email",
       "password_min": "Password must be at least 8 characters",
       "password_strong": "Password must include uppercase, lowercase, and a number",
@@ -96,6 +103,9 @@
   },
   "service_types": {
     "legal_consultation": "Legal consultation",
+    "court_representation": "Court representation",
+    "contract_drafting_review": "Contract drafting/review",
+    "complaint_drafting": "Complaint drafting",
     "case_filing": "Case filing",
     "contract_review": "Contract review",
     "representation": "Representation",
@@ -166,14 +176,6 @@
     "documents:self:create": "Upload own documents",
     "intake:self:create": "Create own intake requests"
   },
-  "service_types": {
-    "legal_consultation": "Legal consultation",
-    "case_filing": "Case filing",
-    "contract_review": "Contract review",
-    "representation": "Representation",
-    "mediation": "Mediation",
-    "other": "Other"
-  },
   "consultations": {
     "title": "Consultations",
     "new_title": "Add consultation",
@@ -208,6 +210,28 @@
     "create": "Create",
     "created": "Consultation created",
     "create_failed": "Failed to create consultation"
+  },
+  "serviceRequests": {
+    "new_request": "Request legal service",
+    "my_requests": "My requests",
+    "management": "Requests management",
+    "service_type": "Service type",
+    "service_type_other": "Service type details",
+    "issue_summary": "Issue summary",
+    "issue_details": "Additional details (optional)",
+    "urgent": "Urgent",
+    "submit": "Submit request",
+    "status": "Status",
+    "statuses": {
+      "new": "New",
+      "in_review": "In review",
+      "accepted": "Accepted",
+      "rejected": "Rejected"
+    },
+    "beneficiary": "Beneficiary",
+    "created_at": "Created at",
+    "empty": "No requests",
+    "issue_summary_required": "Issue summary is required"
   },
   "beneficiaries": {
     "add_title": "Add beneficiary",

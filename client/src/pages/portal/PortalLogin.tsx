@@ -94,9 +94,13 @@ export default function PortalLogin() {
             </div>
             <p className="text-xs text-muted-foreground text-center">
               {t('portal.no_account')}{' '}
-              <a href="/beneficiary/register" className="text-primary hover:underline">
-                {t('portal.register_now')}
-              </a>
+              <button
+                type="button"
+                className="text-primary hover:underline"
+                onClick={() => setLocation("/register")}
+              >
+                {t('portal.create_new_account')}
+              </button>
             </p>
           </CardContent>
           <CardFooter>

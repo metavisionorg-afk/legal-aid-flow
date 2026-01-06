@@ -20,6 +20,7 @@ import {
   insertTaskSchema,
   insertSessionSchema,
   insertConsultationSchema,
+  insertServiceRequestSchema,
   registerBeneficiarySchema,
   registerBeneficiarySimpleSchema,
   uploadedFileMetadataSchema
@@ -142,6 +143,26 @@ export async function registerRoutes(
     req.user = user;
     req.beneficiary = beneficiary;
     next();
+  }
+
+  function requireRole(allowedRoles: Array<string>) {
+    return (req: AuthRequest, res: any, next: any) => {
+      const user = req.user;
+      if (!user) {
+        return res.status(500).json({ error: "Auth context missing" });
+      }
+
+      const role = user.role;
+      const ok =
+        allowedRoles.includes(role) ||
+        (role === "super_admin" && allowedRoles.includes("admin"));
+
+      if (!ok) {
+        return res.status(403).json({ error: "Forbidden" });
+      }
+
+      next();
+    };
   }
 
   // Helper to create audit log
@@ -545,6 +566,99 @@ export async function registerRoutes(
     }
   });
 
+  // ========== SERVICE REQUESTS ROUTES (STAGE 3) ==========
+
+  // Beneficiary creates a new service request (beneficiary only)
+  app.post("/api/service-requests", requireBeneficiary, async (req: AuthRequest, res) => {
+    try {
+      const beneficiary = req.beneficiary!;
+
+      // beneficiaryId/status are enforced server-side
+      const parsed = insertServiceRequestSchema
+        .omit({ beneficiaryId: true, status: true, urgentDate: true })
+        .extend({
+          urgentDate: z.union([z.string().datetime(), z.null()]).optional(),
+        })
+        .safeParse(req.body);
+
+      if (!parsed.success) {
+        return res.status(400).json({ error: fromZodError(parsed.error).message });
+      }
+
+      const input = parsed.data;
+
+      const created = await storage.createServiceRequest({
+        beneficiaryId: beneficiary.id,
+        serviceType: input.serviceType as any,
+        serviceTypeOther: input.serviceTypeOther ?? undefined,
+        issueSummary: input.issueSummary,
+        issueDetails: input.issueDetails ?? undefined,
+        urgent: input.urgent ?? false,
+        urgentDate: input.urgentDate ? new Date(input.urgentDate) : undefined,
+        status: "new",
+      } as any);
+
+      return res.status(201).json(created);
+    } catch (error: any) {
+      return res.status(500).json({ error: getErrorMessage(error) });
+    }
+  });
+
+  // Beneficiary lists their own requests (beneficiary only)
+  app.get("/api/service-requests/my", requireBeneficiary, async (req: AuthRequest, res) => {
+    try {
+      const beneficiary = req.beneficiary!;
+      const requests = await storage.getServiceRequestsByBeneficiary(beneficiary.id);
+      return res.json(requests);
+    } catch (error: any) {
+      return res.status(500).json({ error: getErrorMessage(error) });
+    }
+  });
+
+  // Staff lists all requests (admin/lawyer only)
+  app.get(
+    "/api/service-requests",
+    requireStaff,
+    requireRole(["admin", "lawyer"]),
+    async (_req: AuthRequest, res) => {
+      try {
+        const requests = await storage.getAllServiceRequests();
+        return res.json(requests);
+      } catch (error: any) {
+        return res.status(500).json({ error: getErrorMessage(error) });
+      }
+    },
+  );
+
+  // Staff updates status (admin/lawyer only)
+  app.patch(
+    "/api/service-requests/:id/status",
+    requireStaff,
+    requireRole(["admin", "lawyer"]),
+    async (req: AuthRequest, res) => {
+      try {
+        const parsed = z
+          .object({
+            status: z.enum(["new", "in_review", "accepted", "rejected"]),
+          })
+          .safeParse(req.body);
+
+        if (!parsed.success) {
+          return res.status(400).json({ error: fromZodError(parsed.error).message });
+        }
+
+        const updated = await storage.updateServiceRequestStatus(req.params.id, parsed.data.status);
+        if (!updated) {
+          return res.status(404).json({ error: "Service request not found" });
+        }
+
+        return res.json(updated);
+      } catch (error: any) {
+        return res.status(500).json({ error: getErrorMessage(error) });
+      }
+    },
+  );
+
   // ========== BENEFICIARIES ROUTES (STAFF) ==========
 
   app.get("/api/beneficiaries", requireStaff, async (req, res) => {
@@ -873,43 +987,105 @@ export async function registerRoutes(
     }
   });
 
-  // ========== CASES ROUTES (STAFF) ==========
+  // ========== CASES ROUTES ==========
 
-  app.get("/api/cases", requireStaff, async (req, res) => {
+  app.get("/api/cases", requireAuth, async (req: AuthRequest, res) => {
     try {
+      const user = await storage.getUser(req.session.userId!);
+      if (!user) {
+        return res.status(404).json({ error: "User not found" });
+      }
+
+      // Beneficiaries: only their cases
+      if (user.userType === "beneficiary") {
+        const beneficiary = await storage.getBeneficiaryByUserId(user.id);
+        if (!beneficiary) {
+          return res.json([]);
+        }
+        const cases = await storage.getCasesByBeneficiary(beneficiary.id);
+        const publicCases = cases.map(({ internalNotes, ...caseData }) => caseData);
+        return res.json(publicCases);
+      }
+
+      // Staff: only admin/lawyer (super_admin allowed)
+      const isAllowedStaff = user.role === "admin" || user.role === "lawyer" || user.role === "super_admin";
+      if (!isAllowedStaff) {
+        return res.status(403).json({ error: "Forbidden" });
+      }
+
       const cases = await storage.getAllCases();
-      res.json(cases);
+      return res.json(cases);
     } catch (error: any) {
       res.status(500).json({ error: error.message });
     }
   });
 
-  app.get("/api/cases/:id", requireStaff, async (req, res) => {
+  app.get("/api/cases/:id", requireAuth, async (req: AuthRequest, res) => {
     try {
+      const user = await storage.getUser(req.session.userId!);
+      if (!user) {
+        return res.status(404).json({ error: "User not found" });
+      }
+
       const caseData = await storage.getCase(req.params.id);
       if (!caseData) {
         return res.status(404).json({ error: "Case not found" });
       }
-      res.json(caseData);
+
+      if (user.userType === "beneficiary") {
+        const beneficiary = await storage.getBeneficiaryByUserId(user.id);
+        if (!beneficiary || caseData.beneficiaryId !== beneficiary.id) {
+          return res.status(403).json({ error: "Forbidden" });
+        }
+        const { internalNotes, ...publicCase } = caseData as any;
+        return res.json(publicCase);
+      }
+
+      const isAllowedStaff = user.role === "admin" || user.role === "lawyer" || user.role === "super_admin";
+      if (!isAllowedStaff) {
+        return res.status(403).json({ error: "Forbidden" });
+      }
+
+      return res.json(caseData);
     } catch (error: any) {
       res.status(500).json({ error: error.message });
     }
   });
 
-  app.get("/api/cases/:caseId/documents", requireStaff, async (req: AuthRequest, res) => {
+  app.get("/api/cases/:caseId/documents", requireAuth, async (req: AuthRequest, res) => {
     try {
+      const user = await storage.getUser(req.session.userId!);
+      if (!user) {
+        return res.status(404).json({ error: "User not found" });
+      }
+
       const caseData = await storage.getCase(req.params.caseId);
       if (!caseData) {
         return res.status(404).json({ error: "Case not found" });
       }
+
+      if (user.userType === "beneficiary") {
+        const beneficiary = await storage.getBeneficiaryByUserId(user.id);
+        if (!beneficiary || caseData.beneficiaryId !== beneficiary.id) {
+          return res.status(403).json({ error: "Forbidden" });
+        }
+        const docs = await storage.getDocumentsByCaseForBeneficiary(beneficiary.id, caseData.id);
+        return res.json(docs);
+      }
+
+      const isAllowedStaff = user.role === "admin" || user.role === "lawyer" || user.role === "super_admin";
+      if (!isAllowedStaff) {
+        return res.status(403).json({ error: "Forbidden" });
+      }
+
       const docs = await storage.getDocumentsByCase(caseData.id);
-      res.json(docs);
+      return res.json(docs);
     } catch (error: any) {
       res.status(500).json({ error: error.message });
     }
   });
 
-  app.post("/api/cases/:caseId/documents", requireStaff, async (req: AuthRequest, res) => {
+  app.post("/api/cases/:caseId/documents", requireAuth, async (req: AuthRequest, res) => {
     try {
       const bodySchema = z.object({
         isPublic: z.boolean().optional().default(false),
@@ -921,10 +1097,38 @@ export async function registerRoutes(
         return res.status(400).json({ error: fromZodError(parsed.error).message });
       }
 
-      const user = req.user!;
+      const user = await storage.getUser(req.session.userId!);
+      if (!user) {
+        return res.status(404).json({ error: "User not found" });
+      }
+
       const caseData = await storage.getCase(req.params.caseId);
       if (!caseData) {
         return res.status(404).json({ error: "Case not found" });
+      }
+
+      // Beneficiary uploads are allowed, but must be for their own case and always public.
+      if (user.userType === "beneficiary") {
+        const beneficiary = await storage.getBeneficiaryByUserId(user.id);
+        if (!beneficiary || caseData.beneficiaryId !== beneficiary.id) {
+          return res.status(403).json({ error: "Forbidden" });
+        }
+
+        const docs = await storage.createDocumentsForCase({
+          uploadedBy: user.id,
+          beneficiaryId: beneficiary.id,
+          caseId: caseData.id,
+          isPublic: true,
+          documents: parsed.data.documents,
+        });
+
+        return res.status(201).json({ success: true, documents: docs });
+      }
+
+      // Staff uploads (admin/lawyer/super_admin) may set visibility.
+      const isAllowedStaff = user.role === "admin" || user.role === "lawyer" || user.role === "super_admin";
+      if (!isAllowedStaff) {
+        return res.status(403).json({ error: "Forbidden" });
       }
 
       const docs = await storage.createDocumentsForCase({
@@ -941,7 +1145,7 @@ export async function registerRoutes(
     }
   });
 
-  app.post("/api/cases", requireStaff, async (req, res) => {
+  app.post("/api/cases", requireStaff, requireRole(["admin", "lawyer"]), async (req, res) => {
     try {
       const result = insertCaseSchema.safeParse(req.body);
       if (!result.success) {
@@ -956,7 +1160,7 @@ export async function registerRoutes(
     }
   });
 
-  app.patch("/api/cases/:id", requireStaff, async (req, res) => {
+  app.patch("/api/cases/:id", requireStaff, requireRole(["admin", "lawyer"]), async (req, res) => {
     try {
       const caseData = await storage.updateCase(req.params.id, req.body);
       if (!caseData) {
@@ -969,7 +1173,7 @@ export async function registerRoutes(
     }
   });
 
-  app.delete("/api/cases/:id", requireStaff, async (req, res) => {
+  app.delete("/api/cases/:id", requireStaff, requireRole(["admin", "lawyer"]), async (req, res) => {
     try {
       const success = await storage.deleteCase(req.params.id);
       if (!success) {

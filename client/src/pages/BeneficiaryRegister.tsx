@@ -1,4 +1,4 @@
-import { useMemo } from "react";
+import { useMemo, useEffect } from "react";
 import { useTranslation } from "react-i18next";
 import { useLocation } from "wouter";
 import { useMutation } from "@tanstack/react-query";
@@ -45,6 +45,7 @@ type ServiceType = (typeof SERVICE_TYPES)[number];
 
 type FormValues = {
   fullName: string;
+  username: string;
   email: string;
   password: string;
   confirmPassword: string;
@@ -55,13 +56,23 @@ type FormValues = {
   details?: string;
   nationalId?: string;
   address?: string;
+  gender?: "male" | "female";
 };
 
 export default function BeneficiaryRegister() {
   const { t } = useTranslation();
   const [, setLocation] = useLocation();
   const { toast } = useToast();
-  const { refresh } = useAuth();
+  const { refresh, user } = useAuth();
+
+  useEffect(() => {
+    if (!user) return;
+    if (user.userType === "beneficiary") {
+      setLocation("/beneficiary/dashboard");
+      return;
+    }
+    setLocation("/");
+  }, [user, setLocation]);
 
   const schema = useMemo(() => {
     const passwordStrong = /^(?=.*[a-z])(?=.*[A-Z])(?=.*\d).{8,}$/;
@@ -69,6 +80,7 @@ export default function BeneficiaryRegister() {
     return z
       .object({
         fullName: z.string().min(1, t("beneficiary_register.validation.full_name_required")),
+        username: z.string().min(3, t("beneficiary_register.validation.username_required")),
         email: z.string().email(t("beneficiary_register.validation.email_invalid")),
         password: z
           .string()
@@ -86,6 +98,7 @@ export default function BeneficiaryRegister() {
         details: z.string().optional(),
         nationalId: z.string().optional(),
         address: z.string().optional(),
+        gender: z.enum(["male", "female"]).optional(),
       })
       .superRefine((data, ctx) => {
         if (data.password !== data.confirmPassword) {
@@ -102,6 +115,7 @@ export default function BeneficiaryRegister() {
     resolver: zodResolver(schema),
     defaultValues: {
       fullName: "",
+      username: "",
       email: "",
       password: "",
       confirmPassword: "",
@@ -112,6 +126,7 @@ export default function BeneficiaryRegister() {
       details: "",
       nationalId: "",
       address: "",
+      gender: undefined,
     },
     mode: "onTouched",
   });
@@ -120,7 +135,9 @@ export default function BeneficiaryRegister() {
     mutationFn: async (values: FormValues) => {
       return authAPI.registerBeneficiary({
         email: values.email,
+        username: values.username,
         password: values.password,
+        confirmPassword: values.confirmPassword,
         fullName: values.fullName,
         phone: values.phone,
         city: values.city,
@@ -129,6 +146,7 @@ export default function BeneficiaryRegister() {
         details: values.details?.trim() ? values.details.trim() : undefined,
         nationalId: values.nationalId?.trim() ? values.nationalId.trim() : undefined,
         address: values.address?.trim() ? values.address.trim() : undefined,
+        gender: values.gender ?? undefined,
       });
     },
     onSuccess: async () => {
@@ -137,7 +155,7 @@ export default function BeneficiaryRegister() {
         title: t("common.success"),
         description: t("beneficiary_register.success"),
       });
-      setLocation("/beneficiary/portal");
+      setLocation("/beneficiary/dashboard");
     },
     onError: (err: any) => {
       toast({
@@ -177,6 +195,20 @@ export default function BeneficiaryRegister() {
                     <FormLabel>{t("beneficiary_register.full_name")}</FormLabel>
                     <FormControl>
                       <Input {...field} autoComplete="name" />
+                    </FormControl>
+                    <FormMessage />
+                  </FormItem>
+                )}
+              />
+
+              <FormField
+                control={form.control}
+                name="username"
+                render={({ field }) => (
+                  <FormItem>
+                    <FormLabel>{t("beneficiary_register.username")}</FormLabel>
+                    <FormControl>
+                      <Input {...field} autoComplete="username" />
                     </FormControl>
                     <FormMessage />
                   </FormItem>
@@ -236,6 +268,28 @@ export default function BeneficiaryRegister() {
                     <FormControl>
                       <Input {...field} type="tel" autoComplete="tel" />
                     </FormControl>
+                    <FormMessage />
+                  </FormItem>
+                )}
+              />
+
+              <FormField
+                control={form.control}
+                name="gender"
+                render={({ field }) => (
+                  <FormItem>
+                    <FormLabel>{t("beneficiary_register.gender")}</FormLabel>
+                    <Select value={field.value} onValueChange={field.onChange}>
+                      <FormControl>
+                        <SelectTrigger>
+                          <SelectValue placeholder={t("beneficiary_register.select_gender")} />
+                        </SelectTrigger>
+                      </FormControl>
+                      <SelectContent>
+                        <SelectItem value="male">{t("beneficiary_register.gender_male")}</SelectItem>
+                        <SelectItem value="female">{t("beneficiary_register.gender_female")}</SelectItem>
+                      </SelectContent>
+                    </Select>
                     <FormMessage />
                   </FormItem>
                 )}

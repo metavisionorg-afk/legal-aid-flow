@@ -23,6 +23,7 @@ import PortalRegister from "@/pages/portal/PortalRegister";
 import PortalDashboard from "@/pages/portal/PortalDashboard";
 import BeneficiaryRegister from "@/pages/BeneficiaryRegister";
 import BeneficiaryPortal from "@/pages/BeneficiaryPortal";
+import RegisterBeneficiary from "@/pages/RegisterBeneficiary";
 import Forbidden from "@/pages/Forbidden";
 
 // Initialize i18n
@@ -84,6 +85,10 @@ function PortalRoute({ component: Component }: any) {
 function Router() {
   return (
     <Switch>
+      <Route path="/unauthorized">
+        {() => <Forbidden redirectTo="/" />}
+      </Route>
+      <Route path="/register" component={RegisterBeneficiary} />
       <Route path="/beneficiary/register" component={BeneficiaryRegister} />
 
       {/* Staff Routes */}
@@ -97,9 +102,7 @@ function Router() {
       <Route path="/beneficiaries">
         {() => <StaffRoute component={Beneficiaries} />}
       </Route>
-      <Route path="/cases">
-        {() => <StaffRoute component={Cases} />}
-      </Route>
+      <Route path="/cases" component={Cases} />
       <Route path="/calendar">
         {() => <StaffRoute component={CalendarPage} />}
       </Route>
@@ -113,7 +116,7 @@ function Router() {
         {() => <StaffRoute component={Rules} />}
       </Route>
       <Route path="/consultations">
-        {() => <StaffRoute component={Consultations} />}
+        {() => <Consultations />}
       </Route>
       <Route path="/sessions">
         {() => <StaffRoute component={Sessions} />}
@@ -126,6 +129,9 @@ function Router() {
       <Route path="/portal/login" component={PortalLogin} />
       <Route path="/portal/register" component={PortalRegister} />
       <Route path="/beneficiary/portal">
+        {() => <PortalRoute component={BeneficiaryPortal} />}
+      </Route>
+      <Route path="/beneficiary/dashboard">
         {() => <PortalRoute component={BeneficiaryPortal} />}
       </Route>
       <Route path="/portal">

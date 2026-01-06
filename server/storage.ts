@@ -78,7 +78,10 @@ export interface IStorage {
 
   // Service Requests (self-service)
   getServiceRequest(id: string): Promise<ServiceRequest | undefined>;
+  getServiceRequestsByBeneficiary(beneficiaryId: string): Promise<ServiceRequest[]>;
+  getAllServiceRequests(): Promise<ServiceRequest[]>;
   createServiceRequest(request: InsertServiceRequest): Promise<ServiceRequest>;
+  updateServiceRequestStatus(id: string, status: ServiceRequest["status"]): Promise<ServiceRequest | undefined>;
   attachDocumentsToServiceRequest(input: {
     uploadedBy: string;
     beneficiaryId: string;
@@ -366,8 +369,29 @@ export class DatabaseStorage implements IStorage {
     return request;
   }
 
+  async getServiceRequestsByBeneficiary(beneficiaryId: string): Promise<ServiceRequest[]> {
+    return db
+      .select()
+      .from(schema.serviceRequests)
+      .where(eq(schema.serviceRequests.beneficiaryId, beneficiaryId))
+      .orderBy(desc(schema.serviceRequests.createdAt));
+  }
+
+  async getAllServiceRequests(): Promise<ServiceRequest[]> {
+    return db.select().from(schema.serviceRequests).orderBy(desc(schema.serviceRequests.createdAt));
+  }
+
   async createServiceRequest(insertRequest: InsertServiceRequest): Promise<ServiceRequest> {
     const [request] = await db.insert(schema.serviceRequests).values(insertRequest).returning();
+    return request;
+  }
+
+  async updateServiceRequestStatus(id: string, status: ServiceRequest["status"]): Promise<ServiceRequest | undefined> {
+    const [request] = await db
+      .update(schema.serviceRequests)
+      .set({ status, updatedAt: new Date() })
+      .where(eq(schema.serviceRequests.id, id))
+      .returning();
     return request;
   }
 

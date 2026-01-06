@@ -11,7 +11,10 @@
     "check": "tsc",
     "db:push": "drizzle-kit push",
     "smoke:stage6": "tsx scripts/smoke-stage6.ts",
-    "smoke:stage6:clean": "CLEANUP=1 tsx scripts/smoke-stage6.ts"
+    "smoke:stage6:clean": "SMOKE_CLEAN=1 tsx scripts/smoke-stage6.ts",
+    "smoke:stage1": "tsx scripts/smoke-stage1-cases.ts",
+    "smoke:stage2": "tsx scripts/smoke-stage2-docs.ts",
+    "smoke:stage3": "tsx scripts/smoke-stage3-service-requests.ts"
   },
   "dependencies": {
     "@hookform/resolvers": "^3.10.0",

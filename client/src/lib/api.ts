@@ -144,6 +144,21 @@ export const documentsAPI = {
   listMy: () => fetchAPI("/documents/my"),
 };
 
+export const serviceRequestsAPI = {
+  create: (data: any) =>
+    fetchAPI("/service-requests", {
+      method: "POST",
+      body: JSON.stringify(data),
+    }),
+  listMy: () => fetchAPI("/service-requests/my"),
+  listAll: () => fetchAPI("/service-requests"),
+  updateStatus: (id: string, status: "new" | "in_review" | "accepted" | "rejected") =>
+    fetchAPI(`/service-requests/${id}/status`, {
+      method: "PATCH",
+      body: JSON.stringify({ status }),
+    }),
+};
+
 // Beneficiaries API (Staff only)
 export const beneficiariesAPI = {
   getAll: () => fetchAPI("/beneficiaries"),
@@ -183,6 +198,12 @@ export const casesAPI = {
   getAll: () => fetchAPI("/cases"),
   getOne: (id: string) => fetchAPI(`/cases/${id}`),
   getMy: () => fetchAPI("/cases/my"),
+  listDocuments: (caseId: string) => fetchAPI(`/cases/${caseId}/documents`),
+  uploadDocuments: (caseId: string, data: { isPublic?: boolean; documents: any[] }) =>
+    fetchAPI(`/cases/${caseId}/documents`, {
+      method: "POST",
+      body: JSON.stringify(data),
+    }),
   create: (data: any) =>
     fetchAPI("/cases", {
       method: "POST",

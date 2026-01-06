@@ -44,6 +44,7 @@ export const serviceTypeEnum = pgEnum("service_type", [
 ]);
 export const serviceRequestStatusEnum = pgEnum("service_request_status", ["new", "in_review", "accepted", "rejected"]);
 export const documentOwnerTypeEnum = pgEnum("document_owner_type", ["beneficiary"]);
+export const documentVisibilityEnum = pgEnum("document_visibility", ["INTERNAL", "BENEFICIARY"]);
 export const permissionEnum = pgEnum("permission", [
   "view_dashboard", "manage_users", "manage_beneficiaries", "manage_cases",
   "manage_intake", "manage_tasks", "manage_finance", "manage_documents",
@@ -68,7 +69,10 @@ export const users = pgTable("users", {
   role: roleEnum("role").notNull().default("viewer"),
   emailVerified: boolean("email_verified").notNull().default(false),
   verificationToken: text("verification_token"),
+  // Legacy columns present in some DBs; kept to avoid destructive drops
+  beneficiaryId: varchar("beneficiary_id"),
   createdAt: timestamp("created_at").notNull().defaultNow(),
+  isActive: boolean("is_active").notNull().default(true),
 });
 
 export const insertUserSchema = createInsertSchema(users).omit({ id: true, createdAt: true });
@@ -105,7 +109,7 @@ export const beneficiaries = pgTable("beneficiaries", {
   city: text("city"),
   region: text("region"),
   address: text("address"),
-  dateOfBirth: date("date_of_birth"),
+  dateOfBirth: timestamp("date_of_birth"),
   // Stage 2: birth date alias (kept separate for backwards compatibility)
   birthDate: date("birth_date"),
   nationality: text("nationality"),
@@ -124,6 +128,8 @@ export const beneficiaries = pgTable("beneficiaries", {
   preferredLanguage: preferredLanguageEnum("preferred_language"),
   roleCapacity: text("role_capacity"),
   attachments: text("attachments").array(),
+  // Legacy notes column present in some DBs; kept to avoid destructive drops
+  notes: text("notes"),
   status: beneficiaryStatusEnum("status").notNull().default("pending"),
   createdAt: timestamp("created_at").notNull().defaultNow(),
   updatedAt: timestamp("updated_at").notNull().defaultNow(),
@@ -188,6 +194,10 @@ export const cases = pgTable("cases", {
   createdAt: timestamp("created_at").notNull().defaultNow(),
   updatedAt: timestamp("updated_at").notNull().defaultNow(),
   closedAt: timestamp("closed_at"),
+  // Legacy workflow/stage columns present in some DBs; kept to avoid destructive drops
+  workflowId: varchar("workflow_id"),
+  stageKey: text("stage_key"),
+  stageUpdatedAt: timestamp("stage_updated_at"),
 });
 
 export const insertCaseSchema = createInsertSchema(cases).omit({ id: true, createdAt: true, updatedAt: true });
@@ -485,6 +495,8 @@ export const documents = pgTable("documents", {
   size: integer("size"),
   isPublic: boolean("is_public").notNull().default(false),
   createdAt: timestamp("created_at").notNull().defaultNow(),
+  // Legacy visibility column present in some DBs; kept to avoid destructive drops
+  visibility: documentVisibilityEnum("visibility").notNull().default("INTERNAL"),
 });
 
 export const insertDocumentSchema = createInsertSchema(documents).omit({ id: true, createdAt: true });

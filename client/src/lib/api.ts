@@ -204,10 +204,31 @@ export const casesAPI = {
       method: "POST",
       body: JSON.stringify(data),
     }),
+  getTimeline: (id: string) => fetchAPI(`/cases/${id}/timeline`),
   create: (data: any) =>
     fetchAPI("/cases", {
       method: "POST",
       body: JSON.stringify(data),
+    }),
+  approve: (id: string) =>
+    fetchAPI(`/cases/${id}/approve`, {
+      method: "PATCH",
+      body: JSON.stringify({}),
+    }),
+  reject: (id: string, rejectReason?: string) =>
+    fetchAPI(`/cases/${id}/reject`, {
+      method: "PATCH",
+      body: JSON.stringify({ rejectReason: rejectReason?.trim() ? rejectReason.trim() : null }),
+    }),
+  assignLawyer: (id: string, lawyerId: string) =>
+    fetchAPI(`/cases/${id}/assign-lawyer`, {
+      method: "PATCH",
+      body: JSON.stringify({ lawyerId }),
+    }),
+  updateStatus: (id: string, status: string, note?: string) =>
+    fetchAPI(`/cases/${id}/status`, {
+      method: "PATCH",
+      body: JSON.stringify({ status, note: note?.trim() ? note.trim() : null }),
     }),
   update: (id: string, data: any) =>
     fetchAPI(`/cases/${id}`, {

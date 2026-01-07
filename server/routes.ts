@@ -29,6 +29,7 @@ import {
 import { fromZodError } from "zod-validation-error";
 import bcrypt from "bcrypt";
 import { z } from "zod";
+import { isAdminStatus, isOperatingStatus } from "./lib/caseWorkflow";
 
 interface AuthRequest extends Request {
   user?: User;
@@ -164,6 +165,13 @@ export async function registerRoutes(
 
       next();
     };
+  }
+
+  async function getCurrentUser(req: AuthRequest): Promise<User | undefined> {
+    if (!req.session?.userId) return undefined;
+    const user = await storage.getUser(req.session.userId);
+    if (user) req.user = user;
+    return user;
   }
 
   // Helper to create audit log
@@ -1192,23 +1200,354 @@ export async function registerRoutes(
     },
   );
 
-  app.post("/api/cases", requireStaff, requireRole(["admin", "lawyer"]), async (req, res) => {
+  // CREATE CASE
+  // - Beneficiary: always creates pending_admin_review for themselves.
+  // - Admin: may create an internal case (auto accepted), but cannot assign lawyer via this route.
+  app.post("/api/cases", requireAuth, async (req: AuthRequest, res) => {
     try {
-      const result = insertCaseSchema.safeParse(req.body);
-      if (!result.success) {
-        return res.status(400).json({ error: fromZodError(result.error).message });
+      const user = await getCurrentUser(req);
+      if (!user) {
+        return res.status(401).json({ error: "Unauthorized" });
       }
 
-      const caseData = await storage.createCase(result.data);
-      await createAudit(req.session.userId!, "create", "case", caseData.id, `Created case: ${caseData.caseNumber}`, req.ip);
-      res.json(caseData);
+      // Beneficiary self-create
+      if (user.userType === "beneficiary" || user.role === "beneficiary") {
+        const beneficiary = await storage.getBeneficiaryByUserId(user.id);
+        if (!beneficiary) {
+          return res.status(404).json({ error: "Beneficiary profile not found" });
+        }
+
+        const parsed = insertCaseSchema
+          .omit({
+            beneficiaryId: true,
+            status: true,
+            assignedLawyerId: true,
+            acceptedByUserId: true,
+            acceptedAt: true,
+            completedAt: true,
+            internalNotes: true,
+          })
+          .safeParse(req.body);
+
+        if (!parsed.success) {
+          return res.status(400).json({ error: fromZodError(parsed.error).message });
+        }
+
+        const created = await storage.createCase({
+          ...(parsed.data as any),
+          beneficiaryId: beneficiary.id,
+          status: "pending_review",
+          assignedLawyerId: null,
+          acceptedByUserId: null,
+          acceptedAt: null,
+          completedAt: null,
+        } as any);
+
+        await storage.createCaseTimelineEvent({
+          caseId: created.id,
+          eventType: "created",
+          fromStatus: null,
+          toStatus: created.status as any,
+          note: null,
+          actorUserId: user.id,
+        } as any);
+
+        await createAudit(user.id, "create", "case", created.id, `Created case: ${created.caseNumber}`, req.ip);
+        return res.status(201).json(created);
+      }
+
+      // Staff create (admin only)
+      if (user.userType !== "staff" || !(user.role === "admin" || user.role === "super_admin")) {
+        return res.status(403).json({ error: "Forbidden" });
+      }
+
+      const parsed = insertCaseSchema
+        .omit({
+          status: true,
+          assignedLawyerId: true,
+          acceptedByUserId: true,
+          acceptedAt: true,
+          completedAt: true,
+        })
+        .safeParse(req.body);
+
+      if (!parsed.success) {
+        return res.status(400).json({ error: fromZodError(parsed.error).message });
+      }
+
+      const created = await storage.createCase({
+        ...(parsed.data as any),
+        status: "accepted_pending_assignment",
+        assignedLawyerId: null,
+        acceptedByUserId: user.id,
+        acceptedAt: new Date(),
+        completedAt: null,
+      } as any);
+
+      await storage.createCaseTimelineEvent({
+        caseId: created.id,
+        eventType: "created",
+        fromStatus: null,
+        toStatus: created.status as any,
+        note: null,
+        actorUserId: user.id,
+      } as any);
+
+      await createAudit(user.id, "create", "case", created.id, `Created case: ${created.caseNumber}`, req.ip);
+      return res.status(201).json(created);
     } catch (error: any) {
-      res.status(500).json({ error: error.message });
+      return res.status(500).json({ error: getErrorMessage(error) });
+    }
+  });
+
+  // ADMIN: approve
+  app.patch(
+    "/api/cases/:id/approve",
+    requireStaff,
+    async (req: AuthRequest, res) => {
+      try {
+        const user = req.user!;
+        const isAdmin = user.role === "admin" || user.role === "super_admin";
+        if (!isAdmin) {
+          return res.status(403).json({ error: "Only admin can approve cases" });
+        }
+        const existing = await storage.getCase(req.params.id);
+        if (!existing) return res.status(404).json({ error: "Case not found" });
+
+        if (existing.status !== "pending_review" && existing.status !== "pending_admin_review") {
+          return res.status(400).json({ error: "Invalid transition" });
+        }
+
+        const updated = await storage.updateCase(existing.id, {
+          status: "accepted_pending_assignment" as any,
+          acceptedByUserId: user.id,
+          acceptedAt: new Date(),
+        } as any);
+
+        await storage.createCaseTimelineEvent({
+          caseId: existing.id,
+          eventType: "approved",
+          fromStatus: existing.status as any,
+          toStatus: "accepted_pending_assignment" as any,
+          note: null,
+          actorUserId: user.id,
+        } as any);
+
+        return res.json(updated);
+      } catch (error: any) {
+        return res.status(500).json({ error: getErrorMessage(error) });
+      }
+    },
+  );
+
+  // ADMIN: reject
+  app.patch(
+    "/api/cases/:id/reject",
+    requireStaff,
+    async (req: AuthRequest, res) => {
+      try {
+        const user = req.user!;
+        const isAdmin = user.role === "admin" || user.role === "super_admin";
+        if (!isAdmin) {
+          return res.status(403).json({ error: "Only admin can reject cases" });
+        }
+        const existing = await storage.getCase(req.params.id);
+        if (!existing) return res.status(404).json({ error: "Case not found" });
+
+        if (existing.status !== "pending_review" && existing.status !== "pending_admin_review") {
+          return res.status(400).json({ error: "Invalid transition" });
+        }
+
+        const parsed = z
+          .object({ rejectReason: z.string().trim().min(1).optional().nullable() })
+          .safeParse(req.body);
+
+        if (!parsed.success) {
+          return res.status(400).json({ error: fromZodError(parsed.error).message });
+        }
+
+        const updated = await storage.updateCase(existing.id, {
+          status: "rejected" as any,
+        } as any);
+
+        await storage.createCaseTimelineEvent({
+          caseId: existing.id,
+          eventType: "rejected",
+          fromStatus: existing.status as any,
+          toStatus: "rejected" as any,
+          note: parsed.data.rejectReason ?? null,
+          actorUserId: user.id,
+        } as any);
+
+        return res.json(updated);
+      } catch (error: any) {
+        return res.status(500).json({ error: getErrorMessage(error) });
+      }
+    },
+  );
+
+  // ADMIN: assign lawyer
+  app.patch(
+    "/api/cases/:id/assign-lawyer",
+    requireStaff,
+    async (req: AuthRequest, res) => {
+      try {
+        const user = req.user!;
+        const isAdmin = user.role === "admin" || user.role === "super_admin";
+        if (!isAdmin) {
+          return res.status(403).json({ error: "Only admin can assign lawyers" });
+        }
+        const existing = await storage.getCase(req.params.id);
+        if (!existing) return res.status(404).json({ error: "Case not found" });
+
+        if (existing.status !== "accepted_pending_assignment" && existing.status !== "accepted") {
+          return res.status(400).json({ error: "Invalid transition" });
+        }
+
+        const parsed = z.object({ lawyerId: z.string().min(1) }).safeParse(req.body);
+        if (!parsed.success) {
+          return res.status(400).json({ error: fromZodError(parsed.error).message });
+        }
+
+        const lawyer = await storage.getUser(parsed.data.lawyerId);
+        if (!lawyer || lawyer.userType !== "staff" || lawyer.role !== "lawyer") {
+          return res.status(400).json({ error: "Invalid lawyer" });
+        }
+
+        const updated = await storage.updateCase(existing.id, {
+          assignedLawyerId: lawyer.id,
+          status: "assigned" as any,
+        } as any);
+
+        await storage.createCaseTimelineEvent({
+          caseId: existing.id,
+          eventType: "assigned_lawyer",
+          fromStatus: existing.status as any,
+          toStatus: "assigned" as any,
+          note: lawyer.id,
+          actorUserId: user.id,
+        } as any);
+
+        return res.json(updated);
+      } catch (error: any) {
+        return res.status(500).json({ error: getErrorMessage(error) });
+      }
+    },
+  );
+
+  // UPDATE STATUS (operating statuses for assigned lawyer; admin optional)
+  app.patch(
+    "/api/cases/:id/status",
+    requireStaff,
+    async (req: AuthRequest, res) => {
+      try {
+        const user = req.user!;
+        const existing = await storage.getCase(req.params.id);
+        if (!existing) return res.status(404).json({ error: "Case not found" });
+
+        const parsed = z
+          .object({
+            status: z.string().min(1),
+            note: z.string().trim().max(1000).optional().nullable(),
+          })
+          .safeParse(req.body);
+
+        if (!parsed.success) {
+          return res.status(400).json({ error: fromZodError(parsed.error).message });
+        }
+
+        const nextStatus = parsed.data.status;
+        const fromStatus = String(existing.status);
+
+        const isAdmin = user.role === "admin" || user.role === "super_admin";
+        const isAssignedLawyer = Boolean(existing.assignedLawyerId && existing.assignedLawyerId === user.id);
+
+        // Authz + allowed status sets
+        if (isAdmin) {
+          if (!isAdminStatus(nextStatus)) {
+            return res.status(400).json({ error: "Invalid status" });
+          }
+
+          // Prevent setting "assigned" without an assigned lawyer.
+          if (nextStatus === "assigned" && !existing.assignedLawyerId) {
+            return res.status(400).json({ error: "Cannot set assigned without lawyer" });
+          }
+        } else {
+          if (user.role !== "lawyer" || !isAssignedLawyer) {
+            return res.status(403).json({ error: "Only assigned lawyer can update status" });
+          }
+          if (!isOperatingStatus(nextStatus)) {
+            return res.status(400).json({ error: "Invalid status" });
+          }
+        }
+
+        const updates: any = {
+          status: nextStatus as any,
+        };
+        if (nextStatus === "completed") {
+          updates.completedAt = new Date();
+        }
+
+        if (nextStatus === "closed_admin") {
+          updates.closedAt = new Date();
+        }
+
+        const updated = await storage.updateCase(existing.id, updates);
+
+        await storage.createCaseTimelineEvent({
+          caseId: existing.id,
+          eventType: "status_changed",
+          fromStatus: existing.status as any,
+          toStatus: nextStatus as any,
+          note: parsed.data.note ?? null,
+          actorUserId: user.id,
+        } as any);
+
+        return res.json(updated);
+      } catch (error: any) {
+        return res.status(500).json({ error: getErrorMessage(error) });
+      }
+    },
+  );
+
+  // GET TIMELINE
+  app.get("/api/cases/:id/timeline", requireAuth, async (req: AuthRequest, res) => {
+    try {
+      const user = await getCurrentUser(req);
+      if (!user) return res.status(401).json({ error: "Unauthorized" });
+
+      const existing = await storage.getCase(req.params.id);
+      if (!existing) return res.status(404).json({ error: "Case not found" });
+
+      if (user.userType === "beneficiary") {
+        const beneficiary = await storage.getBeneficiaryByUserId(user.id);
+        if (!beneficiary || existing.beneficiaryId !== beneficiary.id) {
+          return res.status(403).json({ error: "Forbidden" });
+        }
+      }
+
+      const events = await storage.getCaseTimelineEventsByCase(existing.id);
+      return res.json(events);
+    } catch (error: any) {
+      return res.status(500).json({ error: getErrorMessage(error) });
     }
   });
 
   app.patch("/api/cases/:id", requireStaff, requireRole(["admin", "lawyer"]), async (req, res) => {
     try {
+      const forbiddenKeys = [
+        "status",
+        "assignedLawyerId",
+        "acceptedByUserId",
+        "acceptedAt",
+        "completedAt",
+      ];
+      for (const k of forbiddenKeys) {
+        if (k in (req.body || {})) {
+          return res.status(400).json({ error: "Use workflow endpoints for status/assignment changes" });
+        }
+      }
+
       const caseData = await storage.updateCase(req.params.id, req.body);
       if (!caseData) {
         return res.status(404).json({ error: "Case not found" });

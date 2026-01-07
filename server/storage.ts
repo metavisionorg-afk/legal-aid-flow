@@ -1,7 +1,7 @@
 import { drizzle } from "drizzle-orm/node-postgres";
 import pkg from "pg";
 const { Pool } = pkg;
-import { eq, desc, and, sql, gte, lte } from "drizzle-orm";
+import { eq, desc, and, sql, gte, lte, asc } from "drizzle-orm";
 import * as schema from "@shared/schema";
 import type {
   User,
@@ -16,6 +16,8 @@ import type {
   InsertIntakeRequest,
   Case,
   InsertCase,
+  CaseTimelineEvent,
+  InsertCaseTimelineEvent,
   CaseDetails,
   InsertCaseDetails,
   Hearing,
@@ -149,6 +151,10 @@ export interface IStorage {
   createCase(caseData: InsertCase): Promise<Case>;
   updateCase(id: string, caseData: Partial<InsertCase>): Promise<Case | undefined>;
   deleteCase(id: string): Promise<boolean>;
+
+  // Case Timeline
+  createCaseTimelineEvent(event: InsertCaseTimelineEvent): Promise<CaseTimelineEvent>;
+  getCaseTimelineEventsByCase(caseId: string): Promise<CaseTimelineEvent[]>;
 
   // Case Details
   getCaseDetailsByCase(caseId: string): Promise<CaseDetails | undefined>;
@@ -636,6 +642,20 @@ export class DatabaseStorage implements IStorage {
   async deleteCase(id: string): Promise<boolean> {
     const result = await db.delete(schema.cases).where(eq(schema.cases.id, id));
     return result.rowCount ? result.rowCount > 0 : false;
+  }
+
+  // Case Timeline
+  async createCaseTimelineEvent(event: InsertCaseTimelineEvent): Promise<CaseTimelineEvent> {
+    const [row] = await db.insert(schema.caseTimelineEvents).values(event as any).returning();
+    return row;
+  }
+
+  async getCaseTimelineEventsByCase(caseId: string): Promise<CaseTimelineEvent[]> {
+    return db
+      .select()
+      .from(schema.caseTimelineEvents)
+      .where(eq(schema.caseTimelineEvents.caseId, caseId))
+      .orderBy(asc(schema.caseTimelineEvents.createdAt));
   }
 
   // Case Details

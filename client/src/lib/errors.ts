@@ -30,6 +30,14 @@ export function getErrorMessage(error: unknown, t?: TFn): string {
     if (status === 429 || /too many requests/i.test(serverMsg || "")) return t("errors.rate_limited");
     if (status === 409 && /email already exists/i.test(serverMsg || "")) return t("errors.email_exists");
     if (status === 409 && /username already exists/i.test(serverMsg || "")) return t("errors.username_exists");
+
+    // Case workflow (server-side enforced)
+    if (status === 403 && /only admin can approve/i.test(serverMsg || "")) return t("errors.case.only_admin_approve");
+    if (status === 403 && /only admin can reject/i.test(serverMsg || "")) return t("errors.case.only_admin_reject");
+    if (status === 403 && /only admin can assign/i.test(serverMsg || "")) return t("errors.case.only_admin_assign");
+    if (status === 403 && /only assigned lawyer/i.test(serverMsg || "")) return t("errors.case.only_assigned_lawyer_operate");
+    if (status === 400 && /invalid transition/i.test(serverMsg || "")) return t("errors.case.invalid_transition");
+    if (status === 400 && /invalid status/i.test(serverMsg || "")) return t("errors.case.invalid_status");
   }
 
   if (serverMsg && serverMsg.trim()) return serverMsg;

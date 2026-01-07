@@ -60,8 +60,8 @@ export function canViewCases(user: User | null | undefined): boolean {
 export function canCreateCase(user: User | null | undefined): boolean {
   if (!user) return false;
   const role = getRole(user);
-  // Beneficiaries submit intake requests; staff create actual cases.
-  if (role === "beneficiary") return false;
+  // Stage 5/Workflow: beneficiaries can submit cases (pending admin review).
+  if (role === "beneficiary") return true;
   return role === "super_admin" || role === "admin" || role === "lawyer" || role === "intake_officer";
 }
 

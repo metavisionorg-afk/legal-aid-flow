@@ -1,7 +1,7 @@
 /*
 Stage 1 smoke: cases authz
 - Admin can create case
-- Beneficiary cannot create case (403)
+- Beneficiary can create case (pending_admin_review)
 - GET /api/cases returns only beneficiary's cases for beneficiary
 */
 
@@ -104,20 +104,15 @@ export async function run() {
     method: "POST",
     body: JSON.stringify({
       username: b1Username,
-      fullName: "Smoke Beneficiary 1",
       email: `${b1Username}@example.com`,
-      idNumber: randomId("100")
-        .replace(/[^0-9]/g, "")
-        .slice(0, 9)
-        .padEnd(9, "1"),
+      password: "StrongPass1!",
+      confirmPassword: "StrongPass1!",
+      fullName: "Smoke Beneficiary 1",
       phone: "+962791111111",
       city: "Amman",
       preferredLanguage: "ar",
-      password: "StrongPass1!",
-      confirmPassword: "StrongPass1!",
       serviceType: "legal_consultation",
-      issueSummary: "Smoke stage1 issue",
-      urgent: false,
+      details: "Smoke stage1 request",
     }),
   });
 
@@ -125,20 +120,15 @@ export async function run() {
     method: "POST",
     body: JSON.stringify({
       username: b2Username,
-      fullName: "Smoke Beneficiary 2",
       email: `${b2Username}@example.com`,
-      idNumber: randomId("200")
-        .replace(/[^0-9]/g, "")
-        .slice(0, 9)
-        .padEnd(9, "2"),
+      password: "StrongPass1!",
+      confirmPassword: "StrongPass1!",
+      fullName: "Smoke Beneficiary 2",
       phone: "+962792222222",
       city: "Zarqa",
       preferredLanguage: "ar",
-      password: "StrongPass1!",
-      confirmPassword: "StrongPass1!",
       serviceType: "legal_consultation",
-      issueSummary: "Smoke stage1 issue",
-      urgent: false,
+      details: "Smoke stage1 request",
     }),
   });
 
@@ -154,7 +144,7 @@ export async function run() {
   }
   await adminClient.request("/api/cases", { method: "GET" });
 
-  // Admin creates one case for each beneficiary
+  // Admin creates one case for each beneficiary (server will set accepted status)
   const c1 = await adminClient.request<{ id: string }>("/api/cases", {
     method: "POST",
     body: JSON.stringify({
@@ -163,7 +153,6 @@ export async function run() {
       beneficiaryId: beneficiaryId1,
       caseType: "civil",
       description: "Smoke created case 1",
-      status: "open",
       priority: "medium",
     }),
   });
@@ -176,10 +165,28 @@ export async function run() {
       beneficiaryId: beneficiaryId2,
       caseType: "civil",
       description: "Smoke created case 2",
-      status: "open",
       priority: "medium",
     }),
   });
+
+  // Beneficiary can self-create a case (server derives beneficiaryId and sets pending_review)
+  const b1Created = await beneficiaryClient1.request<{ id: string; status?: string; beneficiaryId?: string }>("/api/cases", {
+    method: "POST",
+    body: JSON.stringify({
+      caseNumber: randomId("CASE").slice(0, 18),
+      title: "B1 Self Case",
+      caseType: "civil",
+      description: "Beneficiary submitted case",
+      priority: "medium",
+    }),
+  });
+
+  if (b1Created.status !== "pending_review") {
+    throw new Error(`Expected beneficiary-created case to be pending_review, got ${String(b1Created.status)}`);
+  }
+  if (b1Created.beneficiaryId && b1Created.beneficiaryId !== beneficiaryId1) {
+    throw new Error("Beneficiary-created case beneficiaryId mismatch");
+  }
 
   // Beneficiary GET /api/cases should only return their case(s)
   const b1Cases = await beneficiaryClient1.request<unknown>("/api/cases", { method: "GET" });
@@ -192,34 +199,29 @@ export async function run() {
     (Array.isArray(b2Cases) ? b2Cases : []).map((x) => (isRecord(x) ? String(x.id) : ""))
   );
 
-  if (!b1Ids.has(c1.id) || b1Ids.has(c2.id)) {
+  if (!b1Ids.has(c1.id) || b1Ids.has(c2.id) || !b1Ids.has(b1Created.id)) {
     throw new Error("Beneficiary 1 visibility mismatch for GET /api/cases");
   }
   if (!b2Ids.has(c2.id) || b2Ids.has(c1.id)) {
     throw new Error("Beneficiary 2 visibility mismatch for GET /api/cases");
   }
 
-  // Beneficiary cannot POST /api/cases (must be 403)
-  let got403 = false;
-  try {
-    await beneficiaryClient1.request("/api/cases", {
-      method: "POST",
-      body: JSON.stringify({
-        caseNumber: randomId("CASE").slice(0, 18),
-        title: "Should fail",
-        beneficiaryId: beneficiaryId1,
-        caseType: "civil",
-        description: "Should fail",
-        status: "open",
-        priority: "medium",
-      }),
-    });
-  } catch (e: unknown) {
-    got403 = e instanceof HttpError && e.status === 403;
-  }
+  // Beneficiary cannot create a case for someone else (server ignores beneficiaryId)
+  const b1Created2 = await beneficiaryClient1.request<{ id: string; beneficiaryId?: string }>("/api/cases", {
+    method: "POST",
+    body: JSON.stringify({
+      caseNumber: randomId("CASE").slice(0, 18),
+      title: "B1 Self Case 2",
+      // Attempted injection should be ignored
+      beneficiaryId: beneficiaryId2,
+      caseType: "civil",
+      description: "Beneficiary submitted case",
+      priority: "medium",
+    }),
+  });
 
-  if (!got403) {
-    throw new Error("Expected beneficiary POST /api/cases to return 403");
+  if (b1Created2.beneficiaryId && b1Created2.beneficiaryId !== beneficiaryId1) {
+    throw new Error("Server should enforce beneficiaryId for beneficiary-created case");
   }
 
   console.log("OK stage1 cases authz", {

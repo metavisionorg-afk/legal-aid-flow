@@ -39,6 +39,8 @@ import { useToast } from "@/hooks/use-toast";
 import { beneficiariesAPI, caseDetailsAPI, casesAPI, uploadsAPI } from "@/lib/api";
 import { cn } from "@/lib/utils";
 import { getErrorMessage } from "@/lib/errors";
+import { useAuth } from "@/contexts/AuthContext";
+import { isBeneficiary } from "@/lib/authz";
 
 const fileSchema = z.custom<File>((value) => value instanceof File, {
   message: "File is required",
@@ -53,12 +55,12 @@ const formSchema = z
     // Step 1
     caseNumber: z.string().min(1, "Case number is required"),
     title: z.string().min(1, "Title is required"),
-    beneficiaryId: z.string().min(1, "Beneficiary is required"),
+    beneficiaryId: z.string().optional().nullable(),
     caseType: z.enum(caseTypes, { required_error: "Case type is required" }),
     description: z.string().optional().nullable(),
 
     // Step 2
-    issueSummary: z.string().min(1, "Issue summary is required"),
+    issueSummary: z.string().optional().nullable(),
     issueDetails: z.string().optional().nullable(),
     urgency: z.boolean().default(false),
     urgencyDate: z.string().optional().nullable(),
@@ -102,14 +104,9 @@ type FormValues = z.infer<typeof formSchema>;
 
 type StepKey = "basic" | "legal" | "docs" | "review";
 
-const steps: Array<{ key: StepKey; label: string }> = [
-  { key: "basic", label: "Basic" },
-  { key: "legal", label: "Legal" },
-  { key: "docs", label: "Documents" },
-  { key: "review", label: "Review" },
-];
+type Step = { key: StepKey; label: string };
 
-function Stepper({ current }: { current: number }) {
+function Stepper({ current, steps }: { current: number; steps: Step[] }) {
   return (
     <div className="flex items-center justify-between gap-2">
       {steps.map((step, idx) => {
@@ -145,6 +142,28 @@ export function NewCaseDialog() {
   const { toast } = useToast();
   const queryClient = useQueryClient();
   const [, setLocation] = useLocation();
+  const { user } = useAuth();
+  const isBen = isBeneficiary(user);
+
+  const steps = useMemo<Step[]>(() => {
+    if (isBen) {
+      return [
+        { key: "basic", label: t("cases.new_case.steps.basic") },
+        { key: "docs", label: t("cases.new_case.steps.docs") },
+        { key: "review", label: t("cases.new_case.steps.review") },
+      ];
+    }
+
+    return [
+      { key: "basic", label: t("cases.new_case.steps.basic") },
+      { key: "legal", label: t("cases.new_case.steps.legal") },
+      { key: "docs", label: t("cases.new_case.steps.docs") },
+      { key: "review", label: t("cases.new_case.steps.review") },
+    ];
+  }, [t, isBen]);
+
+  const caseTypeLabel = (value: CaseType | string) =>
+    t(`cases.case_types.${String(value)}`, { defaultValue: String(value) });
 
   const [open, setOpen] = useState(false);
   const [step, setStep] = useState(0);
@@ -152,10 +171,32 @@ export function NewCaseDialog() {
   const { data: beneficiaries, isLoading: beneficiariesLoading } = useQuery({
     queryKey: ["beneficiaries"],
     queryFn: beneficiariesAPI.getAll,
-    enabled: open,
+    enabled: open && !isBen,
   });
 
-  const schema = useMemo(() => formSchema, []);
+  const schema = useMemo(
+    () =>
+      formSchema.superRefine((data, ctx) => {
+        if (!isBen) {
+          if (!data.beneficiaryId || !String(data.beneficiaryId).trim()) {
+            ctx.addIssue({
+              code: z.ZodIssueCode.custom,
+              path: ["beneficiaryId"],
+              message: "Beneficiary is required",
+            });
+          }
+
+          if (!data.issueSummary || !String(data.issueSummary).trim()) {
+            ctx.addIssue({
+              code: z.ZodIssueCode.custom,
+              path: ["issueSummary"],
+              message: "Issue summary is required",
+            });
+          }
+        }
+      }),
+    [isBen],
+  );
 
   const form = useForm<FormValues>({
     resolver: zodResolver(schema),
@@ -188,26 +229,28 @@ export function NewCaseDialog() {
       const created = await casesAPI.create({
         caseNumber: values.caseNumber.trim(),
         title: values.title.trim(),
-        beneficiaryId: values.beneficiaryId,
+        ...(isBen ? {} : { beneficiaryId: values.beneficiaryId }),
         caseType: values.caseType,
         description: values.description?.trim() ? values.description.trim() : "",
-        status: "open",
         priority: "medium",
       });
 
-      await caseDetailsAPI.upsertForCase(String(created.id), {
-        issueSummary: values.issueSummary,
-        issueDetails: values.issueDetails?.trim() ? values.issueDetails.trim() : undefined,
-        urgency: values.urgency,
-        urgencyDate: values.urgencyDate ? new Date(values.urgencyDate).toISOString() : undefined,
-        jurisdiction: values.jurisdiction?.trim() ? values.jurisdiction.trim() : undefined,
-        relatedLaws: values.relatedLaws?.trim() ? values.relatedLaws.trim() : undefined,
-      });
+      // Staff can capture extended legal details.
+      if (!isBen) {
+        await caseDetailsAPI.upsertForCase(String(created.id), {
+          issueSummary: values.issueSummary,
+          issueDetails: values.issueDetails?.trim() ? values.issueDetails.trim() : undefined,
+          urgency: values.urgency,
+          urgencyDate: values.urgencyDate ? new Date(values.urgencyDate).toISOString() : undefined,
+          jurisdiction: values.jurisdiction?.trim() ? values.jurisdiction.trim() : undefined,
+          relatedLaws: values.relatedLaws?.trim() ? values.relatedLaws.trim() : undefined,
+        });
+      }
 
       for (const doc of values.documents || []) {
         const meta = await uploadsAPI.upload(doc.file);
         await casesAPI.uploadDocuments(String(created.id), {
-          isPublic: doc.isPublic,
+          isPublic: isBen ? true : doc.isPublic,
           documents: [
             {
               ...meta,
@@ -221,7 +264,7 @@ export function NewCaseDialog() {
     },
     onSuccess: async (created: any) => {
       await queryClient.invalidateQueries({ queryKey: ["cases"] });
-      toast({ title: t("cases.created") });
+      toast({ title: isBen ? t("cases.submitted") : t("cases.created") });
       setOpen(false);
       setStep(0);
       form.reset();
@@ -236,12 +279,9 @@ export function NewCaseDialog() {
     },
   });
 
-  const stepFields: Array<Array<keyof FormValues>> = [
-    ["caseNumber", "title", "beneficiaryId", "caseType"],
-    ["issueSummary", "urgency", "urgencyDate"],
-    [],
-    ["acknowledge"],
-  ];
+  const stepFields: Array<Array<keyof FormValues>> = isBen
+    ? [["caseNumber", "title", "caseType"], [], ["acknowledge"]]
+    : [["caseNumber", "title", "beneficiaryId", "caseType"], ["issueSummary", "urgency", "urgencyDate"], [], ["acknowledge"]];
 
   const goNext = async () => {
     const fields = stepFields[step] || [];
@@ -273,7 +313,7 @@ export function NewCaseDialog() {
     documents.append({
       file,
       documentType,
-      isPublic: Boolean(draft?.isPublic),
+      isPublic: isBen ? true : Boolean(draft?.isPublic),
     });
 
     form.setValue("documentDraft", { file: null, documentType: "", isPublic: false });
@@ -284,6 +324,8 @@ export function NewCaseDialog() {
     setStep(0);
     form.reset();
   };
+
+  const stepKey = steps[step]?.key;
 
   return (
     <Dialog
@@ -308,14 +350,14 @@ export function NewCaseDialog() {
           <DialogTitle>{t("dashboard.new_case")}</DialogTitle>
         </DialogHeader>
 
-        <Stepper current={step} />
+        <Stepper current={step} steps={steps} />
 
         <Form {...form}>
           <form
             onSubmit={form.handleSubmit((values) => submitMutation.mutate(values))}
             className="space-y-6"
           >
-            {step === 0 ? (
+            {stepKey === "basic" ? (
               <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
                 <FormField
                   control={form.control}
@@ -345,36 +387,38 @@ export function NewCaseDialog() {
                   )}
                 />
 
-                <FormField
-                  control={form.control}
-                  name="beneficiaryId"
-                  render={({ field }) => (
-                    <FormItem>
-                      <FormLabel>{t("consultations.beneficiary")}</FormLabel>
-                      <Select value={field.value} onValueChange={field.onChange}>
-                        <FormControl>
-                          <SelectTrigger data-testid="select-case-beneficiary">
-                            <SelectValue
-                              placeholder={
-                                beneficiariesLoading
-                                  ? t("common.loading")
-                                  : t("consultations.select_beneficiary")
-                              }
-                            />
-                          </SelectTrigger>
-                        </FormControl>
-                        <SelectContent onCloseAutoFocus={(e) => e.preventDefault()}>
-                          {(beneficiaries || []).map((b: any) => (
-                            <SelectItem key={b.id} value={b.id}>
-                              {b.fullName} ({b.idNumber})
-                            </SelectItem>
-                          ))}
-                        </SelectContent>
-                      </Select>
-                      <FormMessage />
-                    </FormItem>
-                  )}
-                />
+                {!isBen ? (
+                  <FormField
+                    control={form.control}
+                    name="beneficiaryId"
+                    render={({ field }) => (
+                      <FormItem>
+                        <FormLabel>{t("consultations.beneficiary")}</FormLabel>
+                        <Select value={field.value ?? ""} onValueChange={field.onChange}>
+                          <FormControl>
+                            <SelectTrigger data-testid="select-case-beneficiary">
+                              <SelectValue
+                                placeholder={
+                                  beneficiariesLoading
+                                    ? t("common.loading")
+                                    : t("consultations.select_beneficiary")
+                                }
+                              />
+                            </SelectTrigger>
+                          </FormControl>
+                          <SelectContent onCloseAutoFocus={(e) => e.preventDefault()}>
+                            {(beneficiaries || []).map((b: any) => (
+                              <SelectItem key={b.id} value={b.id}>
+                                {b.fullName} ({b.idNumber})
+                              </SelectItem>
+                            ))}
+                          </SelectContent>
+                        </Select>
+                        <FormMessage />
+                      </FormItem>
+                    )}
+                  />
+                ) : null}
 
                 <FormField
                   control={form.control}
@@ -389,11 +433,11 @@ export function NewCaseDialog() {
                           </SelectTrigger>
                         </FormControl>
                         <SelectContent onCloseAutoFocus={(e) => e.preventDefault()}>
-                          <SelectItem value="civil">Civil</SelectItem>
-                          <SelectItem value="criminal">Criminal</SelectItem>
-                          <SelectItem value="family">Family/Personal Status</SelectItem>
-                          <SelectItem value="labor">Labor</SelectItem>
-                          <SelectItem value="asylum">Asylum/Refugee</SelectItem>
+                          <SelectItem value="civil">{caseTypeLabel("civil")}</SelectItem>
+                          <SelectItem value="criminal">{caseTypeLabel("criminal")}</SelectItem>
+                          <SelectItem value="family">{caseTypeLabel("family")}</SelectItem>
+                          <SelectItem value="labor">{caseTypeLabel("labor")}</SelectItem>
+                          <SelectItem value="asylum">{caseTypeLabel("asylum")}</SelectItem>
                         </SelectContent>
                       </Select>
                       <FormMessage />
@@ -422,19 +466,19 @@ export function NewCaseDialog() {
               </div>
             ) : null}
 
-            {step === 1 ? (
+            {stepKey === "legal" ? (
               <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
                 <FormField
                   control={form.control}
                   name="issueSummary"
                   render={({ field }) => (
                     <FormItem className="md:col-span-2">
-                      <FormLabel>Issue summary</FormLabel>
+                      <FormLabel>{t("cases.new_case.issue_summary")}</FormLabel>
                       <FormControl>
                         <Textarea
-                          value={field.value}
+                          value={field.value ?? ""}
                           onChange={field.onChange}
-                          placeholder="Summarize the issue"
+                          placeholder={t("cases.new_case.issue_summary_placeholder")}
                           data-testid="textarea-issue-summary"
                         />
                       </FormControl>
@@ -448,12 +492,12 @@ export function NewCaseDialog() {
                   name="issueDetails"
                   render={({ field }) => (
                     <FormItem className="md:col-span-2">
-                      <FormLabel>Issue details</FormLabel>
+                      <FormLabel>{t("cases.new_case.issue_details")}</FormLabel>
                       <FormControl>
                         <Textarea
                           value={field.value ?? ""}
                           onChange={field.onChange}
-                          placeholder="Additional details"
+                          placeholder={t("cases.new_case.issue_details_placeholder")}
                           data-testid="textarea-issue-details"
                         />
                       </FormControl>
@@ -467,7 +511,7 @@ export function NewCaseDialog() {
                   name="urgency"
                   render={({ field }) => (
                     <FormItem className="md:col-span-2">
-                      <FormLabel>Urgent</FormLabel>
+                      <FormLabel>{t("cases.new_case.urgency")}</FormLabel>
                       <div className="flex items-center gap-2">
                         <FormControl>
                           <ToggleSwitch
@@ -477,7 +521,7 @@ export function NewCaseDialog() {
                           />
                         </FormControl>
                         <span className="text-sm text-muted-foreground">
-                          {field.value ? "Yes" : "No"}
+                          {field.value ? t("cases.new_case.yes") : t("cases.new_case.no")}
                         </span>
                       </div>
                       <FormMessage />
@@ -490,7 +534,7 @@ export function NewCaseDialog() {
                   name="urgencyDate"
                   render={({ field }) => (
                     <FormItem>
-                      <FormLabel>Urgency date</FormLabel>
+                      <FormLabel>{t("cases.new_case.urgency_date")}</FormLabel>
                       <FormControl>
                         <Input
                           type="datetime-local"
@@ -509,7 +553,7 @@ export function NewCaseDialog() {
                   name="jurisdiction"
                   render={({ field }) => (
                     <FormItem>
-                      <FormLabel>Jurisdiction</FormLabel>
+                      <FormLabel>{t("cases.new_case.jurisdiction")}</FormLabel>
                       <FormControl>
                         <Input
                           value={field.value ?? ""}
@@ -527,12 +571,12 @@ export function NewCaseDialog() {
                   name="relatedLaws"
                   render={({ field }) => (
                     <FormItem className="md:col-span-2">
-                      <FormLabel>Related laws</FormLabel>
+                      <FormLabel>{t("cases.new_case.related_laws")}</FormLabel>
                       <FormControl>
                         <Textarea
                           value={field.value ?? ""}
                           onChange={field.onChange}
-                          placeholder="e.g., Labor Law Article ..."
+                          placeholder={t("cases.new_case.related_laws_placeholder")}
                           data-testid="textarea-related-laws"
                         />
                       </FormControl>
@@ -543,10 +587,10 @@ export function NewCaseDialog() {
               </div>
             ) : null}
 
-            {step === 2 ? (
+            {stepKey === "docs" ? (
               <div className="space-y-4">
                 <div className="rounded-md border p-4 space-y-4">
-                  <div className="text-sm font-medium">Add document</div>
+                  <div className="text-sm font-medium">{t("cases.new_case.add_document")}</div>
 
                   <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
                     <FormField
@@ -554,7 +598,7 @@ export function NewCaseDialog() {
                       name="documentDraft.file"
                       render={({ field }) => (
                         <FormItem>
-                          <FormLabel>File</FormLabel>
+                          <FormLabel>{t("cases.new_case.document_file")}</FormLabel>
                           <FormControl>
                             <Input
                               type="file"
@@ -572,7 +616,7 @@ export function NewCaseDialog() {
                       name="documentDraft.documentType"
                       render={({ field }) => (
                         <FormItem>
-                          <FormLabel>Document type</FormLabel>
+                          <FormLabel>{t("cases.new_case.document_type")}</FormLabel>
                           <FormControl>
                             <Input
                               value={field.value ?? ""}
@@ -585,40 +629,42 @@ export function NewCaseDialog() {
                       )}
                     />
 
-                    <FormField
-                      control={form.control}
-                      name="documentDraft.isPublic"
-                      render={({ field }) => (
-                        <FormItem className="md:col-span-2">
-                          <FormLabel>Visible to beneficiary (public)</FormLabel>
-                          <div className="flex items-center gap-2">
-                            <FormControl>
-                              <ToggleSwitch
-                                checked={field.value}
-                                onCheckedChange={field.onChange}
-                                data-testid="switch-doc-draft-public"
-                              />
-                            </FormControl>
-                            <span className="text-sm text-muted-foreground">
-                              {field.value ? "Public" : "Private"}
-                            </span>
-                          </div>
-                          <FormMessage />
-                        </FormItem>
-                      )}
-                    />
+                    {!isBen ? (
+                      <FormField
+                        control={form.control}
+                        name="documentDraft.isPublic"
+                        render={({ field }) => (
+                          <FormItem className="md:col-span-2">
+                            <FormLabel>{t("cases.new_case.document_visibility")}</FormLabel>
+                            <div className="flex items-center gap-2">
+                              <FormControl>
+                                <ToggleSwitch
+                                  checked={field.value}
+                                  onCheckedChange={field.onChange}
+                                  data-testid="switch-doc-draft-public"
+                                />
+                              </FormControl>
+                              <span className="text-sm text-muted-foreground">
+                                {field.value ? t("cases.new_case.public") : t("cases.new_case.private")}
+                              </span>
+                            </div>
+                            <FormMessage />
+                          </FormItem>
+                        )}
+                      />
+                    ) : null}
                   </div>
 
                   <div className="flex items-center justify-end">
                     <Button type="button" variant="outline" onClick={addDraftDocument} data-testid="button-doc-draft-add">
-                      Add
+                      {t("cases.new_case.add")}
                     </Button>
                   </div>
                 </div>
 
                 <div className="rounded-md border p-4 space-y-3">
                   <div className="flex items-center justify-between">
-                    <div className="text-sm font-medium">Documents</div>
+                    <div className="text-sm font-medium">{t("cases.new_case.documents")}</div>
                     <Badge variant="secondary">{documents.fields.length}</Badge>
                   </div>
 
@@ -635,10 +681,10 @@ export function NewCaseDialog() {
                           >
                             <div className="min-w-0">
                               <div className="text-sm font-medium truncate">
-                                {file?.name || "Document"}
+                                {file?.name || t("cases.new_case.document")}
                               </div>
                               <div className="text-xs text-muted-foreground">
-                                {type || "-"} • {isPublic ? "Public" : "Private"}
+                                {type || "-"} • {isBen ? t("cases.new_case.public") : isPublic ? t("cases.new_case.public") : t("cases.new_case.private")}
                               </div>
                             </div>
                             <Button
@@ -647,23 +693,23 @@ export function NewCaseDialog() {
                               onClick={() => documents.remove(idx)}
                               data-testid="button-doc-remove"
                             >
-                              Remove
+                              {t("cases.new_case.remove")}
                             </Button>
                           </div>
                         );
                       })}
                     </div>
                   ) : (
-                    <div className="text-sm text-muted-foreground">No documents added yet.</div>
+                    <div className="text-sm text-muted-foreground">{t("cases.new_case.no_documents")}</div>
                   )}
                 </div>
               </div>
             ) : null}
 
-            {step === 3 ? (
+            {stepKey === "review" ? (
               <div className="space-y-4">
                 <div className="rounded-md border p-4 space-y-3" data-testid="review-summary">
-                  <div className="text-sm font-medium">Summary</div>
+                  <div className="text-sm font-medium">{t("cases.new_case.summary")}</div>
                   {(() => {
                     const beneficiaryId = form.getValues("beneficiaryId");
                     const beneficiary = (beneficiaries || []).find((b: any) => b.id === beneficiaryId);
@@ -677,74 +723,84 @@ export function NewCaseDialog() {
                     return (
                       <div className="grid grid-cols-1 md:grid-cols-2 gap-3 text-sm">
                         <div>
-                          <div className="text-muted-foreground">Case number</div>
+                          <div className="text-muted-foreground">{t("cases.case_number")}</div>
                           <div className="font-medium">{form.getValues("caseNumber")}</div>
                         </div>
                         <div>
-                          <div className="text-muted-foreground">Title</div>
+                          <div className="text-muted-foreground">{t("cases.case_title")}</div>
                           <div className="font-medium">{form.getValues("title")}</div>
                         </div>
-                        <div>
-                          <div className="text-muted-foreground">Beneficiary</div>
-                          <div className="font-medium">
-                            {beneficiary ? `${beneficiary.fullName} (${beneficiary.idNumber})` : beneficiaryId}
+                        {!isBen ? (
+                          <div>
+                            <div className="text-muted-foreground">{t("consultations.beneficiary")}</div>
+                            <div className="font-medium">
+                              {beneficiary ? `${beneficiary.fullName} (${beneficiary.idNumber})` : beneficiaryId}
+                            </div>
                           </div>
-                        </div>
+                        ) : null}
                         <div>
-                          <div className="text-muted-foreground">Case type</div>
-                          <div className="font-medium">{form.getValues("caseType")}</div>
+                          <div className="text-muted-foreground">{t("intake.case_type")}</div>
+                          <div className="font-medium">{caseTypeLabel(form.getValues("caseType"))}</div>
                         </div>
 
                         {description?.trim() ? (
                           <div className="md:col-span-2">
-                            <div className="text-muted-foreground">Description</div>
+                            <div className="text-muted-foreground">{t("intake.description")}</div>
                             <div className="font-medium whitespace-pre-wrap">{description}</div>
                           </div>
                         ) : null}
 
-                        <div className="md:col-span-2">
-                          <div className="text-muted-foreground">Issue summary</div>
-                          <div className="font-medium whitespace-pre-wrap">{form.getValues("issueSummary")}</div>
-                        </div>
-
-                        {issueDetails?.trim() ? (
+                        {!isBen ? (
                           <div className="md:col-span-2">
-                            <div className="text-muted-foreground">Issue details</div>
+                            <div className="text-muted-foreground">{t("cases.new_case.issue_summary")}</div>
+                            <div className="font-medium whitespace-pre-wrap">{form.getValues("issueSummary")}</div>
+                          </div>
+                        ) : null}
+
+                        {!isBen && issueDetails?.trim() ? (
+                          <div className="md:col-span-2">
+                            <div className="text-muted-foreground">{t("cases.new_case.issue_details")}</div>
                             <div className="font-medium whitespace-pre-wrap">{issueDetails}</div>
                           </div>
                         ) : null}
 
-                        <div>
-                          <div className="text-muted-foreground">Urgency</div>
-                          <div className="font-medium">{urgency ? "Urgent" : "Not urgent"}</div>
-                        </div>
-                        {urgencyDate ? (
-                          <div>
-                            <div className="text-muted-foreground">Urgency date</div>
-                            <div className="font-medium">{String(urgencyDate)}</div>
-                          </div>
-                        ) : (
-                          <div />
-                        )}
+                        {!isBen ? (
+                          <>
+                            <div>
+                              <div className="text-muted-foreground">{t("cases.new_case.urgency")}</div>
+                              <div className="font-medium">{urgency ? t("cases.new_case.urgent") : t("cases.new_case.not_urgent")}</div>
+                            </div>
+                            {urgencyDate ? (
+                              <div>
+                                <div className="text-muted-foreground">{t("cases.new_case.urgency_date")}</div>
+                                <div className="font-medium">{String(urgencyDate)}</div>
+                              </div>
+                            ) : (
+                              <div />
+                            )}
+                          </>
+                        ) : null}
 
-                        {jurisdiction?.trim() ? (
-                          <div>
-                            <div className="text-muted-foreground">Jurisdiction</div>
-                            <div className="font-medium">{jurisdiction}</div>
-                          </div>
-                        ) : (
-                          <div />
-                        )}
+                        {!isBen ? (
+                          jurisdiction?.trim() ? (
+                            <div>
+                              <div className="text-muted-foreground">{t("cases.new_case.jurisdiction")}</div>
+                              <div className="font-medium">{jurisdiction}</div>
+                            </div>
+                          ) : (
+                            <div />
+                          )
+                        ) : null}
 
-                        {relatedLaws?.trim() ? (
+                        {!isBen && relatedLaws?.trim() ? (
                           <div className="md:col-span-2">
-                            <div className="text-muted-foreground">Related laws</div>
+                            <div className="text-muted-foreground">{t("cases.new_case.related_laws")}</div>
                             <div className="font-medium whitespace-pre-wrap">{relatedLaws}</div>
                           </div>
                         ) : null}
 
                         <div className="md:col-span-2">
-                          <div className="text-muted-foreground">Documents</div>
+                          <div className="text-muted-foreground">{t("cases.new_case.documents")}</div>
                           {documents.fields.length ? (
                             <div className="space-y-2 mt-1">
                               {documents.fields.map((d, idx) => {
@@ -754,9 +810,9 @@ export function NewCaseDialog() {
                                 return (
                                   <div key={d.id} className="flex items-center justify-between gap-3 rounded-md border p-2">
                                     <div className="min-w-0">
-                                      <div className="font-medium truncate">{file?.name || "Document"}</div>
+                                      <div className="font-medium truncate">{file?.name || t("cases.new_case.document")}</div>
                                       <div className="text-xs text-muted-foreground">
-                                        {type || "-"} • {isPublic ? "Public" : "Private"}
+                                        {type || "-"} • {isBen ? t("cases.new_case.public") : isPublic ? t("cases.new_case.public") : t("cases.new_case.private")}
                                       </div>
                                     </div>
                                   </div>
@@ -786,7 +842,7 @@ export function NewCaseDialog() {
                           />
                         </FormControl>
                         <div className="space-y-1">
-                          <FormLabel className="leading-5">I confirm the information is correct</FormLabel>
+                          <FormLabel className="leading-5">{t("cases.new_case.acknowledge")}</FormLabel>
                           <FormMessage />
                         </div>
                       </div>
@@ -803,16 +859,16 @@ export function NewCaseDialog() {
                 onClick={step === 0 ? closeAndReset : goBack}
                 data-testid="button-step-back"
               >
-                {step === 0 ? t("common.cancel") : "Back"}
+                {step === 0 ? t("common.cancel") : t("common.back")}
               </Button>
 
-              {step < 3 ? (
+              {step < steps.length - 1 ? (
                 <Button type="button" onClick={goNext} data-testid="button-step-next">
-                  Next
+                  {t("common.next")}
                 </Button>
               ) : (
                 <Button type="submit" disabled={submitMutation.isPending} data-testid="button-step-submit">
-                  {submitMutation.isPending ? t("common.loading") : "Create case"}
+                  {submitMutation.isPending ? t("common.loading") : t("cases.create")}
                 </Button>
               )}
             </div>

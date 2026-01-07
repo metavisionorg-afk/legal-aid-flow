@@ -7,7 +7,32 @@ import { z } from "zod";
 export const userTypeEnum = pgEnum("user_type", ["staff", "beneficiary"]);
 export const roleEnum = pgEnum("role", ["super_admin", "admin", "lawyer", "intake_officer", "viewer", "expert", "beneficiary"]);
 export const caseTypeEnum = pgEnum("case_type", ["civil", "criminal", "family", "labor", "asylum"]);
-export const caseStatusEnum = pgEnum("case_status", ["open", "in_progress", "pending", "closed", "urgent"]);
+// NOTE: Keep legacy statuses to avoid destructive enum drops in existing DBs.
+// New workflow statuses are appended for add-only migrations.
+export const caseStatusEnum = pgEnum("case_status", [
+  // Legacy
+  "open",
+  "in_progress",
+  "pending",
+  "closed",
+  "urgent",
+  // Workflow (Stage: case workflow)
+  "pending_admin_review",
+  "accepted",
+  "rejected",
+  "assigned",
+  "awaiting_documents",
+  "awaiting_hearing",
+  "on_hold",
+  "completed",
+  "cancelled",
+  // Workflow (Requested - Stage 0)
+  // Appended for add-only migrations.
+  "pending_review",
+  "accepted_pending_assignment",
+  "awaiting_judgment",
+  "closed_admin",
+]);
 export const priorityEnum = pgEnum("priority", ["low", "medium", "high", "urgent"]);
 export const intakeStatusEnum = pgEnum("intake_status", ["pending", "approved", "rejected", "under_review"]);
 export const beneficiaryStatusEnum = pgEnum("beneficiary_status", ["active", "pending", "archived"]);
@@ -190,7 +215,10 @@ export const cases = pgTable("cases", {
   status: caseStatusEnum("status").notNull().default("open"),
   priority: priorityEnum("priority").notNull().default("medium"),
   assignedLawyerId: varchar("assigned_lawyer_id").references(() => users.id),
+  acceptedByUserId: varchar("accepted_by_user_id").references(() => users.id),
+  acceptedAt: timestamp("accepted_at"),
   internalNotes: text("internal_notes"),
+  completedAt: timestamp("completed_at"),
   createdAt: timestamp("created_at").notNull().defaultNow(),
   updatedAt: timestamp("updated_at").notNull().defaultNow(),
   closedAt: timestamp("closed_at"),
@@ -203,6 +231,33 @@ export const cases = pgTable("cases", {
 export const insertCaseSchema = createInsertSchema(cases).omit({ id: true, createdAt: true, updatedAt: true });
 export type InsertCase = z.infer<typeof insertCaseSchema>;
 export type Case = typeof cases.$inferSelect;
+
+// Case Timeline Events (audit trail for workflow changes)
+export const caseTimelineEventTypeEnum = pgEnum("case_timeline_event_type", [
+  "created",
+  "approved",
+  "rejected",
+  "assigned_lawyer",
+  "status_changed",
+]);
+
+export const caseTimelineEvents = pgTable("case_timeline_events", {
+  id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
+  caseId: varchar("case_id").notNull().references(() => cases.id),
+  eventType: caseTimelineEventTypeEnum("event_type").notNull(),
+  fromStatus: caseStatusEnum("from_status"),
+  toStatus: caseStatusEnum("to_status"),
+  note: text("note"),
+  actorUserId: varchar("actor_user_id").notNull().references(() => users.id),
+  createdAt: timestamp("created_at").notNull().defaultNow(),
+});
+
+export const insertCaseTimelineEventSchema = createInsertSchema(caseTimelineEvents).omit({
+  id: true,
+  createdAt: true,
+});
+export type InsertCaseTimelineEvent = z.infer<typeof insertCaseTimelineEventSchema>;
+export type CaseTimelineEvent = typeof caseTimelineEvents.$inferSelect;
 
 // Case Details table (extended case information)
 export const caseDetails = pgTable("case_details", {

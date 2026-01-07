@@ -20,10 +20,18 @@ import { Badge } from "@/components/ui/badge";
 import { MoreHorizontal, Search, Filter } from "lucide-react";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
-import { casesAPI, uploadsAPI } from "@/lib/api";
+import { casesAPI, uploadsAPI, usersAPI } from "@/lib/api";
 import { Skeleton } from "@/components/ui/skeleton";
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/ui/dialog";
 import { Label } from "@/components/ui/label";
+import { Textarea } from "@/components/ui/textarea";
+import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from "@/components/ui/select";
 import { useToast } from "@/hooks/use-toast";
 import { useEffect, useRef, useState } from "react";
 import { useLocation, useRoute } from "wouter";
@@ -50,8 +58,33 @@ export default function Cases() {
   const lastOpenedCaseIdRef = useRef<string | null>(null);
 
   const isBen = isBeneficiary(user);
+  const isAdminUser = isAdmin(user);
+  const isLawyerUser = isLawyer(user);
   const canCreate = canCreateCase(user);
   const allowed = isBeneficiary(user) || isAdmin(user) || isLawyer(user);
+
+  const statusLabel = (status: unknown) =>
+    t(`case.status.${String(status)}`, { defaultValue: String(status || "-") });
+
+  const statusVariant = (status: unknown) => {
+    const s = String(status || "");
+    if (["rejected", "cancelled"].includes(s)) return "destructive" as const;
+    if (["pending_review", "pending_admin_review", "pending"].includes(s)) return "secondary" as const;
+    if (
+      [
+        "accepted_pending_assignment",
+        "accepted",
+        "assigned",
+        "in_progress",
+        "awaiting_documents",
+        "awaiting_hearing",
+        "awaiting_judgment",
+      ].includes(s)
+    )
+      return "default" as const;
+    if (["completed", "closed", "closed_admin"].includes(s)) return "outline" as const;
+    return "secondary" as const;
+  };
 
   useEffect(() => {
     if (!loading && !user) setLocation("/login");
@@ -103,6 +136,150 @@ export default function Cases() {
       setDocFile(null);
       await queryClient.invalidateQueries({ queryKey: ["case-documents", selectedCase?.id] });
       toast({ title: t("common.success") });
+    },
+    onError: (err: any) => {
+      toast({
+        title: t("common.error"),
+        description: getErrorMessage(err, t) || t("common.error"),
+        variant: "destructive",
+      });
+    },
+  });
+
+  const { data: selectedCaseFresh } = useQuery({
+    queryKey: ["case", selectedCase?.id],
+    queryFn: () => casesAPI.getOne(String(selectedCase.id)),
+    enabled: Boolean(!loading && user && allowed && docsOpen && selectedCase?.id),
+  });
+
+  useEffect(() => {
+    if (selectedCaseFresh) setSelectedCase(selectedCaseFresh);
+  }, [selectedCaseFresh]);
+
+  const { data: timeline } = useQuery({
+    queryKey: ["case-timeline", selectedCase?.id],
+    queryFn: () => casesAPI.getTimeline(String(selectedCase.id)),
+    enabled: Boolean(!loading && user && allowed && docsOpen && selectedCase?.id),
+  });
+
+  const { data: allUsers } = useQuery({
+    queryKey: ["users"],
+    queryFn: usersAPI.getAll,
+    enabled: Boolean(!loading && user && docsOpen && isAdminUser),
+  });
+
+  const [rejectReason, setRejectReason] = useState<string>("");
+  const [assignLawyerId, setAssignLawyerId] = useState<string>("");
+  const [nextStatus, setNextStatus] = useState<string>("");
+  const [statusNote, setStatusNote] = useState<string>("");
+
+  const approveMutation = useMutation({
+    mutationFn: async () => {
+      if (!selectedCase?.id) throw new Error("No case selected");
+      return casesAPI.approve(String(selectedCase.id));
+    },
+    onSuccess: async () => {
+      await queryClient.invalidateQueries({ queryKey: ["cases"] });
+      await queryClient.invalidateQueries({ queryKey: ["case", selectedCase?.id] });
+      await queryClient.invalidateQueries({ queryKey: ["case-timeline", selectedCase?.id] });
+      toast({ title: t("common.success") });
+    },
+    onError: (err: any) => {
+      toast({
+        title: t("common.error"),
+        description: getErrorMessage(err, t) || t("common.error"),
+        variant: "destructive",
+      });
+    },
+  });
+
+  const rejectMutation = useMutation({
+    mutationFn: async () => {
+      if (!selectedCase?.id) throw new Error("No case selected");
+      return casesAPI.reject(String(selectedCase.id), rejectReason);
+    },
+    onSuccess: async () => {
+      setRejectReason("");
+      await queryClient.invalidateQueries({ queryKey: ["cases"] });
+      await queryClient.invalidateQueries({ queryKey: ["case", selectedCase?.id] });
+      await queryClient.invalidateQueries({ queryKey: ["case-timeline", selectedCase?.id] });
+      toast({ title: t("common.success") });
+    },
+    onError: (err: any) => {
+      toast({
+        title: t("common.error"),
+        description: getErrorMessage(err, t) || t("common.error"),
+        variant: "destructive",
+      });
+    },
+  });
+
+  const assignLawyerMutation = useMutation({
+    mutationFn: async () => {
+      if (!selectedCase?.id) throw new Error("No case selected");
+      if (!assignLawyerId) throw new Error("No lawyer selected");
+      return casesAPI.assignLawyer(String(selectedCase.id), assignLawyerId);
+    },
+    onSuccess: async () => {
+      setAssignLawyerId("");
+      await queryClient.invalidateQueries({ queryKey: ["cases"] });
+      await queryClient.invalidateQueries({ queryKey: ["case", selectedCase?.id] });
+      await queryClient.invalidateQueries({ queryKey: ["case-timeline", selectedCase?.id] });
+      toast({ title: t("common.success") });
+    },
+    onError: (err: any) => {
+      toast({
+        title: t("common.error"),
+        description: getErrorMessage(err, t) || t("common.error"),
+        variant: "destructive",
+      });
+    },
+  });
+
+  const updateStatusMutation = useMutation({
+    mutationFn: async () => {
+      if (!selectedCase?.id) throw new Error("No case selected");
+      if (!nextStatus) throw new Error("No status selected");
+      return casesAPI.updateStatus(String(selectedCase.id), nextStatus, statusNote);
+    },
+    onSuccess: async () => {
+      setNextStatus("");
+      setStatusNote("");
+      await queryClient.invalidateQueries({ queryKey: ["cases"] });
+      await queryClient.invalidateQueries({ queryKey: ["case", selectedCase?.id] });
+      await queryClient.invalidateQueries({ queryKey: ["case-timeline", selectedCase?.id] });
+      toast({ title: t("cases.status_updated") });
+    },
+    onError: (err: any) => {
+      toast({
+        title: t("common.error"),
+        description: getErrorMessage(err, t) || t("common.error"),
+        variant: "destructive",
+      });
+    },
+  });
+
+  const ADMIN_STATUSES = [
+    "pending_review",
+    "rejected",
+    "accepted_pending_assignment",
+    "assigned",
+    "closed_admin",
+  ] as const;
+
+  const listUpdateStatusMutation = useMutation({
+    mutationFn: async (input: { caseId: string; status: string }) => {
+      return casesAPI.updateStatus(input.caseId, input.status);
+    },
+    onSuccess: async (_data, variables) => {
+      await queryClient.invalidateQueries({ queryKey: ["cases"] });
+
+      if (String(selectedCase?.id) === String(variables.caseId)) {
+        await queryClient.invalidateQueries({ queryKey: ["case", selectedCase?.id] });
+        await queryClient.invalidateQueries({ queryKey: ["case-timeline", selectedCase?.id] });
+      }
+
+      toast({ title: t("cases.status_updated") });
     },
     onError: (err: any) => {
       toast({
@@ -199,13 +376,32 @@ export default function Cases() {
                         </Badge>
                       </TableCell>
                       <TableCell>
-                        <div className="flex items-center gap-2">
-                          <div className={`h-2 w-2 rounded-full ${
-                            c.status === "in_progress" ? "bg-blue-500" : 
-                            c.status === "open" ? "bg-green-500" : 
-                            c.status === "urgent" ? "bg-red-500" : "bg-gray-500"
-                          }`} />
-                          {c.status}
+                        <div className="flex flex-wrap items-center gap-2">
+                          <Badge variant={statusVariant(c.status)}>
+                            {statusLabel(c.status)}
+                          </Badge>
+                          {isAdminUser ? (
+                            <Select
+                              value={""}
+                              onValueChange={(next) =>
+                                listUpdateStatusMutation.mutate({
+                                  caseId: String(c.id),
+                                  status: next,
+                                })
+                              }
+                            >
+                              <SelectTrigger className="h-8 w-[220px]">
+                                <SelectValue placeholder={t("cases.change_status")} />
+                              </SelectTrigger>
+                              <SelectContent>
+                                {ADMIN_STATUSES.filter((s) => s !== String(c.status)).map((s) => (
+                                  <SelectItem key={s} value={s}>
+                                    {statusLabel(s)}
+                                  </SelectItem>
+                                ))}
+                              </SelectContent>
+                            </Select>
+                          ) : null}
                         </div>
                       </TableCell>
                       <TableCell className="text-right rtl:text-left">
@@ -225,12 +421,6 @@ export default function Cases() {
                             >
                               View Details
                             </DropdownMenuItem>
-                            {canCreate ? (
-                              <>
-                                <DropdownMenuItem>Edit Case</DropdownMenuItem>
-                                <DropdownMenuItem>Assign Lawyer</DropdownMenuItem>
-                              </>
-                            ) : null}
                           </DropdownMenuContent>
                         </DropdownMenu>
                       </TableCell>
@@ -266,12 +456,16 @@ export default function Cases() {
             setSelectedCase(null);
             setDocFile(null);
             setDocIsPublic(false);
+            setRejectReason("");
+            setAssignLawyerId("");
+            setNextStatus("");
+            setStatusNote("");
           }
         }}
       >
         <DialogContent className="max-w-2xl">
           <DialogHeader>
-            <DialogTitle>Case Documents</DialogTitle>
+            <DialogTitle>{t("beneficiary_portal.documents")}</DialogTitle>
           </DialogHeader>
 
           <div className="space-y-4">
@@ -279,12 +473,112 @@ export default function Cases() {
               {selectedCase?.caseNumber} — {selectedCase?.title}
             </div>
 
+            <div className="flex flex-wrap items-center gap-2">
+              <Badge variant={statusVariant(selectedCase?.status)}>
+                {statusLabel(selectedCase?.status)}
+              </Badge>
+              {selectedCase?.assignedLawyerId ? (
+                <Badge variant="secondary">
+                  {t("cases.assigned_lawyer")}: {String(selectedCase.assignedLawyerId)}
+                </Badge>
+              ) : null}
+            </div>
+
+            {isBen && ["pending_review", "pending_admin_review"].includes(String(selectedCase?.status)) ? (
+              <div className="text-sm text-muted-foreground">{t("cases.submitted")}</div>
+            ) : null}
+
+            {isAdminUser && ["pending_review", "pending_admin_review"].includes(String(selectedCase?.status)) ? (
+              <div className="rounded-md border p-4 space-y-3">
+                <div className="text-sm font-medium">{t("cases.case_status")}</div>
+                <div className="flex flex-wrap gap-2">
+                  <Button
+                    onClick={() => approveMutation.mutate()}
+                    disabled={approveMutation.isPending}
+                    data-testid="button-case-approve"
+                  >
+                    {approveMutation.isPending ? t("common.loading") : t("common.approve")}
+                  </Button>
+                </div>
+                <div className="space-y-2">
+                  <Label>{t("common.note")}</Label>
+                  <Textarea value={rejectReason} onChange={(e) => setRejectReason(e.target.value)} />
+                  <Button
+                    variant="destructive"
+                    onClick={() => rejectMutation.mutate()}
+                    disabled={rejectMutation.isPending}
+                    data-testid="button-case-reject"
+                  >
+                    {rejectMutation.isPending ? t("common.loading") : t("common.reject")}
+                  </Button>
+                </div>
+              </div>
+            ) : null}
+
+            {isAdminUser && ["accepted_pending_assignment", "accepted"].includes(String(selectedCase?.status)) ? (
+              <div className="rounded-md border p-4 space-y-3">
+                <div className="text-sm font-medium">{t("cases.assign_lawyer")}</div>
+                <Select value={assignLawyerId} onValueChange={setAssignLawyerId}>
+                  <SelectTrigger>
+                    <SelectValue placeholder={t("cases.select_lawyer")} />
+                  </SelectTrigger>
+                  <SelectContent>
+                    {(Array.isArray(allUsers) ? allUsers : [])
+                      .filter((u: any) => u && u.userType === "staff" && u.role === "lawyer")
+                      .map((u: any) => (
+                        <SelectItem key={u.id} value={u.id}>
+                          {u.fullName}
+                        </SelectItem>
+                      ))}
+                  </SelectContent>
+                </Select>
+                <Button
+                  onClick={() => assignLawyerMutation.mutate()}
+                  disabled={!assignLawyerId || assignLawyerMutation.isPending}
+                  data-testid="button-case-assign-lawyer"
+                >
+                  {assignLawyerMutation.isPending ? t("common.loading") : t("common.save")}
+                </Button>
+              </div>
+            ) : null}
+
+            {isLawyerUser && selectedCase?.assignedLawyerId === user?.id ? (
+              <div className="rounded-md border p-4 space-y-3">
+                <div className="text-sm font-medium">{t("cases.update_status")}</div>
+                <Select value={nextStatus} onValueChange={setNextStatus}>
+                  <SelectTrigger>
+                    <SelectValue placeholder={t("cases.select_status")} />
+                  </SelectTrigger>
+                  <SelectContent>
+                    {["in_progress", "awaiting_documents", "awaiting_hearing", "awaiting_judgment", "completed"]
+                      .filter((s) => s !== String(selectedCase?.status))
+                      .map((s) => (
+                        <SelectItem key={s} value={s}>
+                          {statusLabel(s)}
+                        </SelectItem>
+                      ))}
+                  </SelectContent>
+                </Select>
+                <div className="space-y-2">
+                  <Label>{t("common.note")}</Label>
+                  <Textarea value={statusNote} onChange={(e) => setStatusNote(e.target.value)} />
+                </div>
+                <Button
+                  onClick={() => updateStatusMutation.mutate()}
+                  disabled={!nextStatus || updateStatusMutation.isPending}
+                  data-testid="button-case-update-status"
+                >
+                  {updateStatusMutation.isPending ? t("common.loading") : t("common.save")}
+                </Button>
+              </div>
+            ) : null}
+
             <div className="rounded-md border">
               <Table>
                 <TableHeader>
                   <TableRow>
-                    <TableHead>File</TableHead>
-                    <TableHead>Type</TableHead>
+                    <TableHead>{t("cases.new_case.document_file")}</TableHead>
+                    <TableHead>{t("cases.new_case.document_type")}</TableHead>
                     <TableHead className="text-right rtl:text-left">{t("app.actions")}</TableHead>
                   </TableRow>
                 </TableHeader>
@@ -303,7 +597,7 @@ export default function Cases() {
                         <TableCell className="text-right rtl:text-left">
                           <Button variant="outline" size="sm" asChild>
                             <a href={d.fileUrl} target="_blank" rel="noreferrer">
-                              View
+                              {t("common.view")}
                             </a>
                           </Button>
                         </TableCell>
@@ -322,7 +616,7 @@ export default function Cases() {
 
             <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
               <div className="space-y-2">
-                <Label>Upload file</Label>
+                <Label>{t("cases.new_case.document_file")}</Label>
                 <Input
                   type="file"
                   onChange={(e) => setDocFile(e.target.files?.[0] ?? null)}
@@ -331,10 +625,10 @@ export default function Cases() {
 
               {!isBen ? (
                 <div className="space-y-2">
-                  <Label>Visible to beneficiary (public)</Label>
+                  <Label>{t("cases.new_case.document_visibility")}</Label>
                   <div className="flex items-center gap-2">
                     <ToggleSwitch checked={docIsPublic} onCheckedChange={setDocIsPublic} />
-                    <span className="text-sm text-muted-foreground">{docIsPublic ? "Public" : "Private"}</span>
+                    <span className="text-sm text-muted-foreground">{docIsPublic ? t("cases.new_case.public") : t("cases.new_case.private")}</span>
                   </div>
                 </div>
               ) : null}
@@ -348,9 +642,29 @@ export default function Cases() {
                 onClick={() => uploadDocsMutation.mutate()}
                 disabled={!docFile || uploadDocsMutation.isPending}
               >
-                {uploadDocsMutation.isPending ? t("common.loading") : "Upload"}
+                {uploadDocsMutation.isPending ? t("common.loading") : t("common.upload")}
               </Button>
             </div>
+
+            {Array.isArray(timeline) && timeline.length ? (
+              <div className="rounded-md border p-4 space-y-2">
+                <div className="text-sm font-medium">{t("cases.timeline")}</div>
+                <div className="space-y-2">
+                  {timeline.map((e: any) => (
+                    <div key={e.id} className="text-sm">
+                      <div className="text-muted-foreground">
+                        {e.createdAt ? new Date(e.createdAt).toLocaleString() : ""}
+                      </div>
+                      <div>
+                        {String(e.eventType)}
+                        {e.toStatus ? <span>{" "}→ {statusLabel(e.toStatus)}</span> : null}
+                        {e.note ? <span className="text-muted-foreground"> — {String(e.note)}</span> : null}
+                      </div>
+                    </div>
+                  ))}
+                </div>
+              </div>
+            ) : null}
           </div>
         </DialogContent>
       </Dialog>

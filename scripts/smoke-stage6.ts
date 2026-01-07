@@ -246,7 +246,11 @@ async function cleanupViaDb(databaseUrl: string) {
 }
 
 async function main() {
-  const baseUrl = (process.env.BASE_URL || "http://localhost:5001").replace(/\/$/, "");
+  const baseUrl = (
+    process.env.SMOKE_BASE_URL ||
+    process.env.BASE_URL ||
+    "http://localhost:5058"
+  ).replace(/\/$/, "");
   const databaseUrl = process.env.DATABASE_URL;
   const cleanup = process.env.CLEANUP === "1";
 
@@ -338,7 +342,7 @@ async function main() {
         description: "smoke stage6 case1",
       },
     });
-    if (case1.status !== 200) {
+    if (case1.status !== 201) {
       throw new Error(`Create case1 failed: ${case1.status} ${toSnippet(case1.json ?? case1.text)}`);
     }
     case1Id = case1.json?.id as string;
@@ -353,7 +357,7 @@ async function main() {
         description: "smoke stage6 case2",
       },
     });
-    if (case2.status !== 200) {
+    if (case2.status !== 201) {
       throw new Error(`Create case2 failed: ${case2.status} ${toSnippet(case2.json ?? case2.text)}`);
     }
     case2Id = case2.json?.id as string;

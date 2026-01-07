@@ -52,15 +52,15 @@ export default function PortalBookAppointment() {
 
   const handleSubmit = () => {
     if (!expertId) {
-      toast.error("Expert is required");
+      toast.error(t("appointments.validation.expert_required"));
       return;
     }
     if (!scheduledDate) {
-      toast.error("Date is required");
+      toast.error(t("appointments.validation.date_required"));
       return;
     }
     if (!topic.trim()) {
-      toast.error("Topic is required");
+      toast.error(t("appointments.validation.topic_required"));
       return;
     }
 
@@ -93,10 +93,14 @@ export default function PortalBookAppointment() {
         </CardHeader>
         <CardContent className="grid gap-4">
           <div className="grid gap-2">
-            <Label>Expert</Label>
+            <Label>{t("appointments.expert")}</Label>
             <Select value={expertId} onValueChange={setExpertId}>
               <SelectTrigger disabled={expertsLoading}>
-                <SelectValue placeholder={expertsLoading ? t("common.loading") : "Select expert"} />
+                <SelectValue
+                  placeholder={
+                    expertsLoading ? t("common.loading") : t("appointments.select_expert_placeholder")
+                  }
+                />
               </SelectTrigger>
               <SelectContent>
                 {(experts || []).map((e: any) => {
@@ -113,20 +117,20 @@ export default function PortalBookAppointment() {
           </div>
 
           <div className="grid gap-2">
-            <Label>Type</Label>
+            <Label>{t("appointments.appointment_type")}</Label>
             <Select value={appointmentType} onValueChange={(v: any) => setAppointmentType(v)}>
               <SelectTrigger>
                 <SelectValue />
               </SelectTrigger>
               <SelectContent>
-                <SelectItem value="online">Online</SelectItem>
-                <SelectItem value="in_person">In person</SelectItem>
+                <SelectItem value="online">{t("appointments.online")}</SelectItem>
+                <SelectItem value="in_person">{t("appointments.in_person")}</SelectItem>
               </SelectContent>
             </Select>
           </div>
 
           <div className="grid gap-2">
-            <Label>Date</Label>
+            <Label>{t("appointments.select_date")}</Label>
             <Input
               type="datetime-local"
               value={scheduledDate}
@@ -135,7 +139,7 @@ export default function PortalBookAppointment() {
           </div>
 
           <div className="grid gap-2">
-            <Label>Duration (minutes)</Label>
+            <Label>{t("appointments.duration_minutes")}</Label>
             <Input
               type="number"
               min={15}
@@ -146,24 +150,24 @@ export default function PortalBookAppointment() {
           </div>
 
           <div className="grid gap-2">
-            <Label>Topic</Label>
+            <Label>{t("appointments.topic")}</Label>
             <Input value={topic} onChange={(e) => setTopic(e.target.value)} />
           </div>
 
           {appointmentType === "in_person" ? (
             <div className="grid gap-2">
-              <Label>Location</Label>
+              <Label>{t("appointments.location")}</Label>
               <Input value={location} onChange={(e) => setLocationText(e.target.value)} />
             </div>
           ) : null}
 
           <div className="grid gap-2">
-            <Label>Notes</Label>
+            <Label>{t("appointments.notes")}</Label>
             <Textarea value={notes} onChange={(e) => setNotes(e.target.value)} />
           </div>
 
           <div className="flex items-center justify-end gap-2">
-            <Button variant="outline" onClick={() => setLocation("/portal")}>Back</Button>
+            <Button variant="outline" onClick={() => setLocation("/portal")}>{t("common.back")}</Button>
             <Button onClick={handleSubmit} disabled={createMutation.isPending}>
               {createMutation.isPending ? t("common.loading") : t("common.submit")}
             </Button>

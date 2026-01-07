@@ -238,6 +238,7 @@ export const caseTimelineEventTypeEnum = pgEnum("case_timeline_event_type", [
   "approved",
   "rejected",
   "assigned_lawyer",
+  "lawyer_assigned",
   "status_changed",
 ]);
 

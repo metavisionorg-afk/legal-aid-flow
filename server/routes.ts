@@ -1400,10 +1400,6 @@ export async function registerRoutes(
         const existing = await storage.getCase(req.params.id);
         if (!existing) return res.status(404).json({ error: "Case not found" });
 
-        if (existing.status !== "accepted_pending_assignment" && existing.status !== "accepted") {
-          return res.status(400).json({ error: "Invalid transition" });
-        }
-
         const parsed = z.object({ lawyerId: z.string().min(1) }).safeParse(req.body);
         if (!parsed.success) {
           return res.status(400).json({ error: fromZodError(parsed.error).message });
@@ -1421,7 +1417,7 @@ export async function registerRoutes(
 
         await storage.createCaseTimelineEvent({
           caseId: existing.id,
-          eventType: "assigned_lawyer",
+          eventType: "lawyer_assigned",
           fromStatus: existing.status as any,
           toStatus: "assigned" as any,
           note: lawyer.id,

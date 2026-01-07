@@ -165,8 +165,16 @@ export default function Cases() {
   const { data: allUsers } = useQuery({
     queryKey: ["users"],
     queryFn: usersAPI.getAll,
-    enabled: Boolean(!loading && user && docsOpen && isAdminUser),
+    enabled: Boolean(!loading && user && isAdminUser),
   });
+
+  const lawyers = (Array.isArray(allUsers) ? allUsers : []).filter(
+    (u: any) => u && u.userType === "staff" && u.role === "lawyer",
+  );
+
+  const lawyerNameById = new Map(
+    lawyers.map((u: any) => [String(u.id), String(u.fullName || u.username || u.email || u.id)] as const),
+  );
 
   const [rejectReason, setRejectReason] = useState<string>("");
   const [assignLawyerId, setAssignLawyerId] = useState<string>("");
@@ -231,6 +239,29 @@ export default function Cases() {
       toast({
         title: t("common.error"),
         description: getErrorMessage(err, t) || t("common.error"),
+        variant: "destructive",
+      });
+    },
+  });
+
+  const listAssignLawyerMutation = useMutation({
+    mutationFn: async (input: { caseId: string; lawyerId: string }) => {
+      return casesAPI.assignLawyer(input.caseId, input.lawyerId);
+    },
+    onSuccess: async (_data, variables) => {
+      await queryClient.invalidateQueries({ queryKey: ["cases"] });
+
+      if (String(selectedCase?.id) === String(variables.caseId)) {
+        await queryClient.invalidateQueries({ queryKey: ["case", selectedCase?.id] });
+        await queryClient.invalidateQueries({ queryKey: ["case-timeline", selectedCase?.id] });
+      }
+
+      toast({ title: t("cases.lawyer_assigned_success") });
+    },
+    onError: (err: any) => {
+      toast({
+        title: t("common.error"),
+        description: getErrorMessage(err, t) || t("cases.lawyer_assigned_error"),
         variant: "destructive",
       });
     },
@@ -347,6 +378,7 @@ export default function Cases() {
                   <TableHead>Title</TableHead>
                   <TableHead>{t('app.priority')}</TableHead>
                   <TableHead>{t('app.status')}</TableHead>
+                  <TableHead>{t("cases.lawyer")}</TableHead>
                   <TableHead className="text-right rtl:text-left">{t('app.actions')}</TableHead>
                 </TableRow>
               </TableHeader>
@@ -359,6 +391,7 @@ export default function Cases() {
                       <TableCell><Skeleton className="h-4 w-48" /></TableCell>
                       <TableCell><Skeleton className="h-4 w-16" /></TableCell>
                       <TableCell><Skeleton className="h-4 w-20" /></TableCell>
+                      <TableCell><Skeleton className="h-4 w-40" /></TableCell>
                       <TableCell><Skeleton className="h-4 w-10" /></TableCell>
                     </TableRow>
                   ))
@@ -404,6 +437,39 @@ export default function Cases() {
                           ) : null}
                         </div>
                       </TableCell>
+
+                      <TableCell>
+                        <div className="flex flex-col gap-1">
+                          <div className="text-sm">
+                            {c.assignedLawyerId
+                              ? (lawyerNameById.get(String(c.assignedLawyerId)) ?? String(c.assignedLawyerId))
+                              : t("cases.unassigned")}
+                          </div>
+
+                          {isAdminUser ? (
+                            <Select
+                              value={""}
+                              onValueChange={(next) =>
+                                listAssignLawyerMutation.mutate({
+                                  caseId: String(c.id),
+                                  lawyerId: next,
+                                })
+                              }
+                            >
+                              <SelectTrigger className="h-8 w-[220px]" aria-label={t("cases.select_lawyer")}>
+                                <SelectValue placeholder={t("cases.select_lawyer")} />
+                              </SelectTrigger>
+                              <SelectContent onCloseAutoFocus={(e) => e.preventDefault()}>
+                                {lawyers.map((u: any) => (
+                                  <SelectItem key={u.id} value={String(u.id)}>
+                                    {String(u.fullName || u.username || u.email || u.id)}
+                                  </SelectItem>
+                                ))}
+                              </SelectContent>
+                            </Select>
+                          ) : null}
+                        </div>
+                      </TableCell>
                       <TableCell className="text-right rtl:text-left">
                         <DropdownMenu>
                           <DropdownMenuTrigger asChild>
@@ -428,7 +494,7 @@ export default function Cases() {
                   ))
                 ) : (
                   <TableRow>
-                    <TableCell colSpan={6} className="text-center text-muted-foreground py-8">
+                    <TableCell colSpan={7} className="text-center text-muted-foreground py-8">
                       {t("cases.no_cases")}
                     </TableCell>
                   </TableRow>

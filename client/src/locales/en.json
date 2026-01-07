@@ -11,6 +11,7 @@
     "rules": "Rules",
     "calendar": "Calendar",
     "reports": "Reports",
+    "finance": "Accounting",
     "settings": "Settings",
     "logout": "Logout",
     "language": "Language",
@@ -29,6 +30,12 @@
     "assigned_to": "Assigned To",
     "date": "Date",
     "actions": "Actions"
+  },
+
+  "finance": {
+    "coming_soon": "This section is coming soon.",
+    "vouchers": "Vouchers",
+    "installments": "Installments"
   },
   "portal": {
     "title": "Client Portal",

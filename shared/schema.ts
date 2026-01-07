@@ -204,6 +204,31 @@ export const insertCaseSchema = createInsertSchema(cases).omit({ id: true, creat
 export type InsertCase = z.infer<typeof insertCaseSchema>;
 export type Case = typeof cases.$inferSelect;
 
+// Case Details table (extended case information)
+export const caseDetails = pgTable("case_details", {
+  id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
+  caseId: varchar("case_id")
+    .notNull()
+    .references(() => cases.id)
+    .unique(),
+  issueSummary: text("issue_summary").notNull(),
+  issueDetails: text("issue_details"),
+  urgency: boolean("urgency").notNull().default(false),
+  urgencyDate: timestamp("urgency_date"),
+  jurisdiction: text("jurisdiction"),
+  relatedLaws: text("related_laws"),
+  createdAt: timestamp("created_at").notNull().defaultNow(),
+  updatedAt: timestamp("updated_at").notNull().defaultNow(),
+});
+
+export const insertCaseDetailsSchema = createInsertSchema(caseDetails).omit({
+  id: true,
+  createdAt: true,
+  updatedAt: true,
+});
+export type InsertCaseDetails = z.infer<typeof insertCaseDetailsSchema>;
+export type CaseDetails = typeof caseDetails.$inferSelect;
+
 // Hearings table
 export const hearings = pgTable("hearings", {
   id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),

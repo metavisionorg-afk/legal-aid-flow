@@ -84,9 +84,9 @@ export default function PortalDashboard() {
             <p className="text-sm text-muted-foreground mb-4">
               Submit a new legal aid request or inquiry.
             </p>
-            <Link href="/portal/new-request">
-              <Button className="w-full">{t('portal.new_request')}</Button>
-            </Link>
+            <Button className="w-full" asChild>
+              <Link href="/consultations">{t('portal.new_request')}</Link>
+            </Button>
           </CardContent>
         </Card>
 
@@ -98,9 +98,9 @@ export default function PortalDashboard() {
             <p className="text-sm text-muted-foreground mb-4">
               Schedule a consultation with our legal experts.
             </p>
-            <Link href="/portal/book-appointment">
-              <Button className="w-full" variant="outline">{t('portal.book_appointment')}</Button>
-            </Link>
+            <Button className="w-full" variant="outline" asChild>
+              <Link href="/portal/book-appointment">{t('portal.book_appointment')}</Link>
+            </Button>
           </CardContent>
         </Card>
       </div>

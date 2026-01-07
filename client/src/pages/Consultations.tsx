@@ -1,4 +1,4 @@
-import { useMemo, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import { useTranslation } from "react-i18next";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { useLocation } from "wouter";
@@ -48,33 +48,27 @@ export default function Consultations() {
   const { t } = useTranslation();
   const queryClient = useQueryClient();
   const { user, loading } = useAuth();
-  const [, setLocation] = useLocation();
+  const [path, setLocation] = useLocation();
 
   const serviceTypeLabel = (value: string) => t(`service_types.${value}`, value);
   const statusLabel = (value: string) => t(`serviceRequests.statuses.${value}`, value);
 
-  if (loading) {
-    return (
-      <div className="min-h-screen flex items-center justify-center">
-        <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-primary" />
-      </div>
-    );
-  }
+  const isReady = !loading;
+  const isAuthed = Boolean(user);
+  const allowed = Boolean(user) && (isBeneficiary(user) || isAdmin(user) || isLawyer(user));
+  const isBen = Boolean(user) && isBeneficiary(user);
 
-  if (!user) {
-    setLocation("/login");
-    return null;
-  }
+  useEffect(() => {
+    if (!isReady) return;
+    if (!isAuthed) {
+      setLocation("/login");
+      return;
+    }
+    if (!allowed) {
+      setLocation("/unauthorized");
+    }
+  }, [allowed, isAuthed, isReady, setLocation]);
 
-  const allowed = isBeneficiary(user) || isAdmin(user) || isLawyer(user);
-  if (!allowed) {
-    setLocation("/unauthorized");
-    return null;
-  }
-
-  const isBen = isBeneficiary(user);
-
-  const [path] = useLocation();
   const initialBeneficiaryId = useMemo(() => {
     const params = new URLSearchParams(window.location.search);
     return params.get("beneficiaryId") || "";
@@ -82,19 +76,19 @@ export default function Consultations() {
   const { data: myRequests, isLoading: myLoading } = useQuery({
     queryKey: ["serviceRequests", "my"],
     queryFn: serviceRequestsAPI.listMy,
-    enabled: isBen,
+    enabled: isReady && isBen,
   });
 
   const { data: allRequests, isLoading: allLoading } = useQuery({
     queryKey: ["serviceRequests", "all"],
     queryFn: serviceRequestsAPI.listAll,
-    enabled: !isBen,
+    enabled: isReady && isAuthed && allowed && !isBen,
   });
 
   const { data: beneficiaries, isLoading: beneficiariesLoading } = useQuery({
     queryKey: ["beneficiaries"],
     queryFn: beneficiariesAPI.getAll,
-    enabled: !isBen,
+    enabled: isReady && isAuthed && allowed && !isBen,
   });
 
   const beneficiaryMap = useMemo(() => {
@@ -137,6 +131,10 @@ export default function Consultations() {
   });
 
   const handleCreate = () => {
+    if (!isAuthed || !isBen) {
+      toast.error(t("errors.forbidden"));
+      return;
+    }
     if (!issueSummary.trim()) {
       toast.error(t("serviceRequests.issue_summary_required"));
       return;
@@ -150,6 +148,18 @@ export default function Consultations() {
       urgent,
     });
   };
+
+  if (loading) {
+    return (
+      <div className="min-h-screen flex items-center justify-center">
+        <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-primary" />
+      </div>
+    );
+  }
+
+  if (!user || !allowed) {
+    return null;
+  }
 
   const page = (
     <>

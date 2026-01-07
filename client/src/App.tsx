@@ -18,9 +18,11 @@ import Tasks from "@/pages/Tasks";
 import Rules from "@/pages/Rules";
 import Consultations from "@/pages/Consultations";
 import Sessions from "@/pages/Sessions";
+import Finance from "@/pages/Finance.tsx";
 import PortalLogin from "@/pages/portal/PortalLogin";
 import PortalRegister from "@/pages/portal/PortalRegister";
 import PortalDashboard from "@/pages/portal/PortalDashboard";
+import PortalBookAppointment from "@/pages/portal/PortalBookAppointment";
 import BeneficiaryRegister from "@/pages/BeneficiaryRegister";
 import BeneficiaryPortal from "@/pages/BeneficiaryPortal";
 import RegisterBeneficiary from "@/pages/RegisterBeneficiary";
@@ -102,6 +104,7 @@ function Router() {
       <Route path="/beneficiaries">
         {() => <StaffRoute component={Beneficiaries} />}
       </Route>
+      <Route path="/cases/:id" component={Cases} />
       <Route path="/cases" component={Cases} />
       <Route path="/calendar">
         {() => <StaffRoute component={CalendarPage} />}
@@ -111,6 +114,9 @@ function Router() {
       </Route>
       <Route path="/tasks">
         {() => <StaffRoute component={Tasks} />}
+      </Route>
+      <Route path="/finance">
+        {() => <StaffRoute component={Finance} />}
       </Route>
       <Route path="/rules">
         {() => <StaffRoute component={Rules} />}
@@ -136,6 +142,9 @@ function Router() {
       </Route>
       <Route path="/portal">
         {() => <PortalRoute component={PortalDashboard} />}
+      </Route>
+      <Route path="/portal/book-appointment">
+        {() => <PortalRoute component={PortalBookAppointment} />}
       </Route>
       <Route path="/portal/my-cases">
         {() => <PortalRoute component={PortalDashboard} />}

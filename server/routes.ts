@@ -10,6 +10,7 @@ import {
   insertBeneficiarySchema, 
   insertIntakeRequestSchema, 
   insertCaseSchema, 
+  insertCaseDetailsSchema,
   insertHearingSchema,
   insertExpertProfileSchema,
   insertAppointmentSchema,
@@ -1087,9 +1088,15 @@ export async function registerRoutes(
 
   app.post("/api/cases/:caseId/documents", requireAuth, async (req: AuthRequest, res) => {
     try {
+      const uploadMetaSchema = uploadedFileMetadataSchema.extend({
+        category: z.string().optional().nullable(),
+        description: z.string().optional().nullable(),
+        tags: z.array(z.string()).optional().nullable(),
+      });
+
       const bodySchema = z.object({
         isPublic: z.boolean().optional().default(false),
-        documents: z.array(uploadedFileMetadataSchema).min(1),
+        documents: z.array(uploadMetaSchema).min(1),
       });
 
       const parsed = bodySchema.safeParse(req.body);
@@ -1119,7 +1126,7 @@ export async function registerRoutes(
           beneficiaryId: beneficiary.id,
           caseId: caseData.id,
           isPublic: true,
-          documents: parsed.data.documents,
+          documents: parsed.data.documents as any,
         });
 
         return res.status(201).json({ success: true, documents: docs });
@@ -1136,7 +1143,7 @@ export async function registerRoutes(
         beneficiaryId: caseData.beneficiaryId,
         caseId: caseData.id,
         isPublic: parsed.data.isPublic,
-        documents: parsed.data.documents,
+        documents: parsed.data.documents as any,
       });
 
       return res.status(201).json({ success: true, documents: docs });
@@ -1144,6 +1151,46 @@ export async function registerRoutes(
       res.status(500).json({ error: error.message });
     }
   });
+
+  // Case Details (staff only) - add extended legal details for a case
+  app.post(
+    "/api/cases/:caseId/details",
+    requireStaff,
+    requireRole(["admin", "lawyer"]),
+    async (req: AuthRequest, res) => {
+      try {
+        const caseData = await storage.getCase(req.params.caseId);
+        if (!caseData) {
+          return res.status(404).json({ error: "Case not found" });
+        }
+
+        // Accept urgencyDate as an ISO string (common JSON shape) and coerce to Date.
+        const parsed = insertCaseDetailsSchema
+          .omit({ caseId: true, urgencyDate: true })
+          .extend({
+            urgencyDate: z.union([z.date(), z.string(), z.null()]).optional(),
+          })
+          .safeParse(req.body);
+
+        if (!parsed.success) {
+          return res.status(400).json({ error: fromZodError(parsed.error).message });
+        }
+
+        const data: any = { ...(parsed.data as any) };
+        if (typeof data.urgencyDate === "string") {
+          data.urgencyDate = data.urgencyDate ? new Date(data.urgencyDate) : undefined;
+        }
+        if (data.urgencyDate === null) {
+          data.urgencyDate = undefined;
+        }
+
+        const details = await storage.upsertCaseDetails(caseData.id, data as any);
+        return res.status(201).json(details);
+      } catch (error: any) {
+        return res.status(500).json({ error: getErrorMessage(error) });
+      }
+    },
+  );
 
   app.post("/api/cases", requireStaff, requireRole(["admin", "lawyer"]), async (req, res) => {
     try {

@@ -22,7 +22,11 @@ export async function setupVite(server: Server, app: Express) {
       ...viteLogger,
       error: (msg, options) => {
         viteLogger.error(msg, options);
-        process.exit(1);
+        // In development, do not crash the whole server on client/runtime errors.
+        // If you need the old behavior (e.g., certain hosted dev environments), set VITE_EXIT_ON_ERROR=1.
+        if (process.env.VITE_EXIT_ON_ERROR === "1") {
+          process.exit(1);
+        }
       },
     },
     server: serverOptions,

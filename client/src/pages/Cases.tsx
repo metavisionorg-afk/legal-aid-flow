@@ -17,23 +17,22 @@ import {
   DropdownMenuTrigger 
 } from "@/components/ui/dropdown-menu";
 import { Badge } from "@/components/ui/badge";
-import { MoreHorizontal, Plus, Search, Filter } from "lucide-react";
+import { MoreHorizontal, Search, Filter } from "lucide-react";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
-import { casesAPI, beneficiariesAPI, uploadsAPI } from "@/lib/api";
+import { casesAPI, uploadsAPI } from "@/lib/api";
 import { Skeleton } from "@/components/ui/skeleton";
-import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogTrigger } from "@/components/ui/dialog";
+import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/ui/dialog";
 import { Label } from "@/components/ui/label";
-import { Textarea } from "@/components/ui/textarea";
-import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { useToast } from "@/hooks/use-toast";
-import { useState } from "react";
-import { useLocation } from "wouter";
+import { useEffect, useRef, useState } from "react";
+import { useLocation, useRoute } from "wouter";
 import { useAuth } from "@/contexts/AuthContext";
 import { canCreateCase, isAdmin, isBeneficiary, isLawyer } from "@/lib/authz";
 import { PortalLayout } from "@/components/layout/PortalLayout";
 import { Switch as ToggleSwitch } from "@/components/ui/switch";
 import { getErrorMessage } from "@/lib/errors";
+import { NewCaseDialog } from "@/components/cases/NewCaseDialog";
 
 export default function Cases() {
   const { t } = useTranslation();
@@ -42,71 +41,51 @@ export default function Cases() {
   const { user, loading } = useAuth();
   const [, setLocation] = useLocation();
 
-  if (loading) {
-    return (
-      <div className="min-h-screen flex items-center justify-center">
-        <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-primary" />
-      </div>
-    );
-  }
-
-  if (!user) {
-    setLocation("/login");
-    return null;
-  }
-
-  const allowed = isBeneficiary(user) || isAdmin(user) || isLawyer(user);
-  if (!allowed) {
-    setLocation("/unauthorized");
-    return null;
-  }
-
-  const isBen = isBeneficiary(user);
-  const canCreate = canCreateCase(user);
-
-  const [createOpen, setCreateOpen] = useState(false);
   const [docsOpen, setDocsOpen] = useState(false);
   const [selectedCase, setSelectedCase] = useState<any>(null);
   const [docFile, setDocFile] = useState<File | null>(null);
   const [docIsPublic, setDocIsPublic] = useState<boolean>(false);
-  const [caseNumber, setCaseNumber] = useState("");
-  const [title, setTitle] = useState("");
-  const [beneficiaryId, setBeneficiaryId] = useState<string>("");
-  const [caseType, setCaseType] = useState<string>("civil");
-  const [description, setDescription] = useState("");
+
+  const [matchCaseRoute, caseRouteParams] = useRoute("/cases/:id");
+  const lastOpenedCaseIdRef = useRef<string | null>(null);
+
+  const isBen = isBeneficiary(user);
+  const canCreate = canCreateCase(user);
+  const allowed = isBeneficiary(user) || isAdmin(user) || isLawyer(user);
+
+  useEffect(() => {
+    if (!loading && !user) setLocation("/login");
+  }, [loading, user, setLocation]);
+
+  useEffect(() => {
+    if (!loading && user && !allowed) setLocation("/unauthorized");
+  }, [loading, user, allowed, setLocation]);
 
   const { data: cases, isLoading } = useQuery({
     queryKey: ["cases", isBen ? "my" : "all"],
     queryFn: isBen ? casesAPI.getMy : casesAPI.getAll,
+    enabled: Boolean(!loading && user && allowed),
   });
 
-  const { data: beneficiaries, isLoading: beneficiariesLoading } = useQuery({
-    queryKey: ["beneficiaries"],
-    queryFn: beneficiariesAPI.getAll,
-    enabled: canCreate,
-  });
+  useEffect(() => {
+    if (!matchCaseRoute) return;
+    const id = String((caseRouteParams as any)?.id || "");
+    if (!id) return;
+    if (!cases || !Array.isArray(cases)) return;
+    if (lastOpenedCaseIdRef.current === id) return;
 
-  const createCaseMutation = useMutation({
-    mutationFn: casesAPI.create,
-    onSuccess: async () => {
-      await queryClient.invalidateQueries({ queryKey: ["cases"] });
-      setCaseNumber("");
-      setTitle("");
-      setBeneficiaryId("");
-      setCaseType("civil");
-      setDescription("");
-      setCreateOpen(false);
-      toast({ title: t("cases.created") });
-    },
-    onError: () => {
-      toast({ title: t("cases.create_failed"), variant: "destructive" });
-    },
-  });
+    const found = cases.find((c: any) => String(c.id) === id);
+    if (!found) return;
+
+    setSelectedCase(found);
+    setDocsOpen(true);
+    lastOpenedCaseIdRef.current = id;
+  }, [matchCaseRoute, (caseRouteParams as any)?.id, cases]);
 
   const { data: caseDocuments, isLoading: loadingDocs } = useQuery({
     queryKey: ["case-documents", selectedCase?.id],
     queryFn: () => casesAPI.listDocuments(String(selectedCase.id)),
-    enabled: Boolean(docsOpen && selectedCase?.id),
+    enabled: Boolean(!loading && user && allowed && docsOpen && selectedCase?.id),
   });
 
   const uploadDocsMutation = useMutation({
@@ -134,99 +113,27 @@ export default function Cases() {
     },
   });
 
-  const handleCreate = () => {
-    if (!caseNumber.trim() || !title.trim() || !beneficiaryId || !description.trim()) {
-      toast({ title: t("common.error"), variant: "destructive" });
-      return;
-    }
+  if (loading) {
+    return (
+      <div className="min-h-screen flex items-center justify-center">
+        <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-primary" />
+      </div>
+    );
+  }
 
-    createCaseMutation.mutate({
-      caseNumber: caseNumber.trim(),
-      title: title.trim(),
-      beneficiaryId,
-      caseType,
-      description: description.trim(),
-      status: "open",
-      priority: "medium",
-    });
-  };
+  if (!user) {
+    return null;
+  }
+
+  if (!allowed) {
+    return null;
+  }
 
   const page = (
     <>
       <div className="flex flex-col sm:flex-row items-start sm:items-center justify-between gap-4">
         <h1 className="text-3xl font-bold tracking-tight">{t('app.cases')}</h1>
-        {canCreate ? (
-          <Dialog open={createOpen} onOpenChange={setCreateOpen}>
-            <DialogTrigger asChild>
-              <Button data-testid="button-add-case">
-                <Plus className="mr-2 h-4 w-4 rtl:ml-2 rtl:mr-0" />
-                {t('app.add_new')}
-              </Button>
-            </DialogTrigger>
-            <DialogContent>
-              <DialogHeader>
-                <DialogTitle>{t("dashboard.new_case")}</DialogTitle>
-              </DialogHeader>
-
-              <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-                <div className="space-y-2">
-                  <Label>{t("cases.case_number")}</Label>
-                  <Input value={caseNumber} onChange={(e) => setCaseNumber(e.target.value)} />
-                </div>
-                <div className="space-y-2">
-                  <Label>{t("cases.case_title")}</Label>
-                  <Input value={title} onChange={(e) => setTitle(e.target.value)} />
-                </div>
-
-                <div className="space-y-2">
-                  <Label>{t("consultations.beneficiary")}</Label>
-                  <Select value={beneficiaryId} onValueChange={setBeneficiaryId}>
-                    <SelectTrigger data-testid="select-case-beneficiary">
-                      <SelectValue placeholder={beneficiariesLoading ? t("common.loading") : t("consultations.select_beneficiary")} />
-                    </SelectTrigger>
-                    <SelectContent>
-                      {(beneficiaries || []).map((b: any) => (
-                        <SelectItem key={b.id} value={b.id}>
-                          {b.fullName} ({b.idNumber})
-                        </SelectItem>
-                      ))}
-                    </SelectContent>
-                  </Select>
-                </div>
-
-                <div className="space-y-2">
-                  <Label>{t("intake.case_type")}</Label>
-                  <Select value={caseType} onValueChange={setCaseType}>
-                    <SelectTrigger data-testid="select-case-type">
-                      <SelectValue placeholder={t("intake.case_type")} />
-                    </SelectTrigger>
-                    <SelectContent>
-                      <SelectItem value="civil">Civil</SelectItem>
-                      <SelectItem value="criminal">Criminal</SelectItem>
-                      <SelectItem value="family">Family/Personal Status</SelectItem>
-                      <SelectItem value="labor">Labor</SelectItem>
-                      <SelectItem value="asylum">Asylum/Refugee</SelectItem>
-                    </SelectContent>
-                  </Select>
-                </div>
-
-                <div className="space-y-2 md:col-span-2">
-                  <Label>{t("intake.description")}</Label>
-                  <Textarea value={description} onChange={(e) => setDescription(e.target.value)} />
-                </div>
-              </div>
-
-              <div className="flex items-center justify-end gap-2">
-                <Button variant="outline" onClick={() => setCreateOpen(false)}>
-                  {t("common.cancel")}
-                </Button>
-                <Button onClick={handleCreate} disabled={createCaseMutation.isPending}>
-                  {createCaseMutation.isPending ? t("common.loading") : t("cases.create")}
-                </Button>
-              </div>
-            </DialogContent>
-          </Dialog>
-        ) : null}
+        {canCreate ? <NewCaseDialog /> : null}
       </div>
 
       <Tabs defaultValue="all" className="w-full">

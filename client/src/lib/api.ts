@@ -218,6 +218,14 @@ export const casesAPI = {
     fetchAPI(`/cases/${id}`, { method: "DELETE" }),
 };
 
+export const caseDetailsAPI = {
+  upsertForCase: (caseId: string, data: any) =>
+    fetchAPI(`/cases/${caseId}/details`, {
+      method: "POST",
+      body: JSON.stringify(data),
+    }),
+};
+
 // Hearings API (Staff only)
 export const hearingsAPI = {
   getAll: () => fetchAPI("/hearings"),

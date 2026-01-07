@@ -16,6 +16,8 @@ import type {
   InsertIntakeRequest,
   Case,
   InsertCase,
+  CaseDetails,
+  InsertCaseDetails,
   Hearing,
   InsertHearing,
   AuditLog,
@@ -118,6 +120,9 @@ export interface IStorage {
       fileName: string;
       mimeType: string;
       size: number;
+      category?: string | null;
+      description?: string | null;
+      tags?: string[] | null;
     }>;
   }): Promise<Document[]>;
 
@@ -144,6 +149,10 @@ export interface IStorage {
   createCase(caseData: InsertCase): Promise<Case>;
   updateCase(id: string, caseData: Partial<InsertCase>): Promise<Case | undefined>;
   deleteCase(id: string): Promise<boolean>;
+
+  // Case Details
+  getCaseDetailsByCase(caseId: string): Promise<CaseDetails | undefined>;
+  upsertCaseDetails(caseId: string, details: Omit<InsertCaseDetails, "caseId">): Promise<CaseDetails>;
 
   // Hearings
   getHearing(id: string): Promise<Hearing | undefined>;
@@ -332,7 +341,28 @@ export class DatabaseStorage implements IStorage {
       .select()
       .from(schema.beneficiaries)
       .where(eq(schema.beneficiaries.userId, userId));
-    return beneficiary;
+    if (beneficiary) return beneficiary;
+
+    // Legacy fallback: some DBs link the user -> beneficiary via users.beneficiary_id
+    // instead of beneficiaries.user_id.
+    const [user] = await db.select().from(schema.users).where(eq(schema.users.id, userId));
+    const legacyBeneficiaryId = (user as any)?.beneficiaryId as string | undefined;
+    if (!legacyBeneficiaryId) return undefined;
+
+    const [legacyBeneficiary] = await db
+      .select()
+      .from(schema.beneficiaries)
+      .where(eq(schema.beneficiaries.id, legacyBeneficiaryId));
+
+    // Opportunistically backfill beneficiaries.user_id for consistency.
+    if (legacyBeneficiary && !(legacyBeneficiary as any).userId) {
+      await db
+        .update(schema.beneficiaries)
+        .set({ userId, updatedAt: new Date() } as any)
+        .where(eq(schema.beneficiaries.id, legacyBeneficiaryId));
+    }
+
+    return legacyBeneficiary;
   }
 
   async getBeneficiaryByIdNumber(idNumber: string): Promise<Beneficiary | undefined> {
@@ -481,11 +511,14 @@ export class DatabaseStorage implements IStorage {
       fileName: string;
       mimeType: string;
       size: number;
+      category?: string | null;
+      description?: string | null;
+      tags?: string[] | null;
     }>;
   }): Promise<Document[]> {
     const rows: InsertDocument[] = input.documents.map((d) => ({
       title: d.fileName,
-      description: null,
+      description: d.description ?? null,
       fileUrl: d.fileUrl,
       fileType: d.mimeType,
       fileSize: d.size,
@@ -500,8 +533,8 @@ export class DatabaseStorage implements IStorage {
       mimeType: d.mimeType,
       size: d.size,
       isPublic: input.isPublic,
-      category: null,
-      tags: null,
+      category: d.category ?? null,
+      tags: d.tags ?? null,
     } as any));
 
     if (!rows.length) return [];
@@ -603,6 +636,36 @@ export class DatabaseStorage implements IStorage {
   async deleteCase(id: string): Promise<boolean> {
     const result = await db.delete(schema.cases).where(eq(schema.cases.id, id));
     return result.rowCount ? result.rowCount > 0 : false;
+  }
+
+  // Case Details
+  async getCaseDetailsByCase(caseId: string): Promise<CaseDetails | undefined> {
+    const [details] = await db
+      .select()
+      .from(schema.caseDetails)
+      .where(eq(schema.caseDetails.caseId, caseId));
+    return details;
+  }
+
+  async upsertCaseDetails(
+    caseId: string,
+    details: Omit<InsertCaseDetails, "caseId">,
+  ): Promise<CaseDetails> {
+    const [row] = await db
+      .insert(schema.caseDetails)
+      .values({
+        caseId,
+        ...(details as any),
+      })
+      .onConflictDoUpdate({
+        target: schema.caseDetails.caseId,
+        set: {
+          ...(details as any),
+          updatedAt: new Date(),
+        },
+      })
+      .returning();
+    return row;
   }
 
   // Hearings

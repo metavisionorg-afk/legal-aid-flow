@@ -11,6 +11,7 @@
     "rules": "القواعد",
     "calendar": "التقويم",
     "reports": "التقارير",
+    "finance": "المحاسبة",
     "settings": "الإعدادات",
     "logout": "تسجيل الخروج",
     "language": "اللغة",
@@ -29,6 +30,12 @@
     "assigned_to": "مُسند إلى",
     "date": "التاريخ",
     "actions": "الإجراءات"
+  },
+
+  "finance": {
+    "coming_soon": "هذه الصفحة قيد التطوير حالياً.",
+    "vouchers": "السندات",
+    "installments": "الأقساط"
   },
   "portal": {
     "title": "بوابة المستفيدين",

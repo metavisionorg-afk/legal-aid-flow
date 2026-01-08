@@ -146,7 +146,7 @@ export default function LawyerCases() {
                         <TableCell>{statusLabel(c.status)}</TableCell>
                         <TableCell>{formatDate(c.updatedAt)}</TableCell>
                         <TableCell className="text-right">
-                          <Link href={`/cases/${c.id}`}>
+                          <Link href={`/lawyer/cases/${c.id}`}>
                             <Button size="sm" variant="outline">
                               {t("common.open", { defaultValue: "Open" })}
                             </Button>

@@ -141,6 +141,13 @@ function Router() {
           </RequireRole>
         )}
       </Route>
+      <Route path="/lawyer/cases/:id">
+        {() => (
+          <RequireRole role="lawyer">
+            <Cases />
+          </RequireRole>
+        )}
+      </Route>
       <Route path="/calendar">
         {() => <StaffRoute component={CalendarPage} />}
       </Route>

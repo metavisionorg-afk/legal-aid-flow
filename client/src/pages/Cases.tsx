@@ -38,6 +38,7 @@ import { useLocation, useRoute } from "wouter";
 import { useAuth } from "@/contexts/AuthContext";
 import { canCreateCase, isAdmin, isBeneficiary, isLawyer } from "@/lib/authz";
 import { PortalLayout } from "@/components/layout/PortalLayout";
+import { LawyerPortalLayout } from "@/components/layout/LawyerPortalLayout";
 import { Switch as ToggleSwitch } from "@/components/ui/switch";
 import { getErrorMessage } from "@/lib/errors";
 import { NewCaseDialog } from "@/components/cases/NewCaseDialog";
@@ -47,7 +48,7 @@ export default function Cases() {
   const { toast } = useToast();
   const queryClient = useQueryClient();
   const { user, loading } = useAuth();
-  const [, setLocation] = useLocation();
+  const [location, setLocation] = useLocation();
 
   const [docsOpen, setDocsOpen] = useState(false);
   const [selectedCase, setSelectedCase] = useState<any>(null);
@@ -55,6 +56,7 @@ export default function Cases() {
   const [docIsPublic, setDocIsPublic] = useState<boolean>(false);
 
   const [matchCaseRoute, caseRouteParams] = useRoute("/cases/:id");
+  const [matchLawyerCaseRoute, lawyerCaseRouteParams] = useRoute("/lawyer/cases/:id");
   const lastOpenedCaseIdRef = useRef<string | null>(null);
 
   const isBen = isBeneficiary(user);
@@ -62,6 +64,23 @@ export default function Cases() {
   const isLawyerUser = isLawyer(user);
   const canCreate = canCreateCase(user);
   const allowed = isBeneficiary(user) || isAdmin(user) || isLawyer(user);
+  const isLawyerPortalRoute = Boolean(isLawyerUser && location.startsWith("/lawyer"));
+
+  // If a lawyer lands on the staff cases route, keep them inside the lawyer portal.
+  useEffect(() => {
+    if (loading || !user || !isLawyerUser) return;
+    if (location.startsWith("/lawyer")) return;
+
+    if (matchCaseRoute) {
+      const id = String((caseRouteParams as any)?.id || "");
+      setLocation(id ? `/lawyer/cases/${id}` : "/lawyer/cases");
+      return;
+    }
+
+    if (location === "/cases") {
+      setLocation("/lawyer/cases");
+    }
+  }, [loading, user, isLawyerUser, location, matchCaseRoute, (caseRouteParams as any)?.id, setLocation]);
 
   const statusLabel = (status: unknown) =>
     t(`case.status.${String(status)}`, { defaultValue: String(status || "-") });
@@ -101,8 +120,12 @@ export default function Cases() {
   });
 
   useEffect(() => {
-    if (!matchCaseRoute) return;
-    const id = String((caseRouteParams as any)?.id || "");
+    const id = matchLawyerCaseRoute
+      ? String((lawyerCaseRouteParams as any)?.id || "")
+      : matchCaseRoute
+        ? String((caseRouteParams as any)?.id || "")
+        : "";
+
     if (!id) return;
     if (!cases || !Array.isArray(cases)) return;
     if (lastOpenedCaseIdRef.current === id) return;
@@ -113,7 +136,7 @@ export default function Cases() {
     setSelectedCase(found);
     setDocsOpen(true);
     lastOpenedCaseIdRef.current = id;
-  }, [matchCaseRoute, (caseRouteParams as any)?.id, cases]);
+  }, [matchCaseRoute, (caseRouteParams as any)?.id, matchLawyerCaseRoute, (lawyerCaseRouteParams as any)?.id, cases]);
 
   const { data: caseDocuments, isLoading: loadingDocs } = useQuery({
     queryKey: ["case-documents", selectedCase?.id],
@@ -737,5 +760,7 @@ export default function Cases() {
     </>
   );
 
-  return isBen ? <PortalLayout>{page}</PortalLayout> : <Layout>{page}</Layout>;
+  if (isBen) return <PortalLayout>{page}</PortalLayout>;
+  if (isLawyerPortalRoute) return <LawyerPortalLayout>{page}</LawyerPortalLayout>;
+  return <Layout>{page}</Layout>;
 }

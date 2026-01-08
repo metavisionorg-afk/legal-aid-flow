@@ -32,13 +32,14 @@ import BeneficiaryPortal from "@/pages/BeneficiaryPortal";
 import RegisterBeneficiary from "@/pages/RegisterBeneficiary";
 import Forbidden from "@/pages/Forbidden";
 import { RequireRole } from "@/components/auth/RequireRole";
+import { LawyerPortalLayout } from "@/components/layout/LawyerPortalLayout";
 
 // Initialize i18n
 import "./i18n";
 
 function StaffRoute({ component: Component }: any) {
   const { user, loading } = useAuth();
-  const [, setLocation] = useLocation();
+  const [location, setLocation] = useLocation();
 
   if (loading) {
     return (
@@ -55,6 +56,12 @@ function StaffRoute({ component: Component }: any) {
 
   if (user.userType !== "staff") {
     return <Forbidden redirectTo={user.userType === "beneficiary" ? "/beneficiary/portal" : "/portal"} />;
+  }
+
+  // Lawyers should use the dedicated lawyer portal, not the staff UI.
+  if ((user as any).role === "lawyer" && !location.startsWith("/lawyer")) {
+    setLocation("/lawyer/dashboard");
+    return null;
   }
 
   return <Component />;
@@ -119,14 +126,18 @@ function Router() {
       <Route path="/lawyer/dashboard">
         {() => (
           <RequireRole role="lawyer">
-            <LawyerDashboard />
+            <LawyerPortalLayout>
+              <LawyerDashboard />
+            </LawyerPortalLayout>
           </RequireRole>
         )}
       </Route>
       <Route path="/lawyer/cases">
         {() => (
           <RequireRole role="lawyer">
-            <LawyerCases />
+            <LawyerPortalLayout>
+              <LawyerCases />
+            </LawyerPortalLayout>
           </RequireRole>
         )}
       </Route>

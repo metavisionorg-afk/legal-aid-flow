@@ -3,7 +3,6 @@ import { useTranslation } from "react-i18next";
 import { useQuery } from "@tanstack/react-query";
 import { Link } from "wouter";
 
-import { Layout } from "@/components/layout/Layout";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import {
   Table,
@@ -62,8 +61,7 @@ export default function LawyerDashboard() {
     });
 
   return (
-    <Layout>
-      <div className="space-y-6">
+    <div className="space-y-6">
         <div>
           <h1 className="text-2xl font-bold">{t("lawyer.portal_title")}</h1>
           <p className="text-muted-foreground">{t("lawyer.dashboard_title")}</p>
@@ -185,7 +183,6 @@ export default function LawyerDashboard() {
             )}
           </CardContent>
         </Card>
-      </div>
-    </Layout>
+    </div>
   );
 }

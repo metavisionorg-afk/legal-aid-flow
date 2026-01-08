@@ -3,7 +3,6 @@ import { useTranslation } from "react-i18next";
 import { useQuery } from "@tanstack/react-query";
 import { Link } from "wouter";
 
-import { Layout } from "@/components/layout/Layout";
 import { Input } from "@/components/ui/input";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
@@ -74,12 +73,11 @@ export default function LawyerCases() {
     });
 
   return (
-    <Layout>
-      <div className="space-y-6">
+    <div className="space-y-6">
         <div className="flex items-start justify-between gap-4 flex-wrap">
           <div>
             <h1 className="text-2xl font-bold">{t("lawyer.my_cases_title")}</h1>
-            <p className="text-muted-foreground">{t("lawyer.my_cases_title")}</p>
+            <p className="text-muted-foreground">{t("lawyer.my_cases")}</p>
           </div>
           <Link href="/lawyer/dashboard">
             <Button variant="outline">{t("lawyer.dashboard", { defaultValue: "Dashboard" })}</Button>
@@ -168,7 +166,6 @@ export default function LawyerCases() {
             )}
           </CardContent>
         </Card>
-      </div>
-    </Layout>
+    </div>
   );
 }

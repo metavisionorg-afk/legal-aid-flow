@@ -8,6 +8,7 @@ import { useLocation } from "wouter";
 import { useState, useEffect } from "react";
 import { useAuth } from "@/contexts/AuthContext";
 import { useToast } from "@/hooks/use-toast";
+import { getRole } from "@/lib/authz";
 
 export default function Login() {
   const { t } = useTranslation();
@@ -18,6 +19,15 @@ export default function Login() {
 
   useEffect(() => {
     if (user) {
+      const role = getRole(user);
+      if (role === "lawyer") {
+        setLocation("/lawyer/dashboard");
+        return;
+      }
+      if ((user as any)?.userType === "beneficiary") {
+        setLocation("/beneficiary/portal");
+        return;
+      }
       setLocation("/");
     }
   }, [user, setLocation]);
@@ -36,7 +46,7 @@ export default function Login() {
         title: "Success",
         description: "Logged in successfully",
       });
-      setLocation("/");
+      // Redirect is handled by the effect once `user` is set.
     } catch (error: any) {
       toast({
         title: "Error",

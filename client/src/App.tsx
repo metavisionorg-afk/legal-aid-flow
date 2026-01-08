@@ -19,14 +19,19 @@ import Rules from "@/pages/Rules";
 import Consultations from "@/pages/Consultations";
 import Sessions from "@/pages/Sessions";
 import Finance from "@/pages/Finance.tsx";
+import Lawyers from "@/pages/Lawyers";
+import LawyerDashboard from "@/pages/lawyer/LawyerDashboard";
+import LawyerCases from "@/pages/lawyer/LawyerCases";
 import PortalLogin from "@/pages/portal/PortalLogin";
 import PortalRegister from "@/pages/portal/PortalRegister";
 import PortalDashboard from "@/pages/portal/PortalDashboard";
 import PortalBookAppointment from "@/pages/portal/PortalBookAppointment";
+import PortalMyCases from "@/pages/portal/PortalMyCases";
 import BeneficiaryRegister from "@/pages/BeneficiaryRegister";
 import BeneficiaryPortal from "@/pages/BeneficiaryPortal";
 import RegisterBeneficiary from "@/pages/RegisterBeneficiary";
 import Forbidden from "@/pages/Forbidden";
+import { RequireRole } from "@/components/auth/RequireRole";
 
 // Initialize i18n
 import "./i18n";
@@ -106,6 +111,25 @@ function Router() {
       </Route>
       <Route path="/cases/:id" component={Cases} />
       <Route path="/cases" component={Cases} />
+      <Route path="/lawyers">
+        {() => <StaffRoute component={Lawyers} />}
+      </Route>
+
+      {/* Lawyer Portal (staff role=lawyer) */}
+      <Route path="/lawyer/dashboard">
+        {() => (
+          <RequireRole role="lawyer">
+            <LawyerDashboard />
+          </RequireRole>
+        )}
+      </Route>
+      <Route path="/lawyer/cases">
+        {() => (
+          <RequireRole role="lawyer">
+            <LawyerCases />
+          </RequireRole>
+        )}
+      </Route>
       <Route path="/calendar">
         {() => <StaffRoute component={CalendarPage} />}
       </Route>
@@ -147,7 +171,7 @@ function Router() {
         {() => <PortalRoute component={PortalBookAppointment} />}
       </Route>
       <Route path="/portal/my-cases">
-        {() => <PortalRoute component={PortalDashboard} />}
+        {() => <PortalRoute component={PortalMyCases} />}
       </Route>
       <Route path="/portal/my-requests">
         {() => <PortalRoute component={PortalDashboard} />}

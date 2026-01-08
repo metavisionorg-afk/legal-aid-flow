@@ -5,6 +5,8 @@
     "beneficiaries": "Beneficiaries",
     "intake": "Intake Requests",
     "cases": "Cases",
+    "lawyers": "Lawyers",
+    "lawyer_portal": "Lawyer Portal",
     "tasks": "Tasks",
     "sessions": "Sessions",
     "consultations": "Consultations",
@@ -142,7 +144,7 @@
     "legal_consultation": "Legal consultation",
     "court_representation": "Court representation",
     "contract_drafting_review": "Contract drafting/review",
-    "complaint_drafting": "Complaint drafting",
+      "lawyers": "Lawyers",
     "case_filing": "Case filing",
     "contract_review": "Contract review",
     "representation": "Representation",
@@ -375,6 +377,7 @@
   "cases": {
     "case_number": "Case Number",
     "case_title": "Case Title",
+    "add_case": "Submit Case",
     "create": "Create case",
     "created": "Case created",
     "submitted": "Case submitted for review",
@@ -435,6 +438,40 @@
       "acknowledge": "I confirm the information is correct",
       "yes": "Yes",
       "no": "No"
+    }
+  },
+  "lawyers": {
+    "title": "Lawyers",
+    "subtitle": "Manage lawyers and view performance",
+    "add": "Add lawyer",
+    "edit": "Edit lawyer",
+    "report": "Lawyer report",
+    "list": "Lawyers list",
+    "search_placeholder": "Search by name, email, or username...",
+    "no_lawyers": "No lawyers found",
+    "name": "Name",
+    "full_name": "Full name",
+    "email": "Email",
+    "phone": "Phone",
+    "username": "Username",
+    "password": "Password",
+    "confirm_password": "Confirm password",
+    "status": "Status",
+    "status_help": "Enable/disable account access",
+    "active": "Active",
+    "inactive": "Inactive",
+    "role": "Role",
+    "actions": "Actions",
+    "last_cases": "Last 10 cases",
+    "add_success": "Lawyer added",
+    "add_failed": "Failed to add lawyer",
+    "update_success": "Lawyer updated",
+    "update_failed": "Failed to update lawyer",
+    "stats": {
+      "total": "Total cases",
+      "active": "Active",
+      "completed": "Completed",
+      "closed": "Closed"
     }
   },
   "profile": {
@@ -516,6 +553,31 @@
     "no_audit_logs": "No audit logs available",
     "access": "Access"
   },
+  "lawyer": {
+    "portal_title": "Lawyer Portal",
+    "dashboard": "Dashboard",
+    "my_cases": "My Cases",
+    "dashboard_title": "Dashboard",
+    "my_cases_title": "My cases",
+    "latest_cases": "Latest cases",
+    "kpis": {
+      "total_cases": "Total cases",
+      "in_progress": "In progress",
+      "awaiting_documents": "Awaiting documents",
+      "awaiting_hearing": "Awaiting hearing",
+      "completed": "Completed"
+    },
+    "filters": {
+      "search_placeholder": "Search cases...",
+      "status": "Status"
+    },
+    "status": {
+      "in_progress": "In progress",
+      "awaiting_documents": "Awaiting documents",
+      "awaiting_hearing": "Awaiting hearing",
+      "completed": "Completed"
+    }
+  },
   "common": {
     "loading": "Loading...",
     "error": "Error",
@@ -534,6 +596,12 @@
     "reject": "Reject",
     "note": "Note",
     "view": "View",
+    "actions": "Actions",
+    "open": "Open",
+    "all": "All",
+    "no_data": "No data",
+    "unauthorized_title": "Unauthorized",
+    "unauthorized_desc": "You don't have permission to access this page.",
     "forbidden_title": "Forbidden",
     "forbidden_description": "You don't have permission to access this page.",
     "go_to_portal": "Go to portal"

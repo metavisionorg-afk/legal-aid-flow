@@ -1,10 +1,13 @@
 import { Link, useLocation } from "wouter";
 import { useTranslation } from "react-i18next";
 import { cn } from "@/lib/utils";
+import { useAuth } from "@/contexts/AuthContext";
+import { isLawyer } from "@/lib/authz";
 import {
   LayoutDashboard,
   Users,
   Briefcase,
+  Scale,
   MessageSquare,
   Calendar,
   Gavel,
@@ -20,12 +23,21 @@ import {
 export function Sidebar() {
   const [location] = useLocation();
   const { t } = useTranslation();
+  const { user } = useAuth();
+
+  const showLawyerPortal = isLawyer(user);
+
+  const lawyerNavItems = [
+    { icon: LayoutDashboard, label: t("lawyer.dashboard"), href: "/lawyer/dashboard" },
+    { icon: Briefcase, label: t("lawyer.my_cases"), href: "/lawyer/cases" },
+  ];
 
   const navItems = [
     { icon: LayoutDashboard, label: t('app.dashboard'), href: "/" },
     { icon: Users, label: t('app.beneficiaries'), href: "/beneficiaries" },
     { icon: FilePlus, label: t('app.intake'), href: "/intake" },
     { icon: Briefcase, label: t('app.cases'), href: "/cases" },
+    { icon: Scale, label: t('app.lawyers'), href: "/lawyers" },
     { icon: Gavel, label: t('app.sessions'), href: "/sessions" },
     { icon: MessageSquare, label: t('app.consultations'), href: "/consultations" },
     { icon: ClipboardList, label: t('app.tasks'), href: "/tasks" },
@@ -48,6 +60,32 @@ export function Sidebar() {
       </div>
 
       <nav className="flex-1 p-4 space-y-1">
+        {showLawyerPortal ? (
+          <div className="pb-2">
+            <div className="px-3 py-2 text-xs font-semibold text-sidebar-foreground/60">
+              {t("app.lawyer_portal")}
+            </div>
+            <div className="space-y-1">
+              {lawyerNavItems.map((item) => (
+                <Link key={item.href} href={item.href}>
+                  <div
+                    className={cn(
+                      "flex items-center gap-3 px-3 py-2 rounded-md text-sm font-medium transition-colors cursor-pointer",
+                      location === item.href
+                        ? "bg-sidebar-accent text-sidebar-accent-foreground"
+                        : "text-sidebar-foreground/70 hover:bg-sidebar-accent/50 hover:text-sidebar-foreground",
+                    )}
+                  >
+                    <item.icon className="h-4 w-4 rtl:ml-2 rtl:mr-0" />
+                    {item.label}
+                  </div>
+                </Link>
+              ))}
+            </div>
+            <div className="my-2 h-px bg-sidebar-border" />
+          </div>
+        ) : null}
+
         {navItems.map((item) => (
           <Link key={item.href} href={item.href}>
             <div

@@ -79,6 +79,20 @@ export async function registerRoutes(
     };
   }
 
+  // ====== Feature flags (Pro features; default OFF) ======
+  // Exposed to the client as a simple config object.
+  const featureFlags = {
+    FEATURE_CALENDAR_SYNC: process.env.FEATURE_CALENDAR_SYNC === "1",
+    FEATURE_DOC_OCR: process.env.FEATURE_DOC_OCR === "1",
+    FEATURE_AI_SUGGESTIONS: process.env.FEATURE_AI_SUGGESTIONS === "1",
+    FEATURE_SLA: process.env.FEATURE_SLA === "1",
+    FEATURE_2FA: process.env.FEATURE_2FA === "1",
+  } as const;
+
+  app.get("/api/config/features", (_req, res) => {
+    res.json(featureFlags);
+  });
+
   const registerBeneficiaryRateLimit = createInMemoryRateLimiter({ windowMs: 10 * 60 * 1000, max: 10 });
 
   const BENEFICIARY_DEFAULT_RULE_NAME = "beneficiary";
@@ -114,6 +128,36 @@ export async function registerRoutes(
       return res.status(401).json({ error: "Unauthorized" });
     }
     next();
+  }
+
+  // Attach user context (for role-based checks) without changing the auth model.
+  async function requireUser(req: AuthRequest, res: any, next: any) {
+    if (!req.session?.userId) {
+      return res.status(401).json({ error: "Unauthorized" });
+    }
+    const user = await storage.getUser(req.session.userId);
+    if (!user) {
+      return res.status(401).json({ error: "Unauthorized" });
+    }
+    req.user = user;
+    next();
+  }
+
+  async function requireLawyer(req: AuthRequest, res: any, next: any) {
+    await requireStaff(req, res, () => {});
+    if (!req.user) {
+      return res.status(401).json({ error: "Unauthorized" });
+    }
+    if (req.user.role !== "lawyer") {
+      return res.status(403).json({ error: "Forbidden" });
+    }
+    next();
+  }
+
+  function canLawyerAccessCase(user: User, caseData: any): boolean {
+    if (user.role === "admin" || user.role === "super_admin") return true;
+    if (user.role !== "lawyer") return false;
+    return Boolean(caseData?.assignedLawyerId && String(caseData.assignedLawyerId) === String(user.id));
   }
 
   // Staff-only Middleware
@@ -1016,10 +1060,13 @@ export async function registerRoutes(
         return res.json(publicCases);
       }
 
-      // Staff: only admin/lawyer (super_admin allowed)
+      // Staff: admin/super_admin can see all; lawyers can see assigned only.
       const isAllowedStaff = user.role === "admin" || user.role === "lawyer" || user.role === "super_admin";
-      if (!isAllowedStaff) {
-        return res.status(403).json({ error: "Forbidden" });
+      if (!isAllowedStaff) return res.status(403).json({ error: "Forbidden" });
+
+      if (user.role === "lawyer") {
+        const cases = await storage.getCasesByLawyer(user.id);
+        return res.json(cases);
       }
 
       const cases = await storage.getAllCases();
@@ -1051,7 +1098,10 @@ export async function registerRoutes(
       }
 
       const isAllowedStaff = user.role === "admin" || user.role === "lawyer" || user.role === "super_admin";
-      if (!isAllowedStaff) {
+      if (!isAllowedStaff) return res.status(403).json({ error: "Forbidden" });
+
+      // Lawyers: only assigned cases
+      if (!canLawyerAccessCase(user, caseData)) {
         return res.status(403).json({ error: "Forbidden" });
       }
 
@@ -1083,7 +1133,9 @@ export async function registerRoutes(
       }
 
       const isAllowedStaff = user.role === "admin" || user.role === "lawyer" || user.role === "super_admin";
-      if (!isAllowedStaff) {
+      if (!isAllowedStaff) return res.status(403).json({ error: "Forbidden" });
+
+      if (!canLawyerAccessCase(user, caseData)) {
         return res.status(403).json({ error: "Forbidden" });
       }
 
@@ -1142,7 +1194,9 @@ export async function registerRoutes(
 
       // Staff uploads (admin/lawyer/super_admin) may set visibility.
       const isAllowedStaff = user.role === "admin" || user.role === "lawyer" || user.role === "super_admin";
-      if (!isAllowedStaff) {
+      if (!isAllowedStaff) return res.status(403).json({ error: "Forbidden" });
+
+      if (!canLawyerAccessCase(user, caseData)) {
         return res.status(403).json({ error: "Forbidden" });
       }
 
@@ -1520,10 +1574,407 @@ export async function registerRoutes(
         if (!beneficiary || existing.beneficiaryId !== beneficiary.id) {
           return res.status(403).json({ error: "Forbidden" });
         }
+      } else if (user.role === "lawyer") {
+        if (!canLawyerAccessCase(user, existing)) {
+          return res.status(403).json({ error: "Forbidden" });
+        }
       }
 
       const events = await storage.getCaseTimelineEventsByCase(existing.id);
       return res.json(events);
+    } catch (error: any) {
+      return res.status(500).json({ error: getErrorMessage(error) });
+    }
+  });
+
+  // ========== LAWYER PORTAL API (STAGE: lawyer self) ==========
+
+  // Dashboard summary for the logged-in lawyer
+  app.get("/api/lawyer/me/dashboard", requireLawyer, async (req: AuthRequest, res) => {
+    try {
+      const lawyer = req.user!;
+      const cases = await storage.getCasesByLawyer(lawyer.id);
+
+      const byStatus: Record<string, number> = {};
+      for (const c of cases as any[]) {
+        const s = String((c as any).status || "unknown");
+        byStatus[s] = (byStatus[s] || 0) + 1;
+      }
+
+      const tasks = await storage.getTasksByAssignee(lawyer.id);
+      const today = new Date();
+      const startOfToday = new Date(today);
+      startOfToday.setHours(0, 0, 0, 0);
+      const endOfToday = new Date(today);
+      endOfToday.setHours(23, 59, 59, 999);
+
+      const dueToday = (tasks as any[]).filter((t) => {
+        const due = (t as any).dueDate ? new Date((t as any).dueDate) : null;
+        if (!due) return false;
+        return due >= startOfToday && due <= endOfToday && String((t as any).status) !== "completed";
+      });
+
+      const notifications = await storage.getNotificationsByUser(lawyer.id);
+      const recentNotifications = (notifications as any[]).slice(0, 10);
+
+      // Optional: sessions this week (based on cases assigned to the lawyer)
+      const caseIdSet = new Set((cases as any[]).map((c) => String((c as any).id)));
+      const sessionsAll = await storage.getAllSessions();
+      const next7 = new Date();
+      next7.setDate(next7.getDate() + 7);
+      const upcomingSessions = (sessionsAll as any[])
+        .filter((s) => caseIdSet.has(String((s as any).caseId)))
+        .filter((s) => {
+          const d = new Date((s as any).gregorianDate);
+          return d >= today && d <= next7;
+        })
+        .slice(0, 10);
+
+      return res.json({
+        features: featureFlags,
+        counts: {
+          totalCases: cases.length,
+          byStatus,
+          dueTodayTasks: dueToday.length,
+          overdueCases: featureFlags.FEATURE_SLA ? 0 : undefined,
+        },
+        nearest: {
+          sessions: upcomingSessions,
+          tasks: dueToday.slice(0, 10),
+        },
+        notifications: recentNotifications,
+      });
+    } catch (error: any) {
+      return res.status(500).json({ error: getErrorMessage(error) });
+    }
+  });
+
+  // List assigned cases with simple filters
+  app.get("/api/lawyer/cases", requireLawyer, async (req: AuthRequest, res) => {
+    try {
+      const lawyer = req.user!;
+      const all = await storage.getCasesByLawyer(lawyer.id);
+
+      const status = typeof req.query.status === "string" ? req.query.status : undefined;
+      const caseType = typeof req.query.type === "string" ? req.query.type : undefined;
+      const priority = typeof req.query.priority === "string" ? req.query.priority : undefined;
+      const q = typeof req.query.q === "string" ? req.query.q.trim().toLowerCase() : "";
+
+      const from = typeof req.query.from === "string" ? new Date(req.query.from) : undefined;
+      const to = typeof req.query.to === "string" ? new Date(req.query.to) : undefined;
+
+      const filtered = (all as any[]).filter((c) => {
+        if (status && String((c as any).status) !== status) return false;
+        if (caseType && String((c as any).caseType) !== caseType) return false;
+        if (priority && String((c as any).priority) !== priority) return false;
+        if (q) {
+          const hay = [c.caseNumber, c.title, c.description].filter(Boolean).join(" ").toLowerCase();
+          if (!hay.includes(q)) return false;
+        }
+        const updatedAt = (c as any).updatedAt ? new Date((c as any).updatedAt) : null;
+        if (from && updatedAt && updatedAt < from) return false;
+        if (to && updatedAt && updatedAt > to) return false;
+        return true;
+      });
+
+      return res.json(filtered);
+    } catch (error: any) {
+      return res.status(500).json({ error: getErrorMessage(error) });
+    }
+  });
+
+  app.get("/api/lawyer/cases/:id", requireLawyer, async (req: AuthRequest, res) => {
+    try {
+      const lawyer = req.user!;
+      const caseData = await storage.getCase(req.params.id);
+      if (!caseData) return res.status(404).json({ error: "Case not found" });
+      if (!canLawyerAccessCase(lawyer, caseData)) return res.status(403).json({ error: "Forbidden" });
+      return res.json(caseData);
+    } catch (error: any) {
+      return res.status(500).json({ error: getErrorMessage(error) });
+    }
+  });
+
+  // Operational status update (lawyer only)
+  app.patch("/api/lawyer/cases/:id/status", requireLawyer, async (req: AuthRequest, res) => {
+    try {
+      const lawyer = req.user!;
+      const existing = await storage.getCase(req.params.id);
+      if (!existing) return res.status(404).json({ error: "Case not found" });
+      if (!canLawyerAccessCase(lawyer, existing)) return res.status(403).json({ error: "Forbidden" });
+
+      const parsed = z
+        .object({
+          status: z.enum(["in_progress", "awaiting_documents", "awaiting_hearing", "completed"]),
+          note: z.string().trim().max(1000).optional().nullable(),
+        })
+        .safeParse(req.body);
+      if (!parsed.success) {
+        return res.status(400).json({ error: fromZodError(parsed.error).message });
+      }
+
+      const updates: any = { status: parsed.data.status as any };
+      if (parsed.data.status === "completed") updates.completedAt = new Date();
+
+      const updated = await storage.updateCase(existing.id, updates);
+
+      // Log as timeline status_changed
+      await storage.createCaseTimelineEvent({
+        caseId: existing.id,
+        eventType: "status_changed",
+        fromStatus: existing.status as any,
+        toStatus: parsed.data.status as any,
+        note: parsed.data.note ?? null,
+        actorUserId: lawyer.id,
+      } as any);
+
+      return res.json(updated);
+    } catch (error: any) {
+      return res.status(500).json({ error: getErrorMessage(error) });
+    }
+  });
+
+  app.get("/api/lawyer/cases/:id/timeline", requireLawyer, async (req: AuthRequest, res) => {
+    try {
+      const lawyer = req.user!;
+      const existing = await storage.getCase(req.params.id);
+      if (!existing) return res.status(404).json({ error: "Case not found" });
+      if (!canLawyerAccessCase(lawyer, existing)) return res.status(403).json({ error: "Forbidden" });
+      const events = await storage.getCaseTimelineEventsByCase(existing.id);
+      return res.json(events);
+    } catch (error: any) {
+      return res.status(500).json({ error: getErrorMessage(error) });
+    }
+  });
+
+  app.get("/api/lawyer/cases/:id/documents", requireLawyer, async (req: AuthRequest, res) => {
+    try {
+      const lawyer = req.user!;
+      const existing = await storage.getCase(req.params.id);
+      if (!existing) return res.status(404).json({ error: "Case not found" });
+      if (!canLawyerAccessCase(lawyer, existing)) return res.status(403).json({ error: "Forbidden" });
+      const docs = await storage.getDocumentsByCase(existing.id);
+      return res.json(docs);
+    } catch (error: any) {
+      return res.status(500).json({ error: getErrorMessage(error) });
+    }
+  });
+
+  app.post("/api/lawyer/cases/:id/documents", requireLawyer, async (req: AuthRequest, res) => {
+    try {
+      const lawyer = req.user!;
+      const existing = await storage.getCase(req.params.id);
+      if (!existing) return res.status(404).json({ error: "Case not found" });
+      if (!canLawyerAccessCase(lawyer, existing)) return res.status(403).json({ error: "Forbidden" });
+
+      const uploadMetaSchema = uploadedFileMetadataSchema.extend({
+        category: z.string().optional().nullable(),
+        description: z.string().optional().nullable(),
+        tags: z.array(z.string()).optional().nullable(),
+      });
+      const bodySchema = z.object({
+        isPublic: z.boolean().optional().default(false),
+        documents: z.array(uploadMetaSchema).min(1),
+      });
+      const parsed = bodySchema.safeParse(req.body);
+      if (!parsed.success) {
+        return res.status(400).json({ error: fromZodError(parsed.error).message });
+      }
+
+      const docs = await storage.createDocumentsForCase({
+        uploadedBy: lawyer.id,
+        beneficiaryId: existing.beneficiaryId,
+        caseId: existing.id,
+        isPublic: parsed.data.isPublic,
+        documents: parsed.data.documents as any,
+      });
+
+      // Add a timeline note indicating a document upload
+      await storage.createCaseTimelineEvent({
+        caseId: existing.id,
+        eventType: "status_changed",
+        fromStatus: existing.status as any,
+        toStatus: existing.status as any,
+        note: `document_uploaded:${docs.length}`,
+        actorUserId: lawyer.id,
+      } as any);
+
+      return res.status(201).json({ success: true, documents: docs });
+    } catch (error: any) {
+      return res.status(500).json({ error: getErrorMessage(error) });
+    }
+  });
+
+  // Beneficiaries linked to this lawyer (by assigned cases)
+  app.get("/api/lawyer/beneficiaries", requireLawyer, async (req: AuthRequest, res) => {
+    try {
+      const lawyer = req.user!;
+      const cases = await storage.getCasesByLawyer(lawyer.id);
+      const beneficiaryIds = Array.from(new Set((cases as any[]).map((c) => String((c as any).beneficiaryId))));
+
+      const beneficiaries = await Promise.all(
+        beneficiaryIds.map(async (id) => {
+          const b = await storage.getBeneficiary(id);
+          return b || null;
+        }),
+      );
+
+      return res.json(beneficiaries.filter(Boolean));
+    } catch (error: any) {
+      return res.status(500).json({ error: getErrorMessage(error) });
+    }
+  });
+
+  app.get("/api/lawyer/beneficiaries/:id", requireLawyer, async (req: AuthRequest, res) => {
+    try {
+      const lawyer = req.user!;
+      const b = await storage.getBeneficiary(req.params.id);
+      if (!b) return res.status(404).json({ error: "Beneficiary not found" });
+
+      const cases = await storage.getCasesByLawyer(lawyer.id);
+      const hasRelation = (cases as any[]).some((c) => String((c as any).beneficiaryId) === String(b.id));
+      if (!hasRelation) return res.status(403).json({ error: "Forbidden" });
+
+      return res.json(b);
+    } catch (error: any) {
+      return res.status(500).json({ error: getErrorMessage(error) });
+    }
+  });
+
+  // Consultations for this lawyer
+  app.get("/api/lawyer/consultations", requireLawyer, async (req: AuthRequest, res) => {
+    try {
+      const lawyer = req.user!;
+      const consultations = await storage.getConsultationsByLawyer(lawyer.id);
+      return res.json(consultations);
+    } catch (error: any) {
+      return res.status(500).json({ error: getErrorMessage(error) });
+    }
+  });
+
+  app.patch("/api/lawyer/consultations/:id", requireLawyer, async (req: AuthRequest, res) => {
+    try {
+      const lawyer = req.user!;
+      const existing = await storage.getConsultation(req.params.id);
+      if (!existing) return res.status(404).json({ error: "Consultation not found" });
+      if (String((existing as any).lawyerId) !== String(lawyer.id)) {
+        return res.status(403).json({ error: "Forbidden" });
+      }
+
+      const parsed = z
+        .object({
+          status: z.string().trim().min(1).optional(),
+          scheduledDate: z.union([z.string(), z.null()]).optional(),
+          notes: z.union([z.string(), z.null()]).optional(),
+        })
+        .safeParse(req.body);
+      if (!parsed.success) {
+        return res.status(400).json({ error: fromZodError(parsed.error).message });
+      }
+
+      const updates: any = { ...parsed.data };
+      if (typeof updates.scheduledDate === "string") {
+        updates.scheduledDate = updates.scheduledDate ? new Date(updates.scheduledDate) : null;
+      }
+
+      const updated = await storage.updateConsultation(existing.id, updates);
+      return res.json(updated);
+    } catch (error: any) {
+      return res.status(500).json({ error: getErrorMessage(error) });
+    }
+  });
+
+  // Lawyer profile (basic: name only)
+  app.patch("/api/lawyer/me", requireLawyer, async (req: AuthRequest, res) => {
+    try {
+      const lawyer = req.user!;
+      const parsed = z
+        .object({
+          fullName: z.string().trim().min(1).optional(),
+        })
+        .strict()
+        .safeParse(req.body);
+      if (!parsed.success) {
+        return res.status(400).json({ error: fromZodError(parsed.error).message });
+      }
+
+      const updated = await storage.updateUser(lawyer.id, parsed.data as any);
+      if (!updated) return res.status(404).json({ error: "User not found" });
+      const { password: _pw, ...userWithoutPassword } = updated as any;
+      return res.json(userWithoutPassword);
+    } catch (error: any) {
+      return res.status(500).json({ error: getErrorMessage(error) });
+    }
+  });
+
+  // Monthly report (basic aggregates)
+  app.get("/api/lawyer/reports/monthly", requireLawyer, async (req: AuthRequest, res) => {
+    try {
+      const lawyer = req.user!;
+      const month = typeof req.query.month === "string" ? req.query.month : "";
+      const m = /^\d{4}-\d{2}$/.test(month) ? month : null;
+
+      const cases = await storage.getCasesByLawyer(lawyer.id);
+      const list = cases as any[];
+
+      const filtered = m
+        ? list.filter((c) => {
+            const d = new Date((c as any).createdAt);
+            const mm = `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}`;
+            return mm === m;
+          })
+        : list;
+
+      const completed = filtered.filter((c) => String((c as any).status) === "completed");
+      const avgCompletionDays = completed.length
+        ? completed
+            .map((c) => {
+              const start = new Date((c as any).createdAt).getTime();
+              const end = (c as any).completedAt ? new Date((c as any).completedAt).getTime() : start;
+              return Math.max(0, (end - start) / (1000 * 60 * 60 * 24));
+            })
+            .reduce((a, b) => a + b, 0) / completed.length
+        : 0;
+
+      return res.json({
+        month: m,
+        totals: {
+          total: filtered.length,
+          completed: completed.length,
+          active: filtered.filter((c) => !["completed", "cancelled", "rejected", "closed", "closed_admin"].includes(String((c as any).status))).length,
+          overdue: featureFlags.FEATURE_SLA ? 0 : undefined,
+        },
+        avgCompletionDays,
+      });
+    } catch (error: any) {
+      return res.status(500).json({ error: getErrorMessage(error) });
+    }
+  });
+
+  // Change password (any authenticated user)
+  app.post("/api/auth/change-password", requireUser, async (req: AuthRequest, res) => {
+    try {
+      const user = req.user!;
+      const parsed = z
+        .object({
+          currentPassword: z.string().min(1),
+          newPassword: z.string().min(8),
+        })
+        .safeParse(req.body);
+
+      if (!parsed.success) {
+        return res.status(400).json({ error: fromZodError(parsed.error).message });
+      }
+
+      const valid = await bcrypt.compare(parsed.data.currentPassword, user.password);
+      if (!valid) {
+        return res.status(400).json({ error: "Invalid current password" });
+      }
+
+      const hashed = await bcrypt.hash(parsed.data.newPassword, 10);
+      await storage.updateUser(user.id, { password: hashed } as any);
+      await createAudit(user.id, "change_password", "user", user.id, "User changed password", req.ip);
+      return res.json({ success: true });
     } catch (error: any) {
       return res.status(500).json({ error: getErrorMessage(error) });
     }
@@ -1902,6 +2353,105 @@ export async function registerRoutes(
       res.status(500).json({ error: error.message });
     }
   });
+
+  // Admin-only: create a lawyer user
+  app.post(
+    "/api/users",
+    requireStaff,
+    requireRole(["admin"]),
+    async (req: AuthRequest, res) => {
+      try {
+        const parsed = z
+          .object({
+            fullName: z.string().trim().min(1),
+            email: z.string().trim().email(),
+            username: z.string().trim().min(1),
+            password: z.string().min(8),
+            isActive: z.boolean().optional().default(true),
+          })
+          .safeParse(req.body);
+
+        if (!parsed.success) {
+          return res.status(400).json({ error: fromZodError(parsed.error).message });
+        }
+
+        const { fullName, email, username, password, isActive } = parsed.data;
+
+        const existingUsername = await storage.getUserByUsername(username);
+        if (existingUsername) {
+          return res.status(409).json({ error: "Username already exists" });
+        }
+
+        const existingEmail = await storage.getUserByEmail(email);
+        if (existingEmail) {
+          return res.status(409).json({ error: "Email already exists" });
+        }
+
+        const hashedPassword = await bcrypt.hash(password, 10);
+
+        const created = await storage.createUser({
+          username,
+          email,
+          password: hashedPassword,
+          fullName,
+          userType: "staff",
+          role: "lawyer",
+          isActive,
+          emailVerified: false,
+        } as any);
+
+        await createAudit(req.user!.id, "create", "user", created.id, `Created lawyer: ${created.fullName}`, req.ip);
+
+        const { password: _pw, ...userWithoutPassword } = created as any;
+        return res.status(201).json(userWithoutPassword);
+      } catch (error: any) {
+        return res.status(500).json({ error: getErrorMessage(error) });
+      }
+    },
+  );
+
+  // Admin-only: update a lawyer user (name/active)
+  app.patch(
+    "/api/users/:id",
+    requireStaff,
+    requireRole(["admin"]),
+    async (req: AuthRequest, res) => {
+      try {
+        const parsed = z
+          .object({
+            fullName: z.string().trim().min(1).optional(),
+            isActive: z.boolean().optional(),
+          })
+          .strict()
+          .safeParse(req.body);
+
+        if (!parsed.success) {
+          return res.status(400).json({ error: fromZodError(parsed.error).message });
+        }
+
+        const target = await storage.getUser(req.params.id);
+        if (!target) {
+          return res.status(404).json({ error: "User not found" });
+        }
+
+        if (target.userType !== "staff" || target.role !== "lawyer") {
+          return res.status(400).json({ error: "Only lawyer users can be updated here" });
+        }
+
+        const updated = await storage.updateUser(target.id, parsed.data as any);
+        if (!updated) {
+          return res.status(404).json({ error: "User not found" });
+        }
+
+        await createAudit(req.user!.id, "update", "user", updated.id, `Updated lawyer: ${updated.fullName}`, req.ip);
+
+        const { password: _pw, ...userWithoutPassword } = updated as any;
+        return res.json(userWithoutPassword);
+      } catch (error: any) {
+        return res.status(500).json({ error: getErrorMessage(error) });
+      }
+    },
+  );
 
   // ========== SYSTEM SETTINGS ROUTES ==========
 

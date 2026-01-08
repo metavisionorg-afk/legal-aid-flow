@@ -341,7 +341,7 @@ export function NewCaseDialog() {
       <DialogTrigger asChild>
         <Button data-testid="button-add-case">
           <Plus className="mr-2 h-4 w-4 rtl:ml-2 rtl:mr-0" />
-          {t("app.add_new")}
+          {isBen ? t("cases.add_case") : t("app.add_new")}
         </Button>
       </DialogTrigger>
 

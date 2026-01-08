@@ -5,6 +5,8 @@
     "beneficiaries": "المستفيدون",
     "intake": "طلبات الاستقبال",
     "cases": "القضايا",
+    "lawyers": "المحامون",
+    "lawyer_portal": "بوابة المحامي",
     "tasks": "المهام",
     "sessions": "الجلسات",
     "consultations": "الاستشارات",
@@ -375,6 +377,7 @@
   "cases": {
     "case_number": "رقم القضية",
     "case_title": "عنوان القضية",
+    "add_case": "تقديم قضية",
     "create": "إنشاء قضية",
     "created": "تم إنشاء القضية",
     "submitted": "تم تقديم القضية وبانتظار المراجعة",
@@ -435,6 +438,40 @@
       "no_documents": "لم تتم إضافة مستندات بعد.",
       "summary": "الملخص",
       "acknowledge": "أؤكد أن المعلومات صحيحة"
+    }
+  },
+  "lawyers": {
+    "title": "المحامون",
+    "subtitle": "إدارة المحامين وعرض الأداء",
+    "add": "إضافة محام",
+    "edit": "تعديل محام",
+    "report": "تقرير المحامي",
+    "list": "قائمة المحامين",
+    "search_placeholder": "ابحث بالاسم أو البريد أو اسم المستخدم...",
+    "no_lawyers": "لا يوجد محامون",
+    "name": "الاسم",
+    "full_name": "الاسم الكامل",
+    "email": "البريد الإلكتروني",
+    "phone": "الهاتف",
+    "username": "اسم المستخدم",
+    "password": "كلمة المرور",
+    "confirm_password": "تأكيد كلمة المرور",
+    "status": "الحالة",
+    "status_help": "تفعيل/تعطيل الدخول للحساب",
+    "active": "نشط",
+    "inactive": "غير نشط",
+    "role": "الدور",
+    "actions": "الإجراءات",
+    "last_cases": "آخر 10 قضايا",
+    "add_success": "تمت إضافة المحامي",
+    "add_failed": "تعذر إضافة المحامي",
+    "update_success": "تم تحديث بيانات المحامي",
+    "update_failed": "تعذر تحديث بيانات المحامي",
+    "stats": {
+      "total": "إجمالي القضايا",
+      "active": "النشطة",
+      "completed": "المكتملة",
+      "closed": "المغلقة"
     }
   },
   "profile": {
@@ -509,6 +546,31 @@
     "no_audit_logs": "لا توجد سجلات تدقيق",
     "access": "الوصول"
   },
+  "lawyer": {
+    "portal_title": "بوابة المحامي",
+    "dashboard": "لوحة التحكم",
+    "my_cases": "قضاياي",
+    "dashboard_title": "لوحة التحكم",
+    "my_cases_title": "قضاياي",
+    "latest_cases": "أحدث القضايا",
+    "kpis": {
+      "total_cases": "إجمالي القضايا",
+      "in_progress": "قيد التنفيذ",
+      "awaiting_documents": "بانتظار المستندات",
+      "awaiting_hearing": "بانتظار الجلسة",
+      "completed": "مكتملة"
+    },
+    "filters": {
+      "search_placeholder": "ابحث في القضايا...",
+      "status": "الحالة"
+    },
+    "status": {
+      "in_progress": "قيد التنفيذ",
+      "awaiting_documents": "بانتظار المستندات",
+      "awaiting_hearing": "بانتظار الجلسة",
+      "completed": "مكتملة"
+    }
+  },
   "common": {
     "loading": "جاري التحميل...",
     "error": "خطأ",
@@ -527,6 +589,12 @@
     "reject": "رفض",
     "note": "ملاحظة",
     "view": "عرض",
+    "actions": "الإجراءات",
+    "open": "فتح",
+    "all": "الكل",
+    "no_data": "لا توجد بيانات",
+    "unauthorized_title": "غير مصرح",
+    "unauthorized_desc": "ليس لديك صلاحية للوصول إلى هذه الصفحة.",
     "forbidden_title": "غير مصرح",
     "forbidden_description": "ليس لديك صلاحية للوصول إلى هذه الصفحة.",
     "go_to_portal": "الذهاب للبوابة"

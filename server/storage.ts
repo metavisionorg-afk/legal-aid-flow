@@ -250,6 +250,7 @@ export interface IStorage {
   getConsultation(id: string): Promise<schema.Consultation | undefined>;
   getAllConsultations(): Promise<schema.Consultation[]>;
   getConsultationsByBeneficiary(beneficiaryId: string): Promise<schema.Consultation[]>;
+  getConsultationsByLawyer(lawyerId: string): Promise<schema.Consultation[]>;
   createConsultation(consultation: schema.InsertConsultation): Promise<schema.Consultation>;
   updateConsultation(id: string, updates: Partial<schema.InsertConsultation>): Promise<schema.Consultation | undefined>;
   deleteConsultation(id: string): Promise<boolean>;
@@ -743,6 +744,14 @@ export class DatabaseStorage implements IStorage {
       .select()
       .from(schema.consultations)
       .where(eq(schema.consultations.beneficiaryId, beneficiaryId))
+      .orderBy(desc(schema.consultations.createdAt));
+  }
+
+  async getConsultationsByLawyer(lawyerId: string): Promise<schema.Consultation[]> {
+    return db
+      .select()
+      .from(schema.consultations)
+      .where(eq(schema.consultations.lawyerId, lawyerId))
       .orderBy(desc(schema.consultations.createdAt));
   }
 

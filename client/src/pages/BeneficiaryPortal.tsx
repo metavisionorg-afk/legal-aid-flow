@@ -19,6 +19,7 @@ import { useToast } from "@/hooks/use-toast";
 
 import { beneficiaryAPI, casesAPI, documentsAPI, uploadsAPI } from "@/lib/api";
 import { getErrorMessage } from "@/lib/errors";
+import { NewCaseDialog } from "@/components/cases/NewCaseDialog";
 
 type PreferredLanguage = "ar" | "en";
 
@@ -209,8 +210,9 @@ export default function BeneficiaryPortal() {
       </Card>
 
       <Card>
-        <CardHeader>
+        <CardHeader className="flex flex-row items-center justify-between">
           <CardTitle>{t("beneficiary_portal.my_cases")}</CardTitle>
+          <NewCaseDialog />
         </CardHeader>
         <CardContent>
           {loadingCases ? (

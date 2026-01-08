@@ -323,6 +323,18 @@ export const auditAPI = {
 // Users API (Staff only)
 export const usersAPI = {
   getAll: () => fetchAPI("/users"),
+  create: (data: any) =>
+    fetchAPI("/users", {
+      method: "POST",
+      body: JSON.stringify(data),
+    }),
+  update: (id: string, data: any) =>
+    fetchAPI(`/users/${id}`,
+      {
+        method: "PATCH",
+        body: JSON.stringify(data),
+      }
+    ),
 };
 
 // System Settings API (Staff only)
@@ -419,4 +431,17 @@ export const sessionsAPI = {
 // Enhanced Dashboard API (Staff only)
 export const enhancedDashboardAPI = {
   getStats: () => fetchAPI("/dashboard/enhanced-stats"),
+};
+
+// Lawyer Portal API (Staff role=lawyer)
+export const lawyerAPI = {
+  getDashboard: () => fetchAPI("/lawyer/me/dashboard"),
+  listCases: (params?: { status?: string; q?: string }) => {
+    const qs = new URLSearchParams();
+    if (params?.status) qs.set("status", params.status);
+    if (params?.q) qs.set("q", params.q);
+    const suffix = qs.toString() ? `?${qs.toString()}` : "";
+    return fetchAPI(`/lawyer/cases${suffix}`);
+  },
+  listBeneficiaries: () => fetchAPI("/lawyer/beneficiaries"),
 };

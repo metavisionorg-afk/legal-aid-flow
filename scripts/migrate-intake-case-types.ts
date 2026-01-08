@@ -236,6 +236,10 @@ function isDryRun(): boolean {
   return process.env.DRY_RUN !== "0";
 }
 
+function includeInactiveCaseTypes(): boolean {
+  return process.env.INCLUDE_INACTIVE === "1";
+}
+
 function pad(s: string, width: number): string {
   if (s.length >= width) return s.slice(0, width - 1) + "…";
   return s + " ".repeat(width - s.length);
@@ -251,6 +255,7 @@ async function main() {
   }
 
   const dryRun = isDryRun();
+  const includeInactive = includeInactiveCaseTypes();
   const limit = parseLimit();
 
   const client = new Client({ connectionString: databaseUrl });
@@ -311,6 +316,20 @@ async function main() {
     const hasKey = caseTypeCols.has("key");
     const hasSlug = caseTypeCols.has("slug");
 
+    // Counts: always compute activeCount (if possible) and totalCount for reporting.
+    const totalCountRes = await client.query<{ count: string }>(
+      `select count(*)::text as count from case_types`,
+    );
+    const totalCaseTypesCount = Number(totalCountRes.rows[0]?.count || 0);
+
+    let activeCaseTypesCount = totalCaseTypesCount;
+    if (hasIsActive) {
+      const activeCountRes = await client.query<{ count: string }>(
+        `select count(*)::text as count from case_types where is_active = true`,
+      );
+      activeCaseTypesCount = Number(activeCountRes.rows[0]?.count || 0);
+    }
+
     const selectCols = [
       "id",
       "name_ar",
@@ -323,7 +342,7 @@ async function main() {
     const caseTypesRes = await client.query<CaseTypeRow>(
       `select ${selectCols.join(", ")}
        from case_types
-       ${hasIsActive ? "where is_active = true" : ""}`,
+       ${hasIsActive && !includeInactive ? "where is_active = true" : ""}`,
     );
 
     const caseTypes = caseTypesRes.rows.map((r) => {
@@ -344,7 +363,12 @@ async function main() {
       };
     });
 
-    console.log(`Loaded ${caseTypes.length} active case_types.`);
+    console.log(
+      `includeInactive=${includeInactive ? "1" : "0"} | loadedCaseTypesCount=${caseTypes.length} | activeCount=${activeCaseTypesCount} | totalCount=${totalCaseTypesCount}`,
+    );
+    if (!hasIsActive && includeInactive) {
+      console.log("Note: case_types.is_active not found; INCLUDE_INACTIVE has no effect.");
+    }
 
     // ====== Phase 4/5: scan + dry/apply ======
     const globalExamples = {

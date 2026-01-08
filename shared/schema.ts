@@ -6,7 +6,7 @@ import { z } from "zod";
 // Enums
 export const userTypeEnum = pgEnum("user_type", ["staff", "beneficiary"]);
 export const roleEnum = pgEnum("role", ["super_admin", "admin", "lawyer", "intake_officer", "viewer", "expert", "beneficiary"]);
-export const caseTypeEnum = pgEnum("case_type", ["civil", "criminal", "family", "labor", "asylum"]);
+export const caseTypeEnum = pgEnum("case_type", ["civil", "criminal", "family", "labor", "asylum", "other"]);
 // NOTE: Keep legacy statuses to avoid destructive enum drops in existing DBs.
 // New workflow statuses are appended for add-only migrations.
 export const caseStatusEnum = pgEnum("case_status", [
@@ -207,6 +207,9 @@ export const intakeRequests = pgTable("intake_requests", {
   id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
   beneficiaryId: varchar("beneficiary_id").notNull().references(() => beneficiaries.id),
   caseType: caseTypeEnum("case_type").notNull(),
+  // Stage: dynamic case types for intake requests (non-breaking).
+  // Legacy enum remains for backwards compatibility and as fallback.
+  caseTypeId: varchar("case_type_id").references(() => caseTypes.id),
   description: text("description").notNull(),
   status: intakeStatusEnum("status").notNull().default("pending"),
   reviewedBy: varchar("reviewed_by").references(() => users.id),

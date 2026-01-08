@@ -12,6 +12,7 @@
     "db:push": "drizzle-kit push",
     "db:psql": "PAGER=cat psql -P pager=off -h localhost -U legal -d legal_aidflow",
     "db:describe:service_requests": "PAGER=cat psql -P pager=off -h localhost -U legal -d legal_aidflow -c \"\\d+ service_requests\"",
+    "migrate:intake-case-types": "tsx scripts/migrate-intake-case-types.ts",
     "smoke:stage6": "tsx scripts/smoke-stage6.ts",
     "smoke:stage6:clean": "SMOKE_CLEAN=1 tsx scripts/smoke-stage6.ts",
     "smoke:stage1": "tsx scripts/smoke-stage1-cases.ts",

@@ -46,6 +46,12 @@ import type {
   InsertCaseType,
 } from "@shared/schema";
 
+export type IntakeRequestWithCaseType = IntakeRequest & {
+  caseTypeNameAr?: string | null;
+  caseTypeNameEn?: string | null;
+  caseTypeName?: string | null;
+};
+
 const connectionString =
   process.env.DATABASE_URL || (process.env.NODE_ENV === "production" ? "" : "postgresql:///legal_aidflow");
 
@@ -139,9 +145,9 @@ export interface IStorage {
   getDocumentsByBeneficiary(beneficiaryId: string): Promise<Document[]>;
 
   // Intake Requests
-  getIntakeRequest(id: string): Promise<IntakeRequest | undefined>;
-  getAllIntakeRequests(): Promise<IntakeRequest[]>;
-  getIntakeRequestsByBeneficiary(beneficiaryId: string): Promise<IntakeRequest[]>;
+  getIntakeRequest(id: string): Promise<IntakeRequestWithCaseType | undefined>;
+  getAllIntakeRequests(): Promise<IntakeRequestWithCaseType[]>;
+  getIntakeRequestsByBeneficiary(beneficiaryId: string): Promise<IntakeRequestWithCaseType[]>;
   createIntakeRequest(request: InsertIntakeRequest): Promise<IntakeRequest>;
   updateIntakeRequest(id: string, request: Partial<InsertIntakeRequest>): Promise<IntakeRequest | undefined>;
 
@@ -592,17 +598,64 @@ export class DatabaseStorage implements IStorage {
   }
 
   // Intake Requests
-  async getIntakeRequest(id: string): Promise<IntakeRequest | undefined> {
-    const [request] = await db.select().from(schema.intakeRequests).where(eq(schema.intakeRequests.id, id));
-    return request;
+  async getIntakeRequest(id: string): Promise<IntakeRequestWithCaseType | undefined> {
+    const rows = await db
+      .select({
+        request: schema.intakeRequests,
+        caseTypeNameAr: schema.caseTypes.nameAr,
+        caseTypeNameEn: schema.caseTypes.nameEn,
+      })
+      .from(schema.intakeRequests)
+      .leftJoin(schema.caseTypes, eq(schema.intakeRequests.caseTypeId, schema.caseTypes.id))
+      .where(eq(schema.intakeRequests.id, id));
+
+    const row = rows[0];
+    if (!row) return undefined;
+    return {
+      ...(row.request as any),
+      caseTypeNameAr: row.caseTypeNameAr ?? null,
+      caseTypeNameEn: row.caseTypeNameEn ?? null,
+      caseTypeName: (row.caseTypeNameEn ?? row.caseTypeNameAr) ?? null,
+    };
   }
 
-  async getAllIntakeRequests(): Promise<IntakeRequest[]> {
-    return db.select().from(schema.intakeRequests).orderBy(desc(schema.intakeRequests.createdAt));
+  async getAllIntakeRequests(): Promise<IntakeRequestWithCaseType[]> {
+    const rows = await db
+      .select({
+        request: schema.intakeRequests,
+        caseTypeNameAr: schema.caseTypes.nameAr,
+        caseTypeNameEn: schema.caseTypes.nameEn,
+      })
+      .from(schema.intakeRequests)
+      .leftJoin(schema.caseTypes, eq(schema.intakeRequests.caseTypeId, schema.caseTypes.id))
+      .orderBy(desc(schema.intakeRequests.createdAt));
+
+    return rows.map((r) => ({
+      ...(r.request as any),
+      caseTypeNameAr: r.caseTypeNameAr ?? null,
+      caseTypeNameEn: r.caseTypeNameEn ?? null,
+      caseTypeName: (r.caseTypeNameEn ?? r.caseTypeNameAr) ?? null,
+    }));
   }
 
-  async getIntakeRequestsByBeneficiary(beneficiaryId: string): Promise<IntakeRequest[]> {
-    return db.select().from(schema.intakeRequests).where(eq(schema.intakeRequests.beneficiaryId, beneficiaryId));
+  async getIntakeRequestsByBeneficiary(beneficiaryId: string): Promise<IntakeRequestWithCaseType[]> {
+    const rows = await db
+      .select({
+        request: schema.intakeRequests,
+        caseTypeNameAr: schema.caseTypes.nameAr,
+        caseTypeNameEn: schema.caseTypes.nameEn,
+      })
+      .from(schema.intakeRequests)
+      .leftJoin(schema.caseTypes, eq(schema.intakeRequests.caseTypeId, schema.caseTypes.id))
+      .where(eq(schema.intakeRequests.beneficiaryId, beneficiaryId))
+      .orderBy(desc(schema.intakeRequests.createdAt));
+
+    return rows.map((r) => ({
+      ...(r.request as any),
+      caseTypeNameAr: r.caseTypeNameAr ?? null,
+      caseTypeNameEn: r.caseTypeNameEn ?? null,
+      caseTypeName: (r.caseTypeNameEn ?? r.caseTypeNameAr) ?? null,
+    }));
   }
 
   async createIntakeRequest(insertRequest: InsertIntakeRequest): Promise<IntakeRequest> {

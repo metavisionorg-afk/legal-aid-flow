@@ -18,20 +18,34 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/components/ui/card";
 import { Upload } from "lucide-react";
 import { useToast } from "@/hooks/use-toast";
-import { beneficiariesAPI, intakeAPI } from "@/lib/api";
-import { useMutation, useQueryClient } from "@tanstack/react-query";
+import { beneficiariesAPI, intakeAPI, caseTypesAPI } from "@/lib/api";
+import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { useState } from "react";
 
-const INTAKE_CASE_TYPE_VALUES = ["civil", "criminal", "family", "labor", "asylum"] as const;
-type IntakeCaseType = (typeof INTAKE_CASE_TYPE_VALUES)[number];
+type CaseTypeRow = {
+  id: string;
+  nameAr: string;
+  nameEn: string | null;
+  isActive: boolean;
+};
+
+const INTAKE_LEGACY_CASE_TYPE_VALUES = ["civil", "criminal", "family", "labor", "asylum", "other"] as const;
+type IntakeLegacyCaseType = (typeof INTAKE_LEGACY_CASE_TYPE_VALUES)[number];
 
 const formSchema = z.object({
   fullName: z.string().min(2, "Name is required"),
   phone: z.string().min(8, "Valid phone number required"),
   idNumber: z.string().min(5, "ID Number required"),
   email: z.string().email().optional().or(z.literal("")),
-  caseType: z.enum(INTAKE_CASE_TYPE_VALUES),
+  // Encoded select value: either `id:<uuid>` (preferred) or `legacy:<enum>`
+  caseType: z.string().min(1),
   description: z.string().min(10, "Description must be at least 10 characters"),
+}).superRefine((data, ctx) => {
+  const v = data.caseType || "";
+  const ok = v.startsWith("id:") || v.startsWith("legacy:");
+  if (!ok) {
+    ctx.addIssue({ code: z.ZodIssueCode.custom, path: ["caseType"], message: "Case type is required" });
+  }
 });
 
 export default function Intake() {
@@ -40,6 +54,17 @@ export default function Intake() {
   const queryClient = useQueryClient();
   const [isSubmitting, setIsSubmitting] = useState(false);
 
+  const isArabic = (typeof (t as any).i18n?.language === "string" ? (t as any).i18n.language : "").startsWith("ar");
+
+  const {
+    data: activeCaseTypes,
+    isLoading: isLoadingCaseTypes,
+    isError: isCaseTypesError,
+  } = useQuery({
+    queryKey: ["case-types", "active"],
+    queryFn: () => caseTypesAPI.listActive() as Promise<CaseTypeRow[]>,
+  });
+
   const form = useForm<z.infer<typeof formSchema>>({
     resolver: zodResolver(formSchema),
     defaultValues: {
@@ -47,7 +72,8 @@ export default function Intake() {
       phone: "",
       idNumber: "",
       email: "",
-      caseType: "civil" satisfies IntakeCaseType,
+      // default to legacy until dynamic list loads
+      caseType: "legacy:civil",
       description: "",
     },
   });
@@ -55,6 +81,15 @@ export default function Intake() {
   async function onSubmit(values: z.infer<typeof formSchema>) {
     setIsSubmitting(true);
     try {
+      const raw = String(values.caseType || "");
+      const selectedCaseTypeId = raw.startsWith("id:") ? raw.slice(3) : null;
+      const selectedLegacy = raw.startsWith("legacy:") ? (raw.slice(7) as IntakeLegacyCaseType) : null;
+
+      // If we have active case types loaded, prefer forcing id-based selection.
+      if (activeCaseTypes && activeCaseTypes.length > 0 && !selectedCaseTypeId) {
+        throw new Error("Please select a case type");
+      }
+
       // First create or find beneficiary
       const beneficiary = await beneficiariesAPI.create({
         fullName: values.fullName,
@@ -67,7 +102,8 @@ export default function Intake() {
       // Then create intake request
       await intakeAPI.create({
         beneficiaryId: beneficiary.id,
-        caseType: values.caseType,
+        caseTypeId: selectedCaseTypeId,
+        caseTypeLegacy: selectedLegacy,
         description: values.description,
         status: "pending",
       });
@@ -168,11 +204,25 @@ export default function Intake() {
                             </SelectTrigger>
                           </FormControl>
                           <SelectContent>
-                            <SelectItem value="civil">{t("cases.case_types.civil")}</SelectItem>
-                            <SelectItem value="criminal">{t("cases.case_types.criminal")}</SelectItem>
-                            <SelectItem value="family">{t("cases.case_types.family")}</SelectItem>
-                            <SelectItem value="labor">{t("cases.case_types.labor")}</SelectItem>
-                            <SelectItem value="asylum">{t("cases.case_types.asylum")}</SelectItem>
+                            {(activeCaseTypes || []).length > 0 ? (
+                              (activeCaseTypes || [])
+                                .filter((ct) => ct && ct.isActive)
+                                .map((ct) => (
+                                  <SelectItem key={ct.id} value={`id:${ct.id}`}>
+                                    {isArabic ? ct.nameAr : ct.nameEn || ct.nameAr}
+                                  </SelectItem>
+                                ))
+                            ) : (
+                              // Legacy fallback if list cannot load or is empty.
+                              <>
+                                <SelectItem value="legacy:civil">{t("cases.case_types.civil")}</SelectItem>
+                                <SelectItem value="legacy:criminal">{t("cases.case_types.criminal")}</SelectItem>
+                                <SelectItem value="legacy:family">{t("cases.case_types.family")}</SelectItem>
+                                <SelectItem value="legacy:labor">{t("cases.case_types.labor")}</SelectItem>
+                                <SelectItem value="legacy:asylum">{t("cases.case_types.asylum")}</SelectItem>
+                                <SelectItem value="legacy:other">{t("cases.case_types.other", { defaultValue: "Other" })}</SelectItem>
+                              </>
+                            )}
                           </SelectContent>
                         </Select>
                         <FormMessage />

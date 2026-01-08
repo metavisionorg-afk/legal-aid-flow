@@ -31,6 +31,8 @@ import bcrypt from "bcrypt";
 import { z } from "zod";
 import { isAdminStatus, isOperatingStatus } from "./lib/caseWorkflow";
 
+const intakeLegacyCaseTypeSchema = z.enum(["civil", "criminal", "family", "labor", "asylum", "other"]);
+
 interface AuthRequest extends Request {
   user?: User;
   beneficiary?: Beneficiary;
@@ -1064,13 +1066,49 @@ export async function registerRoutes(
     try {
       const user = req.user!;
 
+      const parsed = z
+        .object({
+          // New: dynamic case type id
+          caseTypeId: z.string().uuid().optional().nullable(),
+          // Legacy fallback
+          caseTypeLegacy: intakeLegacyCaseTypeSchema.optional().nullable(),
+          description: z.string().trim().min(1),
+          documents: z.array(z.string()).optional().default([]),
+        })
+        .superRefine((data, ctx) => {
+          if (!data.caseTypeId && !data.caseTypeLegacy) {
+            ctx.addIssue({ code: z.ZodIssueCode.custom, path: ["caseTypeId"], message: "Case type is required" });
+          }
+        })
+        .safeParse(req.body);
+
+      if (!parsed.success) {
+        return res.status(400).json({ error: fromZodError(parsed.error).message });
+      }
+
+      const input = parsed.data;
+
+      // Validate dynamic id if present
+      if (input.caseTypeId) {
+        const ct = await storage.getCaseType(input.caseTypeId);
+        if (!ct) {
+          return res.status(400).json({ error: "Invalid case type" });
+        }
+        if (!ct.isActive) {
+          return res.status(400).json({ error: "Case type is disabled" });
+        }
+      }
+
+      const legacy = input.caseTypeLegacy ?? (input.caseTypeId ? "other" : null);
+
       const request = await storage.createIntakeRequest({
         beneficiaryId: req.beneficiary!.id,
-        caseType: req.body.caseType,
-        description: req.body.description,
-        documents: req.body.documents || [],
+        caseType: legacy as any,
+        caseTypeId: input.caseTypeId ?? null,
+        description: input.description,
+        documents: input.documents || [],
         status: "pending",
-      });
+      } as any);
 
       // Create notification for staff
       await storage.createNotification({
@@ -1121,12 +1159,50 @@ export async function registerRoutes(
 
   app.post("/api/intake-requests", requireStaff, async (req, res) => {
     try {
-      const result = insertIntakeRequestSchema.safeParse(req.body);
-      if (!result.success) {
-        return res.status(400).json({ error: fromZodError(result.error).message });
+      const parsed = z
+        .object({
+          beneficiaryId: z.string().trim().min(1),
+          // New: dynamic case type id
+          caseTypeId: z.string().uuid().optional().nullable(),
+          // Legacy fallback
+          caseTypeLegacy: intakeLegacyCaseTypeSchema.optional().nullable(),
+          description: z.string().trim().min(1),
+          status: z.enum(["pending", "approved", "rejected", "under_review"]).optional(),
+          reviewedBy: z.string().optional().nullable(),
+          reviewNotes: z.string().optional().nullable(),
+          documents: z.array(z.string()).optional().default([]),
+        })
+        .superRefine((data, ctx) => {
+          if (!data.caseTypeId && !data.caseTypeLegacy) {
+            ctx.addIssue({ code: z.ZodIssueCode.custom, path: ["caseTypeId"], message: "Case type is required" });
+          }
+        })
+        .safeParse(req.body);
+
+      if (!parsed.success) {
+        return res.status(400).json({ error: fromZodError(parsed.error).message });
       }
 
-      const request = await storage.createIntakeRequest(result.data);
+      const input = parsed.data;
+
+      if (input.caseTypeId) {
+        const ct = await storage.getCaseType(input.caseTypeId);
+        if (!ct) return res.status(400).json({ error: "Invalid case type" });
+        if (!ct.isActive) return res.status(400).json({ error: "Case type is disabled" });
+      }
+
+      const legacy = input.caseTypeLegacy ?? (input.caseTypeId ? "other" : null);
+
+      const request = await storage.createIntakeRequest({
+        beneficiaryId: input.beneficiaryId,
+        caseType: legacy as any,
+        caseTypeId: input.caseTypeId ?? null,
+        description: input.description,
+        status: input.status ?? "pending",
+        reviewedBy: input.reviewedBy ?? null,
+        reviewNotes: input.reviewNotes ?? null,
+        documents: input.documents || [],
+      } as any);
       await createAudit(req.session.userId!, "create", "intake_request", request.id, "Created intake request", req.ip);
       res.json(request);
     } catch (error: any) {

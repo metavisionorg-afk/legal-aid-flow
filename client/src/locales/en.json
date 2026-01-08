@@ -1,4 +1,12 @@
 {
+    "nav": {
+      "cases": "Cases",
+      "cases_list": "Cases",
+      "case_types": "Case Types"
+    },
+    "case_types": {
+      "placeholder": "Case types page coming soon."
+    },
   "app": {
     "title": "Adala Legal Aid",
     "dashboard": "Dashboard",

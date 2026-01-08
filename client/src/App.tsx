@@ -11,6 +11,7 @@ import Dashboard from "@/pages/Dashboard";
 import Intake from "@/pages/Intake";
 import Beneficiaries from "@/pages/Beneficiaries";
 import Cases from "@/pages/Cases";
+import CaseTypes from "@/pages/CaseTypes";
 import CalendarPage from "@/pages/Calendar";
 import Reports from "@/pages/Reports";
 import Settings from "@/pages/Settings";
@@ -118,6 +119,9 @@ function Router() {
       </Route>
       <Route path="/cases/:id" component={Cases} />
       <Route path="/cases" component={Cases} />
+      <Route path="/case-types">
+        {() => <StaffRoute component={CaseTypes} />}
+      </Route>
       <Route path="/lawyers">
         {() => <StaffRoute component={Lawyers} />}
       </Route>

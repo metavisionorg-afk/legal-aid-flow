@@ -3,6 +3,8 @@ import { useTranslation } from "react-i18next";
 import { cn } from "@/lib/utils";
 import { useAuth } from "@/contexts/AuthContext";
 import { isLawyer } from "@/lib/authz";
+import { Collapsible, CollapsibleContent, CollapsibleTrigger } from "@/components/ui/collapsible";
+import { useEffect, useMemo, useState } from "react";
 import {
   LayoutDashboard,
   Users,
@@ -17,7 +19,8 @@ import {
   Settings,
   LogOut,
   FilePlus,
-  BarChart3
+  BarChart3,
+  ChevronDown,
 } from "lucide-react";
 
 export function Sidebar() {
@@ -26,6 +29,18 @@ export function Sidebar() {
   const { user } = useAuth();
 
   const showLawyerPortal = isLawyer(user);
+  const showStaffCasesGroup = Boolean(user && (user as any).userType === "staff");
+
+  const shouldOpenCasesGroup = useMemo(
+    () => Boolean(location.startsWith("/cases") || location.startsWith("/case-types")),
+    [location],
+  );
+
+  const [casesGroupOpen, setCasesGroupOpen] = useState<boolean>(shouldOpenCasesGroup);
+
+  useEffect(() => {
+    if (shouldOpenCasesGroup) setCasesGroupOpen(true);
+  }, [shouldOpenCasesGroup]);
 
   const lawyerNavItems = [
     { icon: LayoutDashboard, label: t("lawyer.dashboard"), href: "/lawyer/dashboard" },
@@ -36,7 +51,6 @@ export function Sidebar() {
     { icon: LayoutDashboard, label: t('app.dashboard'), href: "/" },
     { icon: Users, label: t('app.beneficiaries'), href: "/beneficiaries" },
     { icon: FilePlus, label: t('app.intake'), href: "/intake" },
-    { icon: Briefcase, label: t('app.cases'), href: "/cases" },
     { icon: Scale, label: t('app.lawyers'), href: "/lawyers" },
     { icon: Gavel, label: t('app.sessions'), href: "/sessions" },
     { icon: MessageSquare, label: t('app.consultations'), href: "/consultations" },
@@ -47,6 +61,9 @@ export function Sidebar() {
     { icon: BarChart3, label: t('app.reports'), href: "/reports" },
     { icon: Settings, label: t('app.settings'), href: "/settings" },
   ];
+
+  const casesListActive = Boolean(location === "/cases" || location.startsWith("/cases/"));
+  const caseTypesActive = Boolean(location === "/case-types" || location.startsWith("/case-types/"));
 
   return (
     <div className="h-full w-64 border-r bg-sidebar flex flex-col">
@@ -84,6 +101,62 @@ export function Sidebar() {
             </div>
             <div className="my-2 h-px bg-sidebar-border" />
           </div>
+        ) : null}
+
+        {showStaffCasesGroup ? (
+          <Collapsible open={casesGroupOpen} onOpenChange={setCasesGroupOpen}>
+            <CollapsibleTrigger asChild>
+              <button
+                type="button"
+                className={cn(
+                  "w-full flex items-center justify-between gap-3 px-3 py-2 rounded-md text-sm font-medium transition-colors",
+                  shouldOpenCasesGroup
+                    ? "bg-sidebar-accent/50 text-sidebar-foreground"
+                    : "text-sidebar-foreground/70 hover:bg-sidebar-accent/50 hover:text-sidebar-foreground",
+                )}
+              >
+                <span className="flex items-center gap-3">
+                  <Briefcase className="h-4 w-4 rtl:ml-2 rtl:mr-0" />
+                  {t("nav.cases")}
+                </span>
+                <ChevronDown
+                  className={cn(
+                    "h-4 w-4 transition-transform",
+                    casesGroupOpen ? "rotate-180" : "rotate-0",
+                  )}
+                />
+              </button>
+            </CollapsibleTrigger>
+
+            <CollapsibleContent>
+              <div className="mt-1 space-y-1 pl-7 rtl:pr-7 rtl:pl-0">
+                <Link href="/cases">
+                  <div
+                    className={cn(
+                      "flex items-center gap-3 px-3 py-2 rounded-md text-sm font-medium transition-colors cursor-pointer",
+                      casesListActive
+                        ? "bg-sidebar-accent text-sidebar-accent-foreground"
+                        : "text-sidebar-foreground/70 hover:bg-sidebar-accent/50 hover:text-sidebar-foreground",
+                    )}
+                  >
+                    {t("nav.cases_list")}
+                  </div>
+                </Link>
+                <Link href="/case-types">
+                  <div
+                    className={cn(
+                      "flex items-center gap-3 px-3 py-2 rounded-md text-sm font-medium transition-colors cursor-pointer",
+                      caseTypesActive
+                        ? "bg-sidebar-accent text-sidebar-accent-foreground"
+                        : "text-sidebar-foreground/70 hover:bg-sidebar-accent/50 hover:text-sidebar-foreground",
+                    )}
+                  >
+                    {t("nav.case_types")}
+                  </div>
+                </Link>
+              </div>
+            </CollapsibleContent>
+          </Collapsible>
         ) : null}
 
         {navItems.map((item) => (

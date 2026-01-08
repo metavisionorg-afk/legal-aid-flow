@@ -120,7 +120,15 @@ function Router() {
       <Route path="/cases/:id" component={Cases} />
       <Route path="/cases" component={Cases} />
       <Route path="/case-types">
-        {() => <StaffRoute component={CaseTypes} />}
+        {() => (
+          <StaffRoute
+            component={() => (
+              <RequireRole role={["admin", "super_admin"]}>
+                <CaseTypes />
+              </RequireRole>
+            )}
+          />
+        )}
       </Route>
       <Route path="/lawyers">
         {() => <StaffRoute component={Lawyers} />}

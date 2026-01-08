@@ -714,6 +714,113 @@ export async function registerRoutes(
 
   // ========== BENEFICIARIES ROUTES (STAFF) ==========
 
+  // ========== CASE TYPES ROUTES (STAFF/ADMIN) ==========
+
+  app.get("/api/case-types", requireStaff, requireRole(["admin"]), async (_req: AuthRequest, res) => {
+    try {
+      const rows = await storage.getAllCaseTypes();
+      return res.json(rows);
+    } catch (error: any) {
+      return res.status(500).json({ error: getErrorMessage(error) });
+    }
+  });
+
+  // Active case types are safe to expose to any authenticated user
+  // (staff and beneficiaries) so the case creation forms can populate the dropdown.
+  app.get("/api/case-types/active", requireAuth, async (_req: AuthRequest, res) => {
+    try {
+      const rows = await storage.getActiveCaseTypes();
+      return res.json(rows);
+    } catch (error: any) {
+      return res.status(500).json({ error: getErrorMessage(error) });
+    }
+  });
+
+  app.post("/api/case-types", requireStaff, requireRole(["admin"]), async (req: AuthRequest, res) => {
+    try {
+      const parsed = z
+        .object({
+          nameAr: z.string().trim().min(1),
+          nameEn: z.string().trim().optional().nullable(),
+          sortOrder: z.number().int().optional().nullable(),
+        })
+        .safeParse(req.body);
+
+      if (!parsed.success) {
+        return res.status(400).json({ error: fromZodError(parsed.error).message });
+      }
+
+      const created = await storage.createCaseType({
+        nameAr: parsed.data.nameAr,
+        nameEn: parsed.data.nameEn ?? null,
+        sortOrder: parsed.data.sortOrder ?? 0,
+        isActive: true,
+      } as any);
+
+      return res.status(201).json(created);
+    } catch (error: any) {
+      return res.status(500).json({ error: getErrorMessage(error) });
+    }
+  });
+
+  app.patch("/api/case-types/:id", requireStaff, requireRole(["admin"]), async (req: AuthRequest, res) => {
+    try {
+      const parsed = z
+        .object({
+          nameAr: z.string().trim().min(1).optional(),
+          nameEn: z.string().trim().optional().nullable(),
+          sortOrder: z.number().int().optional().nullable(),
+        })
+        .safeParse(req.body);
+
+      if (!parsed.success) {
+        return res.status(400).json({ error: fromZodError(parsed.error).message });
+      }
+
+      const updated = await storage.updateCaseType(req.params.id, {
+        ...(parsed.data.nameAr != null ? { nameAr: parsed.data.nameAr } : {}),
+        ...(parsed.data.nameEn !== undefined ? { nameEn: parsed.data.nameEn } : {}),
+        ...(parsed.data.sortOrder !== undefined ? { sortOrder: parsed.data.sortOrder ?? 0 } : {}),
+      } as any);
+
+      if (!updated) return res.status(404).json({ error: "Case type not found" });
+      return res.json(updated);
+    } catch (error: any) {
+      return res.status(500).json({ error: getErrorMessage(error) });
+    }
+  });
+
+  app.patch("/api/case-types/:id/toggle", requireStaff, requireRole(["admin"]), async (req: AuthRequest, res) => {
+    try {
+      const parsed = z.object({ isActive: z.boolean() }).safeParse(req.body);
+      if (!parsed.success) {
+        return res.status(400).json({ error: fromZodError(parsed.error).message });
+      }
+
+      const updated = await storage.toggleCaseType(req.params.id, parsed.data.isActive);
+      if (!updated) return res.status(404).json({ error: "Case type not found" });
+      return res.json(updated);
+    } catch (error: any) {
+      return res.status(500).json({ error: getErrorMessage(error) });
+    }
+  });
+
+  app.delete("/api/case-types/:id", requireStaff, requireRole(["admin"]), async (req: AuthRequest, res) => {
+    try {
+      const result = await storage.deleteCaseType(req.params.id);
+      if (!result.ok && result.reason === "not_found") {
+        return res.status(404).json({ error: "Case type not found" });
+      }
+      if (!result.ok && result.reason === "linked") {
+        return res.status(409).json({ error: "Cannot delete: case type is linked to existing cases" });
+      }
+
+      return res.json({ success: true });
+    } catch (error: any) {
+      return res.status(500).json({ error: getErrorMessage(error) });
+    }
+  });
+
   app.get("/api/beneficiaries", requireStaff, async (req, res) => {
     try {
       const beneficiaries = await storage.getAllBeneficiaries();
@@ -1264,6 +1371,19 @@ export async function registerRoutes(
         return res.status(401).json({ error: "Unauthorized" });
       }
 
+      const resolveCaseTypeSnapshot = async (caseTypeIdRaw: unknown) => {
+        const caseTypeId = typeof caseTypeIdRaw === "string" && caseTypeIdRaw.trim() ? caseTypeIdRaw.trim() : null;
+        if (!caseTypeId) return null;
+        const ct = await storage.getCaseType(caseTypeId);
+        if (!ct) throw new Error("Invalid case type");
+        if (!ct.isActive) throw new Error("Case type is disabled");
+        return {
+          caseTypeId: ct.id,
+          caseTypeNameAr: ct.nameAr,
+          caseTypeNameEn: ct.nameEn ?? null,
+        };
+      };
+
       // Beneficiary self-create
       if (user.userType === "beneficiary" || user.role === "beneficiary") {
         const beneficiary = await storage.getBeneficiaryByUserId(user.id);
@@ -1271,26 +1391,39 @@ export async function registerRoutes(
           return res.status(404).json({ error: "Beneficiary profile not found" });
         }
 
-        const parsed = insertCaseSchema
-          .omit({
-            beneficiaryId: true,
-            status: true,
-            assignedLawyerId: true,
-            acceptedByUserId: true,
-            acceptedAt: true,
-            completedAt: true,
-            internalNotes: true,
+        const parsed = z
+          .object({
+            caseNumber: z.string().trim().min(1),
+            title: z.string().trim().min(1),
+            description: z.string().optional().nullable(),
+            caseType: z.string().optional().nullable(),
+            caseTypeId: z.string().optional().nullable(),
+            opponentName: z.string().optional().nullable(),
+            opponentLawyer: z.string().optional().nullable(),
+            opponentContact: z.string().optional().nullable(),
+            priority: z.string().optional().nullable(),
           })
           .safeParse(req.body);
 
-        if (!parsed.success) {
-          return res.status(400).json({ error: fromZodError(parsed.error).message });
-        }
+        if (!parsed.success) return res.status(400).json({ error: fromZodError(parsed.error).message });
+
+        const snapshot = await resolveCaseTypeSnapshot(parsed.data.caseTypeId);
 
         const created = await storage.createCase({
-          ...(parsed.data as any),
+          caseNumber: parsed.data.caseNumber,
+          title: parsed.data.title,
           beneficiaryId: beneficiary.id,
-          status: "pending_review",
+          // Keep legacy enum populated to avoid breaking existing DB constraints.
+          caseType: ((parsed.data.caseType as any) || "civil") as any,
+          caseTypeId: snapshot?.caseTypeId ?? null,
+          caseTypeNameAr: snapshot?.caseTypeNameAr ?? null,
+          caseTypeNameEn: snapshot?.caseTypeNameEn ?? null,
+          description: parsed.data.description ?? "",
+          opponentName: parsed.data.opponentName ?? null,
+          opponentLawyer: parsed.data.opponentLawyer ?? null,
+          opponentContact: parsed.data.opponentContact ?? null,
+          status: "pending_review" as any,
+          priority: (parsed.data.priority as any) ?? "medium",
           assignedLawyerId: null,
           acceptedByUserId: null,
           acceptedAt: null,
@@ -1315,27 +1448,45 @@ export async function registerRoutes(
         return res.status(403).json({ error: "Forbidden" });
       }
 
-      const parsed = insertCaseSchema
-        .omit({
-          status: true,
-          assignedLawyerId: true,
-          acceptedByUserId: true,
-          acceptedAt: true,
-          completedAt: true,
+      const parsed = z
+        .object({
+          caseNumber: z.string().trim().min(1),
+          title: z.string().trim().min(1),
+          beneficiaryId: z.string().trim().min(1),
+          description: z.string().min(1),
+          caseType: z.string().optional().nullable(),
+          caseTypeId: z.string().optional().nullable(),
+          opponentName: z.string().optional().nullable(),
+          opponentLawyer: z.string().optional().nullable(),
+          opponentContact: z.string().optional().nullable(),
+          priority: z.string().optional().nullable(),
+          internalNotes: z.string().optional().nullable(),
         })
         .safeParse(req.body);
 
-      if (!parsed.success) {
-        return res.status(400).json({ error: fromZodError(parsed.error).message });
-      }
+      if (!parsed.success) return res.status(400).json({ error: fromZodError(parsed.error).message });
+
+      const snapshot = await resolveCaseTypeSnapshot(parsed.data.caseTypeId);
 
       const created = await storage.createCase({
-        ...(parsed.data as any),
-        status: "accepted_pending_assignment",
+        caseNumber: parsed.data.caseNumber,
+        title: parsed.data.title,
+        beneficiaryId: parsed.data.beneficiaryId,
+        caseType: ((parsed.data.caseType as any) || "civil") as any,
+        caseTypeId: snapshot?.caseTypeId ?? null,
+        caseTypeNameAr: snapshot?.caseTypeNameAr ?? null,
+        caseTypeNameEn: snapshot?.caseTypeNameEn ?? null,
+        description: parsed.data.description,
+        opponentName: parsed.data.opponentName ?? null,
+        opponentLawyer: parsed.data.opponentLawyer ?? null,
+        opponentContact: parsed.data.opponentContact ?? null,
+        status: "accepted_pending_assignment" as any,
+        priority: (parsed.data.priority as any) ?? "medium",
         assignedLawyerId: null,
         acceptedByUserId: user.id,
         acceptedAt: new Date(),
         completedAt: null,
+        internalNotes: parsed.data.internalNotes ?? null,
       } as any);
 
       await storage.createCaseTimelineEvent({

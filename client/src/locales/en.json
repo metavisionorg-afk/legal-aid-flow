@@ -5,7 +5,36 @@
       "case_types": "Case Types"
     },
     "case_types": {
-      "placeholder": "Case types page coming soon."
+      "subtitle": "Manage the case types list used across the system.",
+      "table": {
+        "title": "Case Types"
+      },
+      "fields": {
+        "name_ar": "Name (Arabic)",
+        "name_en": "Name (English)",
+        "sort_order": "Sort order",
+        "active": "Active",
+        "cases_count": "Linked cases"
+      },
+      "actions": {
+        "add": "Add case type",
+        "edit": "Edit",
+        "delete": "Delete"
+      },
+      "dialog": {
+        "add_title": "Add case type",
+        "edit_title": "Edit case type"
+      },
+      "toasts": {
+        "created": "Case type created",
+        "updated": "Case type updated",
+        "deleted": "Case type deleted"
+      },
+      "errors": {
+        "name_ar_required": "Arabic name is required"
+      },
+      "empty": "No case types yet.",
+      "hint_delete": "Tip: You can disable a type instead of deleting it."
     },
   "app": {
     "title": "Adala Legal Aid",

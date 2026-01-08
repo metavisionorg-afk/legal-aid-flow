@@ -433,6 +433,30 @@ export const enhancedDashboardAPI = {
   getStats: () => fetchAPI("/dashboard/enhanced-stats"),
 };
 
+// Case Types API (Staff/admin management + active list for authenticated users)
+export const caseTypesAPI = {
+  listAll: () => fetchAPI("/case-types"),
+  listActive: () => fetchAPI("/case-types/active"),
+  create: (data: { nameAr: string; nameEn?: string | null; sortOrder?: number | null }) =>
+    fetchAPI("/case-types", {
+      method: "POST",
+      body: JSON.stringify(data),
+    }),
+  update: (id: string, data: { nameAr?: string; nameEn?: string | null; sortOrder?: number | null }) =>
+    fetchAPI(`/case-types/${id}`,
+      {
+        method: "PATCH",
+        body: JSON.stringify(data),
+      }
+    ),
+  toggle: (id: string, isActive: boolean) =>
+    fetchAPI(`/case-types/${id}/toggle`, {
+      method: "PATCH",
+      body: JSON.stringify({ isActive }),
+    }),
+  delete: (id: string) => fetchAPI(`/case-types/${id}`, { method: "DELETE" }),
+};
+
 // Lawyer Portal API (Staff role=lawyer)
 export const lawyerAPI = {
   getDashboard: () => fetchAPI("/lawyer/me/dashboard"),

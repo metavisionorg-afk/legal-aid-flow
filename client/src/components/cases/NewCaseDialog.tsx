@@ -36,7 +36,7 @@ import { Switch as ToggleSwitch } from "@/components/ui/switch";
 import { Badge } from "@/components/ui/badge";
 import { Plus } from "lucide-react";
 import { useToast } from "@/hooks/use-toast";
-import { beneficiariesAPI, caseDetailsAPI, casesAPI, uploadsAPI } from "@/lib/api";
+import { beneficiariesAPI, caseDetailsAPI, caseTypesAPI, casesAPI, uploadsAPI } from "@/lib/api";
 import { cn } from "@/lib/utils";
 import { getErrorMessage } from "@/lib/errors";
 import { useAuth } from "@/contexts/AuthContext";
@@ -46,9 +46,17 @@ const fileSchema = z.custom<File>((value) => value instanceof File, {
   message: "File is required",
 });
 
-const caseTypes = ["civil", "criminal", "family", "labor", "asylum"] as const;
+const legacyCaseTypes = ["civil", "criminal", "family", "labor", "asylum"] as const;
 
-type CaseType = (typeof caseTypes)[number];
+type LegacyCaseType = (typeof legacyCaseTypes)[number];
+
+type ActiveCaseType = {
+  id: string;
+  nameAr: string;
+  nameEn: string | null;
+  isActive: boolean;
+  sortOrder: number;
+};
 
 const formSchema = z
   .object({
@@ -56,7 +64,8 @@ const formSchema = z
     caseNumber: z.string().min(1, "Case number is required"),
     title: z.string().min(1, "Title is required"),
     beneficiaryId: z.string().optional().nullable(),
-    caseType: z.enum(caseTypes, { required_error: "Case type is required" }),
+    caseTypeId: z.string().optional().nullable(),
+    caseType: z.enum(legacyCaseTypes).optional().nullable(),
     description: z.string().optional().nullable(),
 
     // Step 2
@@ -91,6 +100,14 @@ const formSchema = z
     }),
   })
   .superRefine((data, ctx) => {
+    if (!data.caseTypeId && !data.caseType) {
+      ctx.addIssue({
+        code: z.ZodIssueCode.custom,
+        path: ["caseTypeId"],
+        message: "Case type is required",
+      });
+    }
+
     if (data.urgency && !data.urgencyDate) {
       ctx.addIssue({
         code: z.ZodIssueCode.custom,
@@ -138,7 +155,7 @@ function Stepper({ current, steps }: { current: number; steps: Step[] }) {
 }
 
 export function NewCaseDialog() {
-  const { t } = useTranslation();
+  const { t, i18n } = useTranslation();
   const { toast } = useToast();
   const queryClient = useQueryClient();
   const [, setLocation] = useLocation();
@@ -162,8 +179,11 @@ export function NewCaseDialog() {
     ];
   }, [t, isBen]);
 
-  const caseTypeLabel = (value: CaseType | string) =>
+  const legacyCaseTypeLabel = (value: LegacyCaseType | string) =>
     t(`cases.case_types.${String(value)}`, { defaultValue: String(value) });
+
+  const isArabic = String(i18n.language || "").toLowerCase().startsWith("ar");
+  const activeCaseTypeLabel = (ct: ActiveCaseType) => (isArabic ? ct.nameAr : ct.nameEn || ct.nameAr);
 
   const [open, setOpen] = useState(false);
   const [step, setStep] = useState(0);
@@ -172,6 +192,13 @@ export function NewCaseDialog() {
     queryKey: ["beneficiaries"],
     queryFn: beneficiariesAPI.getAll,
     enabled: open && !isBen,
+  });
+
+  const { data: activeCaseTypes, isLoading: activeCaseTypesLoading } = useQuery({
+    queryKey: ["case-types", "active"],
+    queryFn: caseTypesAPI.listActive,
+    enabled: open,
+    staleTime: 5 * 60 * 1000,
   });
 
   const schema = useMemo(
@@ -204,6 +231,7 @@ export function NewCaseDialog() {
       caseNumber: "",
       title: "",
       beneficiaryId: "",
+      caseTypeId: null,
       caseType: "civil",
       description: "",
       issueSummary: "",
@@ -230,7 +258,8 @@ export function NewCaseDialog() {
         caseNumber: values.caseNumber.trim(),
         title: values.title.trim(),
         ...(isBen ? {} : { beneficiaryId: values.beneficiaryId }),
-        caseType: values.caseType,
+        caseTypeId: values.caseTypeId ? String(values.caseTypeId) : undefined,
+        caseType: values.caseType ?? undefined,
         description: values.description?.trim() ? values.description.trim() : "",
         priority: "medium",
       });
@@ -280,8 +309,8 @@ export function NewCaseDialog() {
   });
 
   const stepFields: Array<Array<keyof FormValues>> = isBen
-    ? [["caseNumber", "title", "caseType"], [], ["acknowledge"]]
-    : [["caseNumber", "title", "beneficiaryId", "caseType"], ["issueSummary", "urgency", "urgencyDate"], [], ["acknowledge"]];
+    ? [["caseNumber", "title", "caseTypeId"], [], ["acknowledge"]]
+    : [["caseNumber", "title", "beneficiaryId", "caseTypeId"], ["issueSummary", "urgency", "urgencyDate"], [], ["acknowledge"]];
 
   const goNext = async () => {
     const fields = stepFields[step] || [];
@@ -422,22 +451,58 @@ export function NewCaseDialog() {
 
                 <FormField
                   control={form.control}
-                  name="caseType"
+                  name="caseTypeId"
                   render={({ field }) => (
                     <FormItem>
                       <FormLabel>{t("intake.case_type")}</FormLabel>
-                      <Select value={field.value} onValueChange={field.onChange}>
+                      <Select
+                        value={
+                          field.value
+                            ? `id:${String(field.value)}`
+                            : form.getValues("caseType")
+                              ? `legacy:${String(form.getValues("caseType"))}`
+                              : ""
+                        }
+                        onValueChange={(value) => {
+                          if (value.startsWith("id:")) {
+                            const id = value.slice(3);
+                            field.onChange(id);
+                            form.setValue("caseType", null, { shouldValidate: true });
+                            return;
+                          }
+
+                          if (value.startsWith("legacy:")) {
+                            const legacy = value.slice(7) as LegacyCaseType;
+                            field.onChange(null);
+                            form.setValue("caseType", legacy, { shouldValidate: true });
+                            return;
+                          }
+
+                          field.onChange(null);
+                          form.setValue("caseType", null, { shouldValidate: true });
+                        }}
+                      >
                         <FormControl>
                           <SelectTrigger data-testid="select-case-type">
-                            <SelectValue placeholder={t("intake.case_type")} />
+                            <SelectValue
+                              placeholder={activeCaseTypesLoading ? t("common.loading") : t("intake.case_type")}
+                            />
                           </SelectTrigger>
                         </FormControl>
                         <SelectContent onCloseAutoFocus={(e) => e.preventDefault()}>
-                          <SelectItem value="civil">{caseTypeLabel("civil")}</SelectItem>
-                          <SelectItem value="criminal">{caseTypeLabel("criminal")}</SelectItem>
-                          <SelectItem value="family">{caseTypeLabel("family")}</SelectItem>
-                          <SelectItem value="labor">{caseTypeLabel("labor")}</SelectItem>
-                          <SelectItem value="asylum">{caseTypeLabel("asylum")}</SelectItem>
+                          {(activeCaseTypes || []).length ? (
+                            (activeCaseTypes || []).map((ct: ActiveCaseType) => (
+                              <SelectItem key={ct.id} value={`id:${ct.id}`}>
+                                {activeCaseTypeLabel(ct)}
+                              </SelectItem>
+                            ))
+                          ) : (
+                            legacyCaseTypes.map((ct) => (
+                              <SelectItem key={ct} value={`legacy:${ct}`}>
+                                {legacyCaseTypeLabel(ct)}
+                              </SelectItem>
+                            ))
+                          )}
                         </SelectContent>
                       </Select>
                       <FormMessage />
@@ -740,7 +805,18 @@ export function NewCaseDialog() {
                         ) : null}
                         <div>
                           <div className="text-muted-foreground">{t("intake.case_type")}</div>
-                          <div className="font-medium">{caseTypeLabel(form.getValues("caseType"))}</div>
+                          <div className="font-medium">
+                            {(() => {
+                              const selectedId = form.getValues("caseTypeId");
+                              if (selectedId && (activeCaseTypes || []).length) {
+                                const hit = (activeCaseTypes as any[]).find((ct) => String(ct.id) === String(selectedId));
+                                return hit ? activeCaseTypeLabel(hit as any) : String(selectedId);
+                              }
+
+                              const legacy = form.getValues("caseType");
+                              return legacy ? legacyCaseTypeLabel(String(legacy)) : "";
+                            })()}
+                          </div>
                         </div>
 
                         {description?.trim() ? (

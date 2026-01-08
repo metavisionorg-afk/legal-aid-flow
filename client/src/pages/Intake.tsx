@@ -22,12 +22,15 @@ import { beneficiariesAPI, intakeAPI } from "@/lib/api";
 import { useMutation, useQueryClient } from "@tanstack/react-query";
 import { useState } from "react";
 
+const INTAKE_CASE_TYPE_VALUES = ["civil", "criminal", "family", "labor", "asylum"] as const;
+type IntakeCaseType = (typeof INTAKE_CASE_TYPE_VALUES)[number];
+
 const formSchema = z.object({
   fullName: z.string().min(2, "Name is required"),
   phone: z.string().min(8, "Valid phone number required"),
   idNumber: z.string().min(5, "ID Number required"),
   email: z.string().email().optional().or(z.literal("")),
-  caseType: z.string(),
+  caseType: z.enum(INTAKE_CASE_TYPE_VALUES),
   description: z.string().min(10, "Description must be at least 10 characters"),
 });
 
@@ -44,7 +47,7 @@ export default function Intake() {
       phone: "",
       idNumber: "",
       email: "",
-      caseType: "civil",
+      caseType: "civil" satisfies IntakeCaseType,
       description: "",
     },
   });
@@ -165,11 +168,11 @@ export default function Intake() {
                             </SelectTrigger>
                           </FormControl>
                           <SelectContent>
-                            <SelectItem value="civil">Civil</SelectItem>
-                            <SelectItem value="criminal">Criminal</SelectItem>
-                            <SelectItem value="family">Family/Personal Status</SelectItem>
-                            <SelectItem value="labor">Labor</SelectItem>
-                            <SelectItem value="asylum">Asylum/Refugee</SelectItem>
+                            <SelectItem value="civil">{t("cases.case_types.civil")}</SelectItem>
+                            <SelectItem value="criminal">{t("cases.case_types.criminal")}</SelectItem>
+                            <SelectItem value="family">{t("cases.case_types.family")}</SelectItem>
+                            <SelectItem value="labor">{t("cases.case_types.labor")}</SelectItem>
+                            <SelectItem value="asylum">{t("cases.case_types.asylum")}</SelectItem>
                           </SelectContent>
                         </Select>
                         <FormMessage />

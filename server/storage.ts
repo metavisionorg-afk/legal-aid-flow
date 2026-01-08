@@ -42,6 +42,8 @@ import type {
   InsertTask,
   Session,
   InsertSession,
+  CaseType,
+  InsertCaseType,
 } from "@shared/schema";
 
 const connectionString =
@@ -265,6 +267,15 @@ export interface IStorage {
     totalBeneficiaries: number;
     upcomingSessions: number;
   }>;
+
+  // Case Types (dynamic)
+  getAllCaseTypes(): Promise<Array<CaseType & { casesCount: number }>>;
+  getActiveCaseTypes(): Promise<CaseType[]>;
+  getCaseType(id: string): Promise<CaseType | undefined>;
+  createCaseType(input: InsertCaseType): Promise<CaseType>;
+  updateCaseType(id: string, updates: Partial<InsertCaseType>): Promise<CaseType | undefined>;
+  toggleCaseType(id: string, isActive: boolean): Promise<CaseType | undefined>;
+  deleteCaseType(id: string): Promise<{ ok: boolean; reason?: "linked" | "not_found" }>; 
 }
 
 export class DatabaseStorage implements IStorage {
@@ -1183,6 +1194,77 @@ export class DatabaseStorage implements IStorage {
       totalBeneficiaries: Number(totalBeneficiaries?.count || 0),
       upcomingSessions: Number(upcomingSessions?.count || 0),
     };
+  }
+
+  // ===== Case Types =====
+
+  async getAllCaseTypes(): Promise<Array<CaseType & { casesCount: number }>> {
+    const rows = await db
+      .select({
+        caseType: schema.caseTypes,
+        casesCount: sql<number>`count(${schema.cases.id})`,
+      })
+      .from(schema.caseTypes)
+      .leftJoin(schema.cases, eq(schema.cases.caseTypeId, schema.caseTypes.id))
+      .groupBy(schema.caseTypes.id)
+      .orderBy(asc(schema.caseTypes.sortOrder), asc(schema.caseTypes.createdAt));
+
+    return rows.map((r) => ({
+      ...(r.caseType as any),
+      casesCount: Number(r.casesCount || 0),
+    }));
+  }
+
+  async getActiveCaseTypes(): Promise<CaseType[]> {
+    return db
+      .select()
+      .from(schema.caseTypes)
+      .where(eq(schema.caseTypes.isActive, true))
+      .orderBy(asc(schema.caseTypes.sortOrder), asc(schema.caseTypes.createdAt));
+  }
+
+  async getCaseType(id: string): Promise<CaseType | undefined> {
+    const [row] = await db.select().from(schema.caseTypes).where(eq(schema.caseTypes.id, id));
+    return row;
+  }
+
+  async createCaseType(input: InsertCaseType): Promise<CaseType> {
+    const [row] = await db.insert(schema.caseTypes).values(input as any).returning();
+    return row;
+  }
+
+  async updateCaseType(id: string, updates: Partial<InsertCaseType>): Promise<CaseType | undefined> {
+    const [row] = await db
+      .update(schema.caseTypes)
+      .set({ ...(updates as any), updatedAt: new Date() })
+      .where(eq(schema.caseTypes.id, id))
+      .returning();
+    return row;
+  }
+
+  async toggleCaseType(id: string, isActive: boolean): Promise<CaseType | undefined> {
+    const [row] = await db
+      .update(schema.caseTypes)
+      .set({ isActive, updatedAt: new Date() })
+      .where(eq(schema.caseTypes.id, id))
+      .returning();
+    return row;
+  }
+
+  async deleteCaseType(id: string): Promise<{ ok: boolean; reason?: "linked" | "not_found" }> {
+    const [existing] = await db.select().from(schema.caseTypes).where(eq(schema.caseTypes.id, id));
+    if (!existing) return { ok: false, reason: "not_found" };
+
+    const [usage] = await db
+      .select({ count: sql<number>`count(*)` })
+      .from(schema.cases)
+      .where(eq(schema.cases.caseTypeId, id));
+
+    const count = Number((usage as any)?.count || 0);
+    if (count > 0) return { ok: false, reason: "linked" };
+
+    const result = await db.delete(schema.caseTypes).where(eq(schema.caseTypes.id, id));
+    return { ok: Boolean(result.rowCount && result.rowCount > 0) };
   }
 }
 

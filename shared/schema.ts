@@ -83,6 +83,25 @@ export const permissionEnum = pgEnum("permission", [
   "intake:self:create"
 ]);
 
+// Case Types (dynamic list managed by staff)
+export const caseTypes = pgTable("case_types", {
+  id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
+  nameAr: text("name_ar").notNull(),
+  nameEn: text("name_en"),
+  isActive: boolean("is_active").notNull().default(true),
+  sortOrder: integer("sort_order").notNull().default(0),
+  createdAt: timestamp("created_at").notNull().defaultNow(),
+  updatedAt: timestamp("updated_at").notNull().defaultNow(),
+});
+
+export const insertCaseTypeSchema = createInsertSchema(caseTypes).omit({
+  id: true,
+  createdAt: true,
+  updatedAt: true,
+});
+export type InsertCaseType = z.infer<typeof insertCaseTypeSchema>;
+export type CaseType = typeof caseTypes.$inferSelect;
+
 // Users table
 export const users = pgTable("users", {
   id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
@@ -208,6 +227,10 @@ export const cases = pgTable("cases", {
   title: text("title").notNull(),
   beneficiaryId: varchar("beneficiary_id").notNull().references(() => beneficiaries.id),
   caseType: caseTypeEnum("case_type").notNull(),
+  // Stage: dynamic case types (non-breaking). Legacy enum remains the canonical DB type.
+  caseTypeId: varchar("case_type_id").references(() => caseTypes.id),
+  caseTypeNameAr: text("case_type_name_ar"),
+  caseTypeNameEn: text("case_type_name_en"),
   description: text("description").notNull(),
   opponentName: text("opponent_name"),
   opponentLawyer: text("opponent_lawyer"),

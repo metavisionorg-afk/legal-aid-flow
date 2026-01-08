@@ -330,6 +330,16 @@ async function main() {
       activeCaseTypesCount = Number(activeCountRes.rows[0]?.count || 0);
     }
 
+    if (totalCaseTypesCount === 0) {
+      console.warn(
+        "WARNING: case_types is empty (totalCount=0). No rows can be matched/updated until case types are created.",
+      );
+    } else if (hasIsActive && !includeInactive && activeCaseTypesCount === 0) {
+      console.warn(
+        "WARNING: includeInactive=0 and there are zero active case types. Matching will find no results; consider activating case types or re-running with INCLUDE_INACTIVE=1.",
+      );
+    }
+
     const selectCols = [
       "id",
       "name_ar",

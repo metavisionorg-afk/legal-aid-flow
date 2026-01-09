@@ -1,5 +1,5 @@
 import { sql } from "drizzle-orm";
-import { pgTable, text, varchar, timestamp, integer, pgEnum, boolean, date } from "drizzle-orm/pg-core";
+import { pgTable, text, varchar, timestamp, integer, pgEnum, boolean, date, index } from "drizzle-orm/pg-core";
 import { createInsertSchema } from "drizzle-zod";
 import { z } from "zod";
 
@@ -38,7 +38,16 @@ export const intakeStatusEnum = pgEnum("intake_status", ["pending", "approved", 
 export const beneficiaryStatusEnum = pgEnum("beneficiary_status", ["active", "pending", "archived"]);
 export const appointmentTypeEnum = pgEnum("appointment_type", ["online", "in_person"]);
 export const appointmentStatusEnum = pgEnum("appointment_status", ["pending", "confirmed", "cancelled", "completed"]);
-export const taskStatusEnum = pgEnum("task_status", ["pending", "in_progress", "completed", "cancelled"]);
+// NOTE: Add-only enum values to avoid destructive drops in existing DBs.
+export const taskStatusEnum = pgEnum("task_status", [
+  "pending",
+  "in_progress",
+  "follow_up",
+  "awaiting_beneficiary",
+  "under_review",
+  "completed",
+  "cancelled",
+]);
 export const taskTypeEnum = pgEnum("task_type", ["follow_up", "document_preparation", "court_appearance", "client_meeting", "research", "other"]);
 export const paymentMethodEnum = pgEnum("payment_method", ["cash", "transfer", "sadad", "cheque"]);
 export const voucherTypeEnum = pgEnum("voucher_type", ["receipt", "disbursement"]);
@@ -68,7 +77,12 @@ export const serviceTypeEnum = pgEnum("service_type", [
   "mediation",
 ]);
 export const serviceRequestStatusEnum = pgEnum("service_request_status", ["new", "in_review", "accepted", "rejected"]);
-export const documentOwnerTypeEnum = pgEnum("document_owner_type", ["beneficiary"]);
+export const documentOwnerTypeEnum = pgEnum("document_owner_type", [
+  "beneficiary",
+  "session",
+  "power_of_attorney",
+  "task",
+]);
 export const documentVisibilityEnum = pgEnum("document_visibility", ["INTERNAL", "BENEFICIARY"]);
 export const permissionEnum = pgEnum("permission", [
   "view_dashboard", "manage_users", "manage_beneficiaries", "manage_cases",
@@ -266,6 +280,7 @@ export const caseTimelineEventTypeEnum = pgEnum("case_timeline_event_type", [
   "assigned_lawyer",
   "lawyer_assigned",
   "status_changed",
+  "session_added",
 ]);
 
 export const caseTimelineEvents = pgTable("case_timeline_events", {
@@ -369,6 +384,7 @@ export const notifications = pgTable("notifications", {
   type: text("type").notNull(),
   title: text("title").notNull(),
   message: text("message").notNull(),
+  url: text("url"),
   isRead: boolean("is_read").notNull().default(false),
   relatedEntityId: text("related_entity_id"),
   createdAt: timestamp("created_at").notNull().defaultNow(),
@@ -442,6 +458,10 @@ export const tasks = pgTable("tasks", {
   title: text("title").notNull(),
   description: text("description"),
   taskType: taskTypeEnum("task_type").notNull(),
+  // New (Stage 4): primary target beneficiary. Nullable for backward compatibility.
+  beneficiaryId: varchar("beneficiary_id").references(() => beneficiaries.id),
+  // Optional: linked lawyer (staff user)
+  lawyerId: varchar("lawyer_id").references(() => users.id),
   assignedTo: varchar("assigned_to").notNull().references(() => users.id),
   assignedBy: varchar("assigned_by").notNull().references(() => users.id),
   caseId: varchar("case_id").references(() => cases.id),
@@ -458,20 +478,44 @@ export type InsertTask = z.infer<typeof insertTaskSchema>;
 export type Task = typeof tasks.$inferSelect;
 
 // Sessions table (court sessions with Hijri/Gregorian dates)
-export const sessions = pgTable("sessions", {
+export const sessions = pgTable(
+  "sessions",
+  {
   id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
   caseId: varchar("case_id").notNull().references(() => cases.id),
   title: text("title").notNull(),
   sessionNumber: integer("session_number"),
   gregorianDate: timestamp("gregorian_date").notNull(),
+  // Stage: separate time field for UI + uniqueness checks.
+  time: text("time"),
   hijriDate: text("hijri_date"),
+  // Court/session details
+  courtName: text("court_name"),
+  city: text("city"),
+  circuit: text("circuit"),
+
+  // Logistics
+  sessionType: text("session_type"),
+  status: text("status"),
+  meetingUrl: text("meeting_url"),
+  requirements: text("requirements"),
+  isConfidential: boolean("is_confidential").notNull().default(false),
+  reminderMinutes: integer("reminder_minutes"),
+  addToTimeline: boolean("add_to_timeline").notNull().default(true),
+
+  // Legacy/extra fields kept for backward compatibility.
   location: text("location"),
   notes: text("notes"),
   outcome: text("outcome"),
   nextSessionDate: timestamp("next_session_date"),
   createdAt: timestamp("created_at").notNull().defaultNow(),
   updatedAt: timestamp("updated_at").notNull().defaultNow(),
-});
+  },
+  (t) => ({
+    caseIdIdx: index("sessions_case_id_idx").on(t.caseId),
+    gregorianDateIdx: index("sessions_gregorian_date_idx").on(t.gregorianDate),
+  }),
+);
 
 export const insertSessionSchema = createInsertSchema(sessions).omit({ id: true, createdAt: true, updatedAt: true });
 export type InsertSession = z.infer<typeof insertSessionSchema>;
@@ -499,7 +543,9 @@ export type InsertConsultation = z.infer<typeof insertConsultationSchema>;
 export type Consultation = typeof consultations.$inferSelect;
 
 // Power of Attorney table
-export const powerOfAttorney = pgTable("power_of_attorney", {
+export const powerOfAttorney = pgTable(
+  "power_of_attorney",
+  {
   id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
   poaNumber: text("poa_number").notNull().unique(),
   beneficiaryId: varchar("beneficiary_id").notNull().references(() => beneficiaries.id),
@@ -514,7 +560,14 @@ export const powerOfAttorney = pgTable("power_of_attorney", {
   notes: text("notes"),
   createdAt: timestamp("created_at").notNull().defaultNow(),
   updatedAt: timestamp("updated_at").notNull().defaultNow(),
-});
+  },
+  (t) => ({
+    beneficiaryIdx: index("power_of_attorney_beneficiary_id_idx").on(t.beneficiaryId),
+    caseIdx: index("power_of_attorney_case_id_idx").on(t.caseId),
+    isActiveIdx: index("power_of_attorney_is_active_idx").on(t.isActive),
+    expiryIdx: index("power_of_attorney_expiry_date_idx").on(t.expiryDate),
+  }),
+);
 
 export const insertPowerOfAttorneySchema = createInsertSchema(powerOfAttorney).omit({ id: true, createdAt: true, updatedAt: true });
 export type InsertPowerOfAttorney = z.infer<typeof insertPowerOfAttorneySchema>;

@@ -1,7 +1,7 @@
 import { drizzle } from "drizzle-orm/node-postgres";
 import pkg from "pg";
 const { Pool } = pkg;
-import { eq, desc, and, sql, gte, lte, asc } from "drizzle-orm";
+import { eq, desc, and, or, sql, gte, lte, asc, inArray } from "drizzle-orm";
 import * as schema from "@shared/schema";
 import type {
   User,
@@ -144,6 +144,22 @@ export interface IStorage {
 
   getDocumentsByBeneficiary(beneficiaryId: string): Promise<Document[]>;
 
+  // Session Documents
+  attachDocumentsToSession(input: {
+    uploadedBy: string;
+    beneficiaryId: string;
+    caseId: string;
+    sessionId: string;
+    documents: Array<{
+      storageKey: string;
+      fileUrl: string;
+      fileName: string;
+      mimeType: string;
+      size: number;
+    }>;
+  }): Promise<Document[]>;
+  getDocumentsBySession(sessionId: string): Promise<Document[]>;
+
   // Intake Requests
   getIntakeRequest(id: string): Promise<IntakeRequestWithCaseType | undefined>;
   getAllIntakeRequests(): Promise<IntakeRequestWithCaseType[]>;
@@ -199,6 +215,10 @@ export interface IStorage {
   markNotificationAsRead(id: string): Promise<Notification | undefined>;
   markAllNotificationsAsRead(userId: string): Promise<void>;
 
+  // Notifications (current user)
+  listMyNotifications(userId: string): Promise<Notification[]>;
+  markNotificationRead(userId: string, notificationId: string): Promise<Notification | undefined>;
+
   // Audit Log
   createAuditLog(log: InsertAuditLog): Promise<AuditLog>;
   getAuditLogs(limit?: number): Promise<AuditLog[]>;
@@ -246,6 +266,27 @@ export interface IStorage {
   updateTask(id: string, updates: Partial<InsertTask>): Promise<Task | undefined>;
   deleteTask(id: string): Promise<boolean>;
 
+  // Tasks (scoped)
+  listTasksForAdmin(): Promise<Task[]>;
+  listTasksForLawyer(userId: string): Promise<Task[]>;
+  listTasksForBeneficiary(beneficiaryId: string, beneficiaryUserId?: string): Promise<Task[]>;
+
+  // Task attachments (documents)
+  attachDocumentsToTask(input: {
+    uploadedBy: string;
+    beneficiaryId: string;
+    taskId: string;
+    isPublic: boolean;
+    documents: Array<{
+      storageKey: string;
+      fileUrl: string;
+      fileName: string;
+      mimeType: string;
+      size: number;
+    }>;
+  }): Promise<Document[]>;
+  getDocumentsByTask(taskId: string): Promise<Document[]>;
+
   // Sessions
   getSession(id: string): Promise<Session | undefined>;
   getAllSessions(): Promise<Session[]>;
@@ -262,6 +303,30 @@ export interface IStorage {
   createConsultation(consultation: schema.InsertConsultation): Promise<schema.Consultation>;
   updateConsultation(id: string, updates: Partial<schema.InsertConsultation>): Promise<schema.Consultation | undefined>;
   deleteConsultation(id: string): Promise<boolean>;
+
+  // Powers of Attorney
+  getPowerOfAttorney(id: string): Promise<schema.PowerOfAttorney | undefined>;
+  getAllPowersOfAttorney(): Promise<schema.PowerOfAttorney[]>;
+  getPowersOfAttorneyByCase(caseId: string): Promise<schema.PowerOfAttorney[]>;
+  getPowersOfAttorneyByBeneficiary(beneficiaryId: string): Promise<schema.PowerOfAttorney[]>;
+  getExpiringPowersOfAttorney(input: { days: number }): Promise<schema.PowerOfAttorney[]>;
+  createPowerOfAttorney(input: schema.InsertPowerOfAttorney): Promise<schema.PowerOfAttorney>;
+  updatePowerOfAttorney(id: string, updates: Partial<schema.InsertPowerOfAttorney>): Promise<schema.PowerOfAttorney | undefined>;
+  deletePowerOfAttorney(id: string): Promise<boolean>;
+  attachDocumentsToPowerOfAttorney(input: {
+    uploadedBy: string;
+    beneficiaryId: string;
+    caseId?: string | null;
+    powerOfAttorneyId: string;
+    documents: Array<{
+      storageKey: string;
+      fileUrl: string;
+      fileName: string;
+      mimeType: string;
+      size: number;
+    }>;
+  }): Promise<Document[]>;
+  getDocumentsByPowerOfAttorney(powerOfAttorneyId: string): Promise<Document[]>;
 
   // Enhanced Dashboard Stats
   getEnhancedDashboardStats(): Promise<{
@@ -597,6 +662,55 @@ export class DatabaseStorage implements IStorage {
       .orderBy(desc(schema.documents.createdAt));
   }
 
+  // ===== Session Documents =====
+
+  async attachDocumentsToSession(input: {
+    uploadedBy: string;
+    beneficiaryId: string;
+    caseId: string;
+    sessionId: string;
+    documents: Array<{
+      storageKey: string;
+      fileUrl: string;
+      fileName: string;
+      mimeType: string;
+      size: number;
+    }>;
+  }): Promise<Document[]> {
+    const rows: InsertDocument[] = input.documents.map((d) => ({
+      title: d.fileName,
+      description: null,
+      fileUrl: d.fileUrl,
+      fileType: d.mimeType,
+      fileSize: d.size,
+      uploadedBy: input.uploadedBy,
+      beneficiaryId: input.beneficiaryId,
+      caseId: input.caseId,
+      ownerType: "session",
+      ownerId: input.sessionId,
+      requestId: null,
+      storageKey: d.storageKey,
+      fileName: d.fileName,
+      mimeType: d.mimeType,
+      size: d.size,
+      // Session attachments should be visible to the beneficiary by default.
+      isPublic: true,
+      category: null,
+      tags: null,
+    } as any));
+
+    if (!rows.length) return [];
+    return db.insert(schema.documents).values(rows).returning();
+  }
+
+  async getDocumentsBySession(sessionId: string): Promise<Document[]> {
+    return db
+      .select()
+      .from(schema.documents)
+      .where(and(eq(schema.documents.ownerType, "session" as any), eq(schema.documents.ownerId, sessionId)))
+      .orderBy(desc(schema.documents.createdAt));
+  }
+
   // Intake Requests
   async getIntakeRequest(id: string): Promise<IntakeRequestWithCaseType | undefined> {
     const rows = await db
@@ -705,8 +819,43 @@ export class DatabaseStorage implements IStorage {
   }
 
   async deleteCase(id: string): Promise<boolean> {
-    const result = await db.delete(schema.cases).where(eq(schema.cases.id, id));
-    return result.rowCount ? result.rowCount > 0 : false;
+    return db.transaction(async (tx) => {
+      // Delete dependent rows first to satisfy foreign key constraints.
+
+      // Critical: ensure timeline rows are removed before deleting the case.
+      // Some environments have legacy schema quirks; this explicit SQL keeps deletion reliable.
+      await tx.execute(sql`DELETE FROM case_timeline_events WHERE case_id = ${id}`);
+
+      // Finance chain: installments -> vouchers (by contract) -> contracts.
+      const contractRows = await tx
+        .select({ id: schema.contracts.id })
+        .from(schema.contracts)
+        .where(eq(schema.contracts.caseId, id));
+
+      const contractIds = contractRows.map((r) => r.id);
+      if (contractIds.length) {
+        await tx.delete(schema.installments).where(inArray(schema.installments.contractId, contractIds));
+        await tx.delete(schema.vouchers).where(inArray(schema.vouchers.contractId, contractIds));
+        await tx.delete(schema.contracts).where(inArray(schema.contracts.id, contractIds));
+      }
+
+      // Vouchers may link directly to caseId as well.
+      await tx.delete(schema.vouchers).where(eq(schema.vouchers.caseId, id));
+
+      // Power of Attorney references cases.
+      await tx.delete(schema.powerOfAttorney).where(eq(schema.powerOfAttorney.caseId, id));
+
+      // Case-linked operational tables.
+      await tx.delete(schema.caseDetails).where(eq(schema.caseDetails.caseId, id));
+      await tx.delete(schema.hearings).where(eq(schema.hearings.caseId, id));
+      await tx.delete(schema.sessions).where(eq(schema.sessions.caseId, id));
+      await tx.delete(schema.tasks).where(eq(schema.tasks.caseId, id));
+      await tx.delete(schema.documents).where(eq(schema.documents.caseId, id));
+      await tx.delete(schema.caseTimelineEvents).where(eq(schema.caseTimelineEvents.caseId, id));
+
+      const result = await tx.delete(schema.cases).where(eq(schema.cases.id, id));
+      return Boolean(result.rowCount && result.rowCount > 0);
+    });
   }
 
   // Case Timeline
@@ -840,6 +989,126 @@ export class DatabaseStorage implements IStorage {
     const result = await db.delete(schema.consultations).where(eq(schema.consultations.id, id));
     // @ts-ignore
     return Boolean(result?.rowCount);
+  }
+
+  // ===== Powers of Attorney =====
+
+  async getPowerOfAttorney(id: string): Promise<schema.PowerOfAttorney | undefined> {
+    const [row] = await db.select().from(schema.powerOfAttorney).where(eq(schema.powerOfAttorney.id, id));
+    return row;
+  }
+
+  async getAllPowersOfAttorney(): Promise<schema.PowerOfAttorney[]> {
+    return db.select().from(schema.powerOfAttorney).orderBy(desc(schema.powerOfAttorney.createdAt));
+  }
+
+  async getPowersOfAttorneyByCase(caseId: string): Promise<schema.PowerOfAttorney[]> {
+    return db
+      .select()
+      .from(schema.powerOfAttorney)
+      .where(eq(schema.powerOfAttorney.caseId, caseId))
+      .orderBy(desc(schema.powerOfAttorney.createdAt));
+  }
+
+  async getPowersOfAttorneyByBeneficiary(beneficiaryId: string): Promise<schema.PowerOfAttorney[]> {
+    return db
+      .select()
+      .from(schema.powerOfAttorney)
+      .where(eq(schema.powerOfAttorney.beneficiaryId, beneficiaryId))
+      .orderBy(desc(schema.powerOfAttorney.createdAt));
+  }
+
+  async getExpiringPowersOfAttorney(input: { days: number }): Promise<schema.PowerOfAttorney[]> {
+    const days = Number.isFinite(input.days) ? Math.max(1, Math.trunc(input.days)) : 30;
+    const now = new Date();
+    const until = new Date(now);
+    until.setDate(until.getDate() + days);
+
+    return db
+      .select()
+      .from(schema.powerOfAttorney)
+      .where(
+        and(
+          eq(schema.powerOfAttorney.isActive, true),
+          sql`${schema.powerOfAttorney.expiryDate} is not null`,
+          lte(schema.powerOfAttorney.expiryDate, until),
+        ),
+      )
+      .orderBy(asc(schema.powerOfAttorney.expiryDate));
+  }
+
+  async createPowerOfAttorney(input: schema.InsertPowerOfAttorney): Promise<schema.PowerOfAttorney> {
+    const [row] = await db.insert(schema.powerOfAttorney).values(input as any).returning();
+    return row;
+  }
+
+  async updatePowerOfAttorney(
+    id: string,
+    updates: Partial<schema.InsertPowerOfAttorney>,
+  ): Promise<schema.PowerOfAttorney | undefined> {
+    const [row] = await db
+      .update(schema.powerOfAttorney)
+      .set({ ...updates, updatedAt: new Date() } as any)
+      .where(eq(schema.powerOfAttorney.id, id))
+      .returning();
+    return row;
+  }
+
+  async deletePowerOfAttorney(id: string): Promise<boolean> {
+    // Best-effort cleanup of linked documents first (ownerType + ownerId).
+    await db
+      .delete(schema.documents)
+      .where(and(eq(schema.documents.ownerType, "power_of_attorney" as any), eq(schema.documents.ownerId, id)));
+
+    const result = await db.delete(schema.powerOfAttorney).where(eq(schema.powerOfAttorney.id, id));
+    return result.rowCount ? result.rowCount > 0 : false;
+  }
+
+  async attachDocumentsToPowerOfAttorney(input: {
+    uploadedBy: string;
+    beneficiaryId: string;
+    caseId?: string | null;
+    powerOfAttorneyId: string;
+    documents: Array<{
+      storageKey: string;
+      fileUrl: string;
+      fileName: string;
+      mimeType: string;
+      size: number;
+    }>;
+  }): Promise<Document[]> {
+    const rows: InsertDocument[] = input.documents.map((d) => ({
+      title: d.fileName,
+      description: null,
+      fileUrl: d.fileUrl,
+      fileType: d.mimeType,
+      fileSize: d.size,
+      uploadedBy: input.uploadedBy,
+      beneficiaryId: input.beneficiaryId,
+      caseId: input.caseId ?? null,
+      ownerType: "power_of_attorney" as any,
+      ownerId: input.powerOfAttorneyId,
+      requestId: null,
+      storageKey: d.storageKey,
+      fileName: d.fileName,
+      mimeType: d.mimeType,
+      size: d.size,
+      // Default: keep it internal unless explicitly attached elsewhere.
+      isPublic: false,
+      category: null,
+      tags: null,
+    } as any));
+
+    if (!rows.length) return [];
+    return db.insert(schema.documents).values(rows).returning();
+  }
+
+  async getDocumentsByPowerOfAttorney(powerOfAttorneyId: string): Promise<Document[]> {
+    return db
+      .select()
+      .from(schema.documents)
+      .where(and(eq(schema.documents.ownerType, "power_of_attorney" as any), eq(schema.documents.ownerId, powerOfAttorneyId)))
+      .orderBy(desc(schema.documents.createdAt));
   }
   async getHearing(id: string): Promise<Hearing | undefined> {
     const [hearing] = await db.select().from(schema.hearings).where(eq(schema.hearings.id, id));
@@ -982,6 +1251,17 @@ export class DatabaseStorage implements IStorage {
       .update(schema.notifications)
       .set({ isRead: true })
       .where(eq(schema.notifications.userId, userId));
+  }
+
+  async listMyNotifications(userId: string): Promise<Notification[]> {
+    return this.getNotificationsByUser(userId);
+  }
+
+  async markNotificationRead(userId: string, notificationId: string): Promise<Notification | undefined> {
+    const existing = await this.getNotification(notificationId);
+    if (!existing) return undefined;
+    if (String(existing.userId) !== String(userId)) return undefined;
+    return this.markNotificationAsRead(notificationId);
   }
 
   // Audit Log
@@ -1199,6 +1479,80 @@ export class DatabaseStorage implements IStorage {
   async deleteTask(id: string): Promise<boolean> {
     const result = await db.delete(schema.tasks).where(eq(schema.tasks.id, id));
     return result.rowCount ? result.rowCount > 0 : false;
+  }
+
+  async listTasksForAdmin(): Promise<Task[]> {
+    return this.getAllTasks();
+  }
+
+  async listTasksForLawyer(userId: string): Promise<Task[]> {
+    return db
+      .select()
+      .from(schema.tasks)
+      .where(or(eq(schema.tasks.lawyerId, userId), eq(schema.tasks.assignedTo, userId)))
+      .orderBy(desc(schema.tasks.createdAt));
+  }
+
+  async listTasksForBeneficiary(beneficiaryId: string, beneficiaryUserId?: string): Promise<Task[]> {
+    if (beneficiaryUserId) {
+      return db
+        .select()
+        .from(schema.tasks)
+        .where(or(eq(schema.tasks.beneficiaryId, beneficiaryId), eq(schema.tasks.assignedTo, beneficiaryUserId)))
+        .orderBy(desc(schema.tasks.createdAt));
+    }
+
+    return db
+      .select()
+      .from(schema.tasks)
+      .where(eq(schema.tasks.beneficiaryId, beneficiaryId))
+      .orderBy(desc(schema.tasks.createdAt));
+  }
+
+  async attachDocumentsToTask(input: {
+    uploadedBy: string;
+    beneficiaryId: string;
+    taskId: string;
+    isPublic: boolean;
+    documents: Array<{
+      storageKey: string;
+      fileUrl: string;
+      fileName: string;
+      mimeType: string;
+      size: number;
+    }>;
+  }): Promise<Document[]> {
+    const rows: InsertDocument[] = input.documents.map((d) => ({
+      title: d.fileName,
+      description: null,
+      fileUrl: d.fileUrl,
+      fileType: d.mimeType,
+      fileSize: d.size,
+      uploadedBy: input.uploadedBy,
+      beneficiaryId: input.beneficiaryId,
+      caseId: null,
+      ownerType: "task" as any,
+      ownerId: input.taskId,
+      requestId: null,
+      storageKey: d.storageKey,
+      fileName: d.fileName,
+      mimeType: d.mimeType,
+      size: d.size,
+      isPublic: input.isPublic,
+      category: null,
+      tags: null,
+    } as any));
+
+    if (!rows.length) return [];
+    return db.insert(schema.documents).values(rows).returning();
+  }
+
+  async getDocumentsByTask(taskId: string): Promise<Document[]> {
+    return db
+      .select()
+      .from(schema.documents)
+      .where(and(eq(schema.documents.ownerType, "task" as any), eq(schema.documents.ownerId, taskId)))
+      .orderBy(desc(schema.documents.createdAt));
   }
 
   // Enhanced Dashboard Stats

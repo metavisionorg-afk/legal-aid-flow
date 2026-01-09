@@ -1,12 +1,23 @@
 import { useTranslation } from "react-i18next";
-import { Bell, Search, User } from "lucide-react";
+import { Search } from "lucide-react";
 import { Input } from "@/components/ui/input";
-import { Button } from "@/components/ui/button";
 import { LanguageSwitcher } from "../LanguageSwitcher";
 import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
+import { useAuth } from "@/contexts/AuthContext";
+import { NotificationsBell } from "@/components/layout/NotificationsBell";
 
 export function Header() {
   const { t } = useTranslation();
+  const { user } = useAuth();
+
+  const initials = (user?.fullName || "")
+    .split(/\s+/)
+    .filter(Boolean)
+    .slice(0, 2)
+    .map((p) => p[0]?.toUpperCase())
+    .join("") || "U";
+
+  const roleLabel = (user as any)?.role ? String((user as any).role) : (user as any)?.userType ? String((user as any).userType) : "";
 
   return (
     <header className="h-16 border-b bg-background px-6 flex items-center justify-between sticky top-0 z-10">
@@ -23,22 +34,19 @@ export function Header() {
 
       <div className="flex items-center gap-4">
         <LanguageSwitcher />
-        
-        <Button variant="ghost" size="icon" className="text-muted-foreground hover:text-foreground relative">
-          <Bell className="h-5 w-5" />
-          <span className="absolute top-2 right-2 h-2 w-2 rounded-full bg-destructive" />
-        </Button>
+
+        <NotificationsBell />
 
         <div className="h-8 w-px bg-border mx-2" />
 
         <div className="flex items-center gap-3">
           <div className="text-right hidden md:block rtl:text-left">
-            <p className="text-sm font-medium leading-none">Sarah Ahmed</p>
-            <p className="text-xs text-muted-foreground">Admin</p>
+            <p className="text-sm font-medium leading-none">{user?.fullName || ""}</p>
+            <p className="text-xs text-muted-foreground">{roleLabel}</p>
           </div>
           <Avatar className="h-8 w-8">
-            <AvatarImage src="https://github.com/shadcn.png" />
-            <AvatarFallback>SA</AvatarFallback>
+            <AvatarImage src={(user as any)?.avatarUrl || ""} />
+            <AvatarFallback>{initials}</AvatarFallback>
           </Avatar>
         </div>
       </div>

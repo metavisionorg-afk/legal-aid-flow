@@ -7,11 +7,13 @@ import {
   LayoutDashboard,
   Briefcase,
   Calendar,
+  CheckSquare,
   User,
   FilePlus,
   LogOut
 } from "lucide-react";
 import { authAPI } from "@/lib/api";
+import { NotificationsBell } from "@/components/layout/NotificationsBell";
 
 export function PortalLayout({ children }: { children: ReactNode }) {
   const [location] = useLocation();
@@ -20,6 +22,7 @@ export function PortalLayout({ children }: { children: ReactNode }) {
   const navItems = [
     { icon: LayoutDashboard, label: t('app.dashboard'), href: "/portal" },
     { icon: Briefcase, label: t('portal.my_cases'), href: "/portal/my-cases" },
+    { icon: CheckSquare, label: t('portal.my_tasks'), href: "/portal/tasks" },
     { icon: FilePlus, label: t('portal.my_requests'), href: "/portal/my-requests" },
     { icon: Calendar, label: t('portal.my_appointments'), href: "/portal/my-appointments" },
     { icon: User, label: t('portal.my_profile'), href: "/portal/profile" },
@@ -74,6 +77,7 @@ export function PortalLayout({ children }: { children: ReactNode }) {
           <div className="font-semibold">{t('portal.welcome')}</div>
           <div className="flex items-center gap-4">
             <LanguageSwitcher />
+            <NotificationsBell />
           </div>
         </header>
 

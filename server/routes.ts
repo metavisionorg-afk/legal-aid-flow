@@ -328,7 +328,13 @@ export async function registerRoutes(
   // ========== PUBLIC UPLOADS (REGISTRATION) ==========
 
   const UPLOAD_MAX_BYTES = 10 * 1024 * 1024;
-  const UPLOAD_ALLOWED_MIME = new Set(["image/jpeg", "image/png", "application/pdf"]);
+  const UPLOAD_ALLOWED_MIME = new Set([
+    "image/jpeg",
+    "image/png",
+    "application/pdf",
+    "application/vnd.openxmlformats-officedocument.wordprocessingml.document",
+    "application/msword",
+  ]);
   const uploadsDir = path.resolve(process.cwd(), "uploads");
   if (!fs.existsSync(uploadsDir)) fs.mkdirSync(uploadsDir, { recursive: true });
 
@@ -350,7 +356,16 @@ export async function registerRoutes(
       const originalFileName = typeof fileNameHeader === "string" && fileNameHeader.trim() ? fileNameHeader.trim() : "upload";
       const fileName = originalFileName.replace(/[^a-zA-Z0-9._-]/g, "_").slice(0, 120);
 
-      const ext = mimeType === "application/pdf" ? ".pdf" : mimeType === "image/png" ? ".png" : ".jpg";
+      const ext =
+        mimeType === "application/pdf"
+          ? ".pdf"
+          : mimeType === "image/png"
+            ? ".png"
+            : mimeType === "application/vnd.openxmlformats-officedocument.wordprocessingml.document"
+              ? ".docx"
+              : mimeType === "application/msword"
+                ? ".doc"
+                : ".jpg";
       const storageKey = `${randomUUID()}${ext}`;
       const fullPath = path.join(uploadsDir, storageKey);
 
@@ -2513,7 +2528,17 @@ export async function registerRoutes(
 
   app.get("/api/notifications", requireAuth, async (req, res) => {
     try {
-      const notifications = await storage.getNotificationsByUser(req.session.userId!);
+      const notifications = await storage.listMyNotifications(req.session.userId!);
+      res.json(notifications);
+    } catch (error: any) {
+      res.status(500).json({ error: error.message });
+    }
+  });
+
+  // Alias (client-friendly)
+  app.get("/api/notifications/my", requireAuth, async (req, res) => {
+    try {
+      const notifications = await storage.listMyNotifications(req.session.userId!);
       res.json(notifications);
     } catch (error: any) {
       res.status(500).json({ error: error.message });
@@ -2531,10 +2556,8 @@ export async function registerRoutes(
 
   app.patch("/api/notifications/:id/read", requireAuth, async (req, res) => {
     try {
-      const notification = await storage.markNotificationAsRead(req.params.id);
-      if (!notification) {
-        return res.status(404).json({ error: "Notification not found" });
-      }
+      const notification = await storage.markNotificationRead(req.session.userId!, req.params.id);
+      if (!notification) return res.status(404).json({ error: "Notification not found" });
       res.json(notification);
     } catch (error: any) {
       res.status(500).json({ error: error.message });
@@ -2814,27 +2837,115 @@ export async function registerRoutes(
 
   // ========== TASKS ROUTES ==========
 
-  app.get("/api/tasks", requireStaff, async (req, res) => {
-    try {
-      const tasks = await storage.getAllTasks();
-      res.json(tasks);
-    } catch (error: any) {
-      res.status(500).json({ error: error.message });
-    }
-  });
+  const TASK_NOTIFICATION_TYPES = {
+    ASSIGNED: "TASK_ASSIGNED",
+    STATUS_CHANGED: "TASK_STATUS_CHANGED",
+    ATTACHMENT_ADDED: "TASK_ATTACHMENT_ADDED",
+  } as const;
 
-  app.get("/api/tasks/:id", requireStaff, async (req, res) => {
+  function canStaffAccessTask(user: User, task: any): boolean {
+    if (user.role === "admin" || user.role === "super_admin") return true;
+    if (user.role === "lawyer") {
+      return Boolean(
+        (task as any).lawyerId && String((task as any).lawyerId) === String(user.id)
+          ? true
+          : String((task as any).assignedTo) === String(user.id),
+      );
+    }
+    return false;
+  }
+
+  async function notifyTaskParticipants(input: {
+    task: any;
+    actorUserId: string;
+    type: string;
+    title: string;
+    message: string;
+  }) {
+    const url = "/portal/tasks";
+    const recipientIds = new Set<string>();
+
+    // Primary: assignedTo is the beneficiary userId (enforced at creation).
+    if (input.task?.assignedTo) recipientIds.add(String(input.task.assignedTo));
+    if (input.task?.lawyerId) recipientIds.add(String(input.task.lawyerId));
+
+    // Don't notify the actor.
+    recipientIds.delete(String(input.actorUserId));
+
+    await Promise.all(
+      Array.from(recipientIds).map((userId) =>
+        storage.createNotification({
+          userId,
+          type: input.type,
+          title: input.title,
+          message: input.message,
+          url,
+          relatedEntityId: String(input.task.id),
+        } as any),
+      ),
+    );
+  }
+
+  // Staff lists tasks
+  // - admin/super_admin: all
+  // - lawyer: only tasks linked to them
+  app.get("/api/tasks", requireStaff, async (req: AuthRequest, res) => {
     try {
-      const task = await storage.getTask(req.params.id);
-      if (!task) {
-        return res.status(404).json({ error: "Task not found" });
+      const user = req.user as User;
+      if (user.role === "admin" || user.role === "super_admin") {
+        const tasks = await storage.listTasksForAdmin();
+        return res.json(tasks);
       }
-      res.json(task);
+      if (user.role === "lawyer") {
+        const tasks = await storage.listTasksForLawyer(user.id);
+        return res.json(tasks);
+      }
+      return res.status(403).json({ error: "Forbidden" });
     } catch (error: any) {
-      res.status(500).json({ error: error.message });
+      return res.status(500).json({ error: getErrorMessage(error) });
     }
   });
 
+  // Beneficiary lists their own tasks
+  app.get("/api/tasks/my", requireBeneficiary, async (req: AuthRequest, res) => {
+    try {
+      const beneficiary = req.beneficiary!;
+      const user = req.user!;
+      const tasks = await storage.listTasksForBeneficiary(beneficiary.id, user.id);
+      return res.json(tasks);
+    } catch (error: any) {
+      return res.status(500).json({ error: getErrorMessage(error) });
+    }
+  });
+
+  // Task details for authorized users
+  app.get("/api/tasks/:id", requireAuth, async (req: AuthRequest, res) => {
+    try {
+      const user = await getCurrentUser(req);
+      if (!user) return res.status(401).json({ error: "Unauthorized" });
+
+      const task = await storage.getTask(req.params.id);
+      if (!task) return res.status(404).json({ error: "Task not found" });
+
+      if (user.userType === "beneficiary") {
+        const beneficiary = await storage.getBeneficiaryByUserId(user.id);
+        if (!beneficiary) return res.status(403).json({ error: "Forbidden" });
+        const ok =
+          (task as any).beneficiaryId && String((task as any).beneficiaryId) === String(beneficiary.id)
+            ? true
+            : String((task as any).assignedTo) === String(user.id);
+        if (!ok) return res.status(403).json({ error: "Forbidden" });
+        return res.json(task);
+      }
+
+      if (!canStaffAccessTask(user, task)) return res.status(403).json({ error: "Forbidden" });
+      return res.json(task);
+    } catch (error: any) {
+      return res.status(500).json({ error: getErrorMessage(error) });
+    }
+  });
+
+  // Legacy staff helper routes (kept for compatibility)
   app.get("/api/users/:userId/tasks", requireStaff, async (req, res) => {
     try {
       const tasks = await storage.getTasksByAssignee(req.params.userId);
@@ -2853,59 +2964,334 @@ export async function registerRoutes(
     }
   });
 
-  app.post("/api/tasks", requireStaff, async (req: AuthRequest, res) => {
-    try {
-      const result = insertTaskSchema.safeParse(req.body);
-      if (!result.success) {
-        return res.status(400).json({ error: fromZodError(result.error).message });
+  // Admin creates a task (assigned to beneficiary)
+  app.post(
+    "/api/tasks",
+    requireStaff,
+    requireRole(["admin", "super_admin"]),
+    async (req: AuthRequest, res) => {
+      try {
+        const user = req.user as User;
+
+        const parsed = z
+          .object({
+            beneficiaryId: z.string().trim().min(1),
+            title: z.string().trim().min(1),
+            description: z.string().optional().nullable(),
+            taskType: z.enum(["follow_up", "document_preparation", "court_appearance", "client_meeting", "research", "other"]),
+            priority: z.enum(["low", "medium", "high", "urgent"]).optional().nullable(),
+            status: z
+              .enum(["pending", "in_progress", "follow_up", "awaiting_beneficiary", "under_review", "completed", "cancelled"])
+              .optional()
+              .nullable(),
+            dueDate: z.union([z.string().datetime(), z.null()]).optional(),
+            lawyerId: z.string().trim().min(1).optional().nullable(),
+            caseId: z.string().trim().min(1).optional().nullable(),
+          })
+          .safeParse(req.body);
+
+        if (!parsed.success) {
+          return res.status(400).json({ error: fromZodError(parsed.error).message });
+        }
+
+        const beneficiary = await storage.getBeneficiary(parsed.data.beneficiaryId);
+        if (!beneficiary) return res.status(400).json({ error: "Beneficiary not found" });
+        if (!(beneficiary as any).userId) {
+          return res.status(400).json({ error: "Beneficiary has no linked user account" });
+        }
+
+        const assignedToUserId = String((beneficiary as any).userId);
+
+        if (parsed.data.lawyerId) {
+          const lawyer = await storage.getUser(parsed.data.lawyerId);
+          if (!lawyer || lawyer.userType !== "staff" || lawyer.role !== "lawyer") {
+            return res.status(400).json({ error: "Invalid lawyer" });
+          }
+        }
+
+        if (parsed.data.caseId) {
+          const caseData = await storage.getCase(parsed.data.caseId);
+          if (!caseData) return res.status(400).json({ error: "Case not found" });
+        }
+
+        const status = (parsed.data.status ?? "pending") as any;
+        const dueDate = typeof parsed.data.dueDate === "string" ? new Date(parsed.data.dueDate) : null;
+
+        const created = await storage.createTask({
+          title: parsed.data.title,
+          description: parsed.data.description ?? null,
+          taskType: parsed.data.taskType as any,
+          beneficiaryId: beneficiary.id,
+          lawyerId: parsed.data.lawyerId ?? null,
+          caseId: parsed.data.caseId ?? null,
+          assignedTo: assignedToUserId,
+          assignedBy: user.id,
+          status,
+          priority: (parsed.data.priority as any) ?? "medium",
+          dueDate: dueDate ? (dueDate as any) : null,
+          completedAt: status === "completed" ? new Date() : null,
+        } as any);
+
+        await notifyTaskParticipants({
+          task: created,
+          actorUserId: user.id,
+          type: TASK_NOTIFICATION_TYPES.ASSIGNED,
+          title: "Task assigned",
+          message: `New task: ${created.title}`,
+        });
+
+        await createAudit(user.id, "create", "task", created.id, `Created task: ${created.title}`, req.ip);
+        return res.status(201).json(created);
+      } catch (error: any) {
+        return res.status(500).json({ error: getErrorMessage(error) });
       }
-      const user = req.user as User;
-      const task = await storage.createTask({
-        ...result.data,
-        assignedBy: user.id,
-      });
-      
-      // Send notification to assignee
-      await storage.createNotification({
-        userId: task.assignedTo,
-        type: "task_assigned",
-        title: "New Task Assigned",
-        message: `You have been assigned a new task: ${task.title}`,
-        relatedEntityId: task.id,
-      });
+    },
+  );
 
-      await createAudit(user.id, "create", "task", task.id, `Created task: ${task.title}`, req.ip);
-      res.json(task);
-    } catch (error: any) {
-      res.status(500).json({ error: error.message });
-    }
-  });
-
+  // Update task
+  // - admin/super_admin: update fields
+  // - lawyer: status-only
   app.patch("/api/tasks/:id", requireStaff, async (req: AuthRequest, res) => {
     try {
       const user = req.user as User;
-      const task = await storage.updateTask(req.params.id, req.body);
-      if (!task) {
-        return res.status(404).json({ error: "Task not found" });
+      const existing = await storage.getTask(req.params.id);
+      if (!existing) return res.status(404).json({ error: "Task not found" });
+
+      const isAdmin = user.role === "admin" || user.role === "super_admin";
+      const isLawyer = user.role === "lawyer";
+
+      if (!isAdmin && !isLawyer) return res.status(403).json({ error: "Forbidden" });
+      if (isLawyer && !canStaffAccessTask(user, existing)) return res.status(403).json({ error: "Forbidden" });
+
+      if (isLawyer && !isAdmin) {
+        const parsed = z
+          .object({
+            status: z.enum(["pending", "in_progress", "follow_up", "awaiting_beneficiary", "under_review", "completed", "cancelled"]),
+            note: z.string().trim().max(1000).optional().nullable(),
+          })
+          .safeParse(req.body);
+        if (!parsed.success) {
+          return res.status(400).json({ error: fromZodError(parsed.error).message });
+        }
+
+        const updates: any = {
+          status: parsed.data.status as any,
+        };
+        if (parsed.data.status === "completed") updates.completedAt = new Date();
+
+        const updated = await storage.updateTask(existing.id, updates);
+        if (!updated) return res.status(404).json({ error: "Task not found" });
+
+        await notifyTaskParticipants({
+          task: updated,
+          actorUserId: user.id,
+          type: TASK_NOTIFICATION_TYPES.STATUS_CHANGED,
+          title: "Task status updated",
+          message: `Task "${updated.title}" is now ${String((updated as any).status)}`,
+        });
+
+        await createAudit(user.id, "update", "task", updated.id, `Updated task status: ${updated.title}`, req.ip);
+        return res.json(updated);
       }
-      await createAudit(user.id, "update", "task", task.id, `Updated task: ${task.title}`, req.ip);
-      res.json(task);
+
+      // Admin update
+      const parsed = z
+        .object({
+          beneficiaryId: z.string().trim().min(1).optional(),
+          lawyerId: z.union([z.string().trim().min(1), z.null()]).optional(),
+          caseId: z.union([z.string().trim().min(1), z.null()]).optional(),
+          title: z.string().trim().min(1).optional(),
+          description: z.union([z.string(), z.null()]).optional(),
+          taskType: z.enum(["follow_up", "document_preparation", "court_appearance", "client_meeting", "research", "other"]).optional(),
+          priority: z.enum(["low", "medium", "high", "urgent"]).optional(),
+          status: z.enum(["pending", "in_progress", "follow_up", "awaiting_beneficiary", "under_review", "completed", "cancelled"]).optional(),
+          dueDate: z.union([z.string().datetime(), z.null()]).optional(),
+        })
+        .safeParse(req.body);
+      if (!parsed.success) {
+        return res.status(400).json({ error: fromZodError(parsed.error).message });
+      }
+
+      const updates: any = { ...parsed.data };
+
+      if (updates.dueDate !== undefined) {
+        updates.dueDate = typeof updates.dueDate === "string" ? new Date(updates.dueDate) : null;
+      }
+
+      if (updates.status === "completed") updates.completedAt = new Date();
+
+      // If beneficiary changes, also update assignedTo (must be a linked beneficiary user).
+      if (updates.beneficiaryId) {
+        const beneficiary = await storage.getBeneficiary(updates.beneficiaryId);
+        if (!beneficiary) return res.status(400).json({ error: "Beneficiary not found" });
+        if (!(beneficiary as any).userId) {
+          return res.status(400).json({ error: "Beneficiary has no linked user account" });
+        }
+        updates.assignedTo = String((beneficiary as any).userId);
+      }
+
+      if (updates.lawyerId) {
+        const lawyer = await storage.getUser(updates.lawyerId);
+        if (!lawyer || lawyer.userType !== "staff" || lawyer.role !== "lawyer") {
+          return res.status(400).json({ error: "Invalid lawyer" });
+        }
+      }
+      if (updates.caseId) {
+        const caseData = await storage.getCase(updates.caseId);
+        if (!caseData) return res.status(400).json({ error: "Case not found" });
+      }
+
+      const updated = await storage.updateTask(existing.id, updates);
+      if (!updated) return res.status(404).json({ error: "Task not found" });
+
+      if (parsed.data.status && parsed.data.status !== (existing as any).status) {
+        await notifyTaskParticipants({
+          task: updated,
+          actorUserId: user.id,
+          type: TASK_NOTIFICATION_TYPES.STATUS_CHANGED,
+          title: "Task status updated",
+          message: `Task "${updated.title}" is now ${String((updated as any).status)}`,
+        });
+      }
+
+      await createAudit(user.id, "update", "task", updated.id, `Updated task: ${updated.title}`, req.ip);
+      return res.json(updated);
     } catch (error: any) {
-      res.status(500).json({ error: error.message });
+      return res.status(500).json({ error: getErrorMessage(error) });
     }
   });
 
-  app.delete("/api/tasks/:id", requireStaff, async (req: AuthRequest, res) => {
-    try {
-      const user = req.user as User;
-      const success = await storage.deleteTask(req.params.id);
-      if (!success) {
-        return res.status(404).json({ error: "Task not found" });
+  // Delete task (admin only)
+  app.delete(
+    "/api/tasks/:id",
+    requireStaff,
+    requireRole(["admin", "super_admin"]),
+    async (req: AuthRequest, res) => {
+      try {
+        const user = req.user as User;
+        const success = await storage.deleteTask(req.params.id);
+        if (!success) {
+          return res.status(404).json({ error: "Task not found" });
+        }
+        await createAudit(user.id, "delete", "task", req.params.id, "Deleted task", req.ip);
+        return res.json({ success: true });
+      } catch (error: any) {
+        return res.status(500).json({ error: getErrorMessage(error) });
       }
-      await createAudit(user.id, "delete", "task", req.params.id, "Deleted task", req.ip);
-      res.json({ success: true });
+    },
+  );
+
+  // Task attachments
+  app.get("/api/tasks/:id/attachments", requireAuth, async (req: AuthRequest, res) => {
+    try {
+      const user = await getCurrentUser(req);
+      if (!user) return res.status(401).json({ error: "Unauthorized" });
+
+      const task = await storage.getTask(req.params.id);
+      if (!task) return res.status(404).json({ error: "Task not found" });
+
+      if (user.userType === "beneficiary") {
+        const beneficiary = await storage.getBeneficiaryByUserId(user.id);
+        if (!beneficiary) return res.status(403).json({ error: "Forbidden" });
+        const ok =
+          (task as any).beneficiaryId && String((task as any).beneficiaryId) === String(beneficiary.id)
+            ? true
+            : String((task as any).assignedTo) === String(user.id);
+        if (!ok) return res.status(403).json({ error: "Forbidden" });
+
+        const docs = await storage.getDocumentsByTask(task.id);
+        const publicDocs = (docs as any[]).filter((d) => Boolean((d as any).isPublic));
+        return res.json(publicDocs);
+      }
+
+      if (!canStaffAccessTask(user, task)) return res.status(403).json({ error: "Forbidden" });
+      const docs = await storage.getDocumentsByTask(task.id);
+      return res.json(docs);
     } catch (error: any) {
-      res.status(500).json({ error: error.message });
+      return res.status(500).json({ error: getErrorMessage(error) });
+    }
+  });
+
+  app.post("/api/tasks/:id/attachments", requireAuth, async (req: AuthRequest, res) => {
+    try {
+      const user = await getCurrentUser(req);
+      if (!user) return res.status(401).json({ error: "Unauthorized" });
+
+      const task = await storage.getTask(req.params.id);
+      if (!task) return res.status(404).json({ error: "Task not found" });
+
+      const parsed = z
+        .object({
+          isPublic: z.boolean().optional(),
+          documents: z.array(uploadedFileMetadataSchema).min(1),
+        })
+        .safeParse(req.body);
+
+      if (!parsed.success) {
+        return res.status(400).json({ error: fromZodError(parsed.error).message });
+      }
+
+      let beneficiaryIdForDoc: string | null = (task as any).beneficiaryId ? String((task as any).beneficiaryId) : null;
+      if (!beneficiaryIdForDoc) {
+        // Best-effort fallback: resolve beneficiary via assignedTo (beneficiary userId)
+        const b = await storage.getBeneficiaryByUserId(String((task as any).assignedTo));
+        if (b) beneficiaryIdForDoc = String((b as any).id);
+      }
+
+      if (!beneficiaryIdForDoc) {
+        return res.status(400).json({ error: "Task has no beneficiary linked" });
+      }
+
+      if (user.userType === "beneficiary") {
+        const beneficiary = await storage.getBeneficiaryByUserId(user.id);
+        if (!beneficiary) return res.status(403).json({ error: "Forbidden" });
+        const ok =
+          (task as any).beneficiaryId && String((task as any).beneficiaryId) === String(beneficiary.id)
+            ? true
+            : String((task as any).assignedTo) === String(user.id);
+        if (!ok) return res.status(403).json({ error: "Forbidden" });
+
+        const docs = await storage.attachDocumentsToTask({
+          uploadedBy: user.id,
+          beneficiaryId: beneficiaryIdForDoc,
+          taskId: task.id,
+          isPublic: true,
+          documents: parsed.data.documents,
+        });
+
+        await notifyTaskParticipants({
+          task,
+          actorUserId: user.id,
+          type: TASK_NOTIFICATION_TYPES.ATTACHMENT_ADDED,
+          title: "Task attachment added",
+          message: `Attachment added to task: ${String((task as any).title || "")}`,
+        });
+
+        return res.status(201).json({ success: true, documents: docs });
+      }
+
+      if (!canStaffAccessTask(user, task)) return res.status(403).json({ error: "Forbidden" });
+
+      const isPublic = parsed.data.isPublic ?? true;
+      const docs = await storage.attachDocumentsToTask({
+        uploadedBy: user.id,
+        beneficiaryId: beneficiaryIdForDoc,
+        taskId: task.id,
+        isPublic,
+        documents: parsed.data.documents,
+      });
+
+      await notifyTaskParticipants({
+        task,
+        actorUserId: user.id,
+        type: TASK_NOTIFICATION_TYPES.ATTACHMENT_ADDED,
+        title: "Task attachment added",
+        message: `Attachment added to task: ${String((task as any).title || "")}`,
+      });
+
+      return res.status(201).json({ success: true, documents: docs });
+    } catch (error: any) {
+      return res.status(500).json({ error: getErrorMessage(error) });
     }
   });
 
@@ -2924,10 +3310,25 @@ export async function registerRoutes(
 
   app.get("/api/sessions", requireStaff, async (req, res) => {
     try {
-      const sessions = await storage.getAllSessions();
+      const caseId = typeof req.query.caseId === "string" && req.query.caseId.trim() ? req.query.caseId.trim() : null;
+      const sessions = caseId ? await storage.getSessionsByCase(caseId) : await storage.getAllSessions();
       res.json(sessions);
     } catch (error: any) {
       res.status(500).json({ error: error.message });
+    }
+  });
+
+  app.get("/api/sessions/:id", requireStaff, async (req, res) => {
+    try {
+      const session = await storage.getSession(req.params.id);
+      if (!session) {
+        return res.status(404).json({ error: "Session not found" });
+      }
+
+      const attachments = await storage.getDocumentsBySession(session.id);
+      return res.json({ ...session, attachments });
+    } catch (error: any) {
+      return res.status(500).json({ error: error.message });
     }
   });
 
@@ -2942,15 +3343,110 @@ export async function registerRoutes(
 
   app.post("/api/sessions", requireStaff, async (req: AuthRequest, res) => {
     try {
-      const result = insertSessionSchema.safeParse(req.body);
-      if (!result.success) {
-        return res.status(400).json({ error: fromZodError(result.error).message });
+      const user = req.user as User;
+
+      const sessionTypeSchema = z.enum(["in_person", "remote", "hybrid"]);
+      const statusSchema = z.enum(["upcoming", "postponed", "completed", "cancelled"]);
+
+      const parsed = z
+        .object({
+          caseId: z.string().trim().min(1),
+          dateGregorian: z.string().datetime(),
+          time: z.string().trim().min(1),
+          hijriDate: z.string().trim().optional().nullable(),
+          sessionType: sessionTypeSchema.optional().nullable(),
+          status: statusSchema.optional().nullable(),
+          meetingUrl: z.string().trim().url().optional().nullable(),
+          requirements: z.string().optional().nullable(),
+          notes: z.string().optional().nullable(),
+          isConfidential: z.boolean().optional().default(false),
+          reminderMinutes: z.number().int().nonnegative().optional().nullable(),
+          addToTimeline: z.boolean().optional().default(true),
+          courtName: z.string().trim().min(1),
+          city: z.string().trim().min(1),
+          circuit: z.string().trim().optional().nullable(),
+          attachments: z.array(uploadedFileMetadataSchema).optional().default([]),
+        })
+        .superRefine((data, ctx) => {
+          if (data.sessionType === "remote" && !data.meetingUrl) {
+            ctx.addIssue({
+              code: z.ZodIssueCode.custom,
+              path: ["meetingUrl"],
+              message: "Meeting URL is required when session type is remote",
+            });
+          }
+        })
+        .safeParse(req.body);
+
+      if (!parsed.success) {
+        return res.status(400).json({ error: fromZodError(parsed.error).message });
       }
 
-      const user = req.user as User;
-      const session = await storage.createSession(result.data);
-      await createAudit(user.id, "create", "session", session.id, `Created session: ${session.title}`, req.ip);
-      res.json(session);
+      const input = parsed.data;
+      const caseData = await storage.getCase(input.caseId);
+      if (!caseData) {
+        return res.status(400).json({ error: "Case not found" });
+      }
+
+      const title = `${input.courtName} — ${new Date(input.dateGregorian).toLocaleDateString()} ${input.time}`;
+
+      const created = await storage.createSession({
+        caseId: input.caseId,
+        title,
+        sessionNumber: null,
+        gregorianDate: new Date(input.dateGregorian),
+        time: input.time,
+        hijriDate: input.hijriDate ?? null,
+        courtName: input.courtName,
+        city: input.city,
+        circuit: input.circuit ?? null,
+        sessionType: input.sessionType ?? null,
+        status: (input.status ?? "upcoming") as any,
+        meetingUrl: input.meetingUrl ?? null,
+        requirements: input.requirements ?? null,
+        notes: input.notes ?? null,
+        isConfidential: input.isConfidential ?? false,
+        reminderMinutes: input.reminderMinutes ?? null,
+        addToTimeline: input.addToTimeline ?? true,
+        // Legacy/extra
+        location: null,
+        outcome: null,
+        nextSessionDate: null,
+      } as any);
+
+      if (input.attachments?.length) {
+        await storage.attachDocumentsToSession({
+          uploadedBy: user.id,
+          beneficiaryId: caseData.beneficiaryId,
+          caseId: caseData.id,
+          sessionId: created.id,
+          documents: input.attachments,
+        });
+      }
+
+      if (input.addToTimeline ?? true) {
+        await storage.createCaseTimelineEvent({
+          caseId: caseData.id,
+          eventType: "session_added" as any,
+          fromStatus: null,
+          toStatus: null,
+          note: JSON.stringify({
+            sessionId: created.id,
+            dateGregorian: input.dateGregorian,
+            time: input.time,
+            courtName: input.courtName,
+            city: input.city,
+            circuit: input.circuit ?? null,
+            sessionType: input.sessionType ?? null,
+            status: input.status ?? "upcoming",
+            meetingUrl: input.meetingUrl ?? null,
+          }),
+          actorUserId: user.id,
+        } as any);
+      }
+
+      await createAudit(user.id, "create", "session", created.id, `Created session: ${created.title}`, req.ip);
+      return res.status(201).json(created);
     } catch (error: any) {
       res.status(500).json({ error: error.message });
     }
@@ -2959,7 +3455,49 @@ export async function registerRoutes(
   app.patch("/api/sessions/:id", requireStaff, async (req: AuthRequest, res) => {
     try {
       const user = req.user as User;
-      const session = await storage.updateSession(req.params.id, req.body);
+
+      const sessionTypeSchema = z.enum(["in_person", "remote", "hybrid"]);
+      const statusSchema = z.enum(["upcoming", "postponed", "completed", "cancelled"]);
+
+      const parsed = z
+        .object({
+          dateGregorian: z.string().datetime().optional(),
+          time: z.string().trim().min(1).optional(),
+          hijriDate: z.string().trim().optional().nullable(),
+          sessionType: sessionTypeSchema.optional().nullable(),
+          status: statusSchema.optional().nullable(),
+          meetingUrl: z.string().trim().url().optional().nullable(),
+          requirements: z.string().optional().nullable(),
+          notes: z.string().optional().nullable(),
+          isConfidential: z.boolean().optional(),
+          reminderMinutes: z.number().int().nonnegative().optional().nullable(),
+          addToTimeline: z.boolean().optional(),
+          courtName: z.string().trim().min(1).optional(),
+          city: z.string().trim().min(1).optional(),
+          circuit: z.string().trim().optional().nullable(),
+        })
+        .superRefine((data, ctx) => {
+          if (data.sessionType === "remote" && data.meetingUrl === null) {
+            ctx.addIssue({
+              code: z.ZodIssueCode.custom,
+              path: ["meetingUrl"],
+              message: "Meeting URL is required when session type is remote",
+            });
+          }
+        })
+        .safeParse(req.body);
+
+      if (!parsed.success) {
+        return res.status(400).json({ error: fromZodError(parsed.error).message });
+      }
+
+      const updates: any = { ...parsed.data };
+      if (typeof updates.dateGregorian === "string") {
+        updates.gregorianDate = new Date(updates.dateGregorian);
+        delete updates.dateGregorian;
+      }
+
+      const session = await storage.updateSession(req.params.id, updates);
       if (!session) {
         return res.status(404).json({ error: "Session not found" });
       }
@@ -3057,6 +3595,363 @@ export async function registerRoutes(
       res.status(500).json({ error: error.message });
     }
   });
+
+  // ========== POWERS OF ATTORNEY ROUTES (STAFF) ==========
+
+  function canStaffAccessPowerOfAttorney(user: User, poa: any, caseData?: any): boolean {
+    if (user.role === "admin" || user.role === "super_admin") return true;
+    if (user.role !== "lawyer") return false;
+    if (poa?.lawyerId && String(poa.lawyerId) === String(user.id)) return true;
+    if (poa?.caseId && caseData) return canLawyerAccessCase(user, caseData);
+    return false;
+  }
+
+  // List POAs (admin only)
+  app.get(
+    "/api/power-of-attorney",
+    requireStaff,
+    requireRole(["admin", "super_admin"]),
+    async (req: AuthRequest, res) => {
+      try {
+        const caseId = typeof req.query.caseId === "string" && req.query.caseId.trim() ? req.query.caseId.trim() : undefined;
+        const beneficiaryId =
+          typeof req.query.beneficiaryId === "string" && req.query.beneficiaryId.trim() ? req.query.beneficiaryId.trim() : undefined;
+        const expiringDays = typeof req.query.expiringDays === "string" ? Number(req.query.expiringDays) : undefined;
+
+        if (Number.isFinite(expiringDays) && expiringDays && expiringDays > 0) {
+          const rows = await storage.getExpiringPowersOfAttorney({ days: Math.trunc(expiringDays) });
+          const filtered = rows.filter((r: any) => {
+            if (caseId && String(r.caseId || "") !== caseId) return false;
+            if (beneficiaryId && String(r.beneficiaryId || "") !== beneficiaryId) return false;
+            return true;
+          });
+          return res.json(filtered);
+        }
+
+        if (caseId) {
+          const rows = await storage.getPowersOfAttorneyByCase(caseId);
+          return res.json(rows);
+        }
+        if (beneficiaryId) {
+          const rows = await storage.getPowersOfAttorneyByBeneficiary(beneficiaryId);
+          return res.json(rows);
+        }
+
+        const rows = await storage.getAllPowersOfAttorney();
+        return res.json(rows);
+      } catch (error: any) {
+        return res.status(500).json({ error: getErrorMessage(error) });
+      }
+    },
+  );
+
+  // Expiring soon (admin only)
+  app.get(
+    "/api/power-of-attorney/expiring",
+    requireStaff,
+    requireRole(["admin", "super_admin"]),
+    async (req: AuthRequest, res) => {
+      try {
+        const daysRaw = typeof req.query.days === "string" ? Number(req.query.days) : 30;
+        const days = Number.isFinite(daysRaw) ? Math.max(1, Math.trunc(daysRaw)) : 30;
+        const rows = await storage.getExpiringPowersOfAttorney({ days });
+        return res.json(rows);
+      } catch (error: any) {
+        return res.status(500).json({ error: getErrorMessage(error) });
+      }
+    },
+  );
+
+  // Get by id (admin any; lawyer only if related)
+  app.get("/api/power-of-attorney/:id", requireStaff, async (req: AuthRequest, res) => {
+    try {
+      const user = req.user as User;
+      const poa = await storage.getPowerOfAttorney(req.params.id);
+      if (!poa) return res.status(404).json({ error: "Power of attorney not found" });
+
+      const caseData = poa.caseId ? await storage.getCase(String(poa.caseId)) : undefined;
+      if (!canStaffAccessPowerOfAttorney(user, poa, caseData)) {
+        return res.status(403).json({ error: "Forbidden" });
+      }
+
+      const attachments = await storage.getDocumentsByPowerOfAttorney(poa.id);
+      return res.json({ ...poa, attachments });
+    } catch (error: any) {
+      return res.status(500).json({ error: getErrorMessage(error) });
+    }
+  });
+
+  // Create POA (admin/lawyer)
+  app.post(
+    "/api/power-of-attorney",
+    requireStaff,
+    requireRole(["admin", "lawyer", "super_admin"]),
+    async (req: AuthRequest, res) => {
+      try {
+        const user = req.user as User;
+
+        const parsed = z
+          .object({
+            poaNumber: z.string().trim().min(1).optional().nullable(),
+            beneficiaryId: z.string().trim().min(1),
+            caseId: z.string().trim().optional().nullable(),
+            lawyerId: z.string().trim().optional().nullable(),
+            issueDate: z.string().datetime(),
+            expiryDate: z.union([z.string().datetime(), z.null()]).optional(),
+            scope: z.string().trim().min(1),
+            restrictions: z.union([z.string(), z.null()]).optional(),
+            notes: z.union([z.string(), z.null()]).optional(),
+            isActive: z.boolean().optional(),
+            attachments: z.array(uploadedFileMetadataSchema).optional().default([]),
+          })
+          .safeParse(req.body);
+
+        if (!parsed.success) {
+          return res.status(400).json({ error: fromZodError(parsed.error).message });
+        }
+
+        const input = parsed.data;
+
+        const beneficiary = await storage.getBeneficiary(input.beneficiaryId);
+        if (!beneficiary) return res.status(400).json({ error: "Beneficiary not found" });
+
+        const caseId = input.caseId ? String(input.caseId) : null;
+        const caseData = caseId ? await storage.getCase(caseId) : undefined;
+        if (caseId && !caseData) return res.status(400).json({ error: "Case not found" });
+
+        if (user.role === "lawyer" && caseData && !canLawyerAccessCase(user, caseData)) {
+          return res.status(403).json({ error: "Forbidden" });
+        }
+
+        const poaNumber = (input.poaNumber && input.poaNumber.trim()) || `POA-${Date.now()}`;
+
+        const created = await storage.createPowerOfAttorney({
+          poaNumber,
+          beneficiaryId: beneficiary.id,
+          caseId: caseId,
+          lawyerId: input.lawyerId ? String(input.lawyerId) : null,
+          issueDate: new Date(input.issueDate),
+          expiryDate: input.expiryDate ? new Date(input.expiryDate) : null,
+          scope: input.scope,
+          restrictions: input.restrictions ? String(input.restrictions) : null,
+          notes: input.notes ? String(input.notes) : null,
+          isActive: input.isActive ?? true,
+          documentUrl: null,
+        } as any);
+
+        if (input.attachments?.length) {
+          await storage.attachDocumentsToPowerOfAttorney({
+            uploadedBy: user.id,
+            beneficiaryId: created.beneficiaryId,
+            caseId: created.caseId,
+            powerOfAttorneyId: created.id,
+            documents: input.attachments,
+          });
+        }
+
+        await createAudit(user.id, "create", "power_of_attorney", created.id, `Created POA: ${created.poaNumber}`, req.ip);
+        return res.status(201).json(created);
+      } catch (error: any) {
+        return res.status(500).json({ error: getErrorMessage(error) });
+      }
+    },
+  );
+
+  // Update POA (admin/lawyer with access)
+  app.patch(
+    "/api/power-of-attorney/:id",
+    requireStaff,
+    requireRole(["admin", "lawyer", "super_admin"]),
+    async (req: AuthRequest, res) => {
+      try {
+        const user = req.user as User;
+        const existing = await storage.getPowerOfAttorney(req.params.id);
+        if (!existing) return res.status(404).json({ error: "Power of attorney not found" });
+
+        const caseData = existing.caseId ? await storage.getCase(String(existing.caseId)) : undefined;
+        if (!canStaffAccessPowerOfAttorney(user, existing, caseData)) {
+          return res.status(403).json({ error: "Forbidden" });
+        }
+
+        const parsed = z
+          .object({
+            caseId: z.union([z.string().trim(), z.null()]).optional(),
+            lawyerId: z.union([z.string().trim(), z.null()]).optional(),
+            issueDate: z.union([z.string().datetime(), z.null()]).optional(),
+            expiryDate: z.union([z.string().datetime(), z.null()]).optional(),
+            scope: z.string().trim().min(1).optional(),
+            restrictions: z.union([z.string(), z.null()]).optional(),
+            notes: z.union([z.string(), z.null()]).optional(),
+            isActive: z.boolean().optional(),
+          })
+          .safeParse(req.body);
+
+        if (!parsed.success) {
+          return res.status(400).json({ error: fromZodError(parsed.error).message });
+        }
+
+        const updates: any = { ...parsed.data };
+        if (typeof updates.issueDate === "string") updates.issueDate = new Date(updates.issueDate);
+        if (typeof updates.expiryDate === "string") updates.expiryDate = new Date(updates.expiryDate);
+
+        if (updates.caseId !== undefined) {
+          const nextCaseId = updates.caseId === null ? null : String(updates.caseId);
+          if (nextCaseId) {
+            const nextCase = await storage.getCase(nextCaseId);
+            if (!nextCase) return res.status(400).json({ error: "Case not found" });
+            if (user.role === "lawyer" && !canLawyerAccessCase(user, nextCase)) {
+              return res.status(403).json({ error: "Forbidden" });
+            }
+          }
+          updates.caseId = nextCaseId;
+        }
+
+        const updated = await storage.updatePowerOfAttorney(existing.id, updates);
+        if (!updated) return res.status(404).json({ error: "Power of attorney not found" });
+
+        await createAudit(user.id, "update", "power_of_attorney", updated.id, `Updated POA: ${updated.poaNumber}`, req.ip);
+        return res.json(updated);
+      } catch (error: any) {
+        return res.status(500).json({ error: getErrorMessage(error) });
+      }
+    },
+  );
+
+  // Delete POA (admin only)
+  app.delete(
+    "/api/power-of-attorney/:id",
+    requireStaff,
+    requireRole(["admin", "super_admin"]),
+    async (req: AuthRequest, res) => {
+      try {
+        const user = req.user as User;
+        const existing = await storage.getPowerOfAttorney(req.params.id);
+        if (!existing) return res.status(404).json({ error: "Power of attorney not found" });
+
+        const ok = await storage.deletePowerOfAttorney(existing.id);
+        if (!ok) return res.status(404).json({ error: "Power of attorney not found" });
+
+        await createAudit(user.id, "delete", "power_of_attorney", existing.id, `Deleted POA: ${existing.poaNumber}`, req.ip);
+        return res.json({ success: true });
+      } catch (error: any) {
+        return res.status(500).json({ error: getErrorMessage(error) });
+      }
+    },
+  );
+
+  // Attachments
+  app.get(
+    "/api/power-of-attorney/:id/attachments",
+    requireStaff,
+    async (req: AuthRequest, res) => {
+      try {
+        const user = req.user as User;
+        const poa = await storage.getPowerOfAttorney(req.params.id);
+        if (!poa) return res.status(404).json({ error: "Power of attorney not found" });
+
+        const caseData = poa.caseId ? await storage.getCase(String(poa.caseId)) : undefined;
+        if (!canStaffAccessPowerOfAttorney(user, poa, caseData)) {
+          return res.status(403).json({ error: "Forbidden" });
+        }
+
+        const docs = await storage.getDocumentsByPowerOfAttorney(poa.id);
+        return res.json(docs);
+      } catch (error: any) {
+        return res.status(500).json({ error: getErrorMessage(error) });
+      }
+    },
+  );
+
+  app.post(
+    "/api/power-of-attorney/:id/attachments",
+    requireStaff,
+    requireRole(["admin", "lawyer", "super_admin"]),
+    async (req: AuthRequest, res) => {
+      try {
+        const user = req.user as User;
+        const poa = await storage.getPowerOfAttorney(req.params.id);
+        if (!poa) return res.status(404).json({ error: "Power of attorney not found" });
+
+        const caseData = poa.caseId ? await storage.getCase(String(poa.caseId)) : undefined;
+        if (!canStaffAccessPowerOfAttorney(user, poa, caseData)) {
+          return res.status(403).json({ error: "Forbidden" });
+        }
+
+        const parsed = z
+          .object({ documents: z.array(uploadedFileMetadataSchema).min(1) })
+          .safeParse(req.body);
+        if (!parsed.success) {
+          return res.status(400).json({ error: fromZodError(parsed.error).message });
+        }
+
+        const docs = await storage.attachDocumentsToPowerOfAttorney({
+          uploadedBy: user.id,
+          beneficiaryId: String(poa.beneficiaryId),
+          caseId: poa.caseId ? String(poa.caseId) : null,
+          powerOfAttorneyId: poa.id,
+          documents: parsed.data.documents,
+        });
+
+        await createAudit(user.id, "attach_document", "power_of_attorney", poa.id, `Attached ${docs.length} document(s)`, req.ip);
+        return res.status(201).json({ success: true, documents: docs });
+      } catch (error: any) {
+        return res.status(500).json({ error: getErrorMessage(error) });
+      }
+    },
+  );
+
+  // Printable view (HTML; browser can print to PDF)
+  app.get(
+    "/api/power-of-attorney/:id/print",
+    requireStaff,
+    async (req: AuthRequest, res) => {
+      try {
+        const user = req.user as User;
+        const poa = await storage.getPowerOfAttorney(req.params.id);
+        if (!poa) return res.status(404).send("Not found");
+
+        const caseData = poa.caseId ? await storage.getCase(String(poa.caseId)) : undefined;
+        if (!canStaffAccessPowerOfAttorney(user, poa, caseData)) {
+          return res.status(403).send("Forbidden");
+        }
+
+        const beneficiary = await storage.getBeneficiary(String(poa.beneficiaryId));
+        const html = `<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>Power of Attorney ${String((poa as any).poaNumber || "")}</title>
+    <style>
+      body { font-family: system-ui, -apple-system, Segoe UI, Roboto, Arial, sans-serif; padding: 24px; }
+      h1 { font-size: 18px; margin: 0 0 12px; }
+      .row { margin: 8px 0; }
+      .label { color: #555; display: inline-block; min-width: 180px; }
+      .value { font-weight: 500; }
+      hr { margin: 16px 0; border: 0; border-top: 1px solid #ddd; }
+    </style>
+  </head>
+  <body>
+    <h1>Power of Attorney</h1>
+    <div class="row"><span class="label">POA Number</span><span class="value">${String((poa as any).poaNumber || "-")}</span></div>
+    <div class="row"><span class="label">Beneficiary</span><span class="value">${String((beneficiary as any)?.fullName || "-")}</span></div>
+    <div class="row"><span class="label">Issue Date</span><span class="value">${(poa as any).issueDate ? new Date((poa as any).issueDate).toLocaleDateString() : "-"}</span></div>
+    <div class="row"><span class="label">Expiry Date</span><span class="value">${(poa as any).expiryDate ? new Date((poa as any).expiryDate).toLocaleDateString() : "-"}</span></div>
+    <div class="row"><span class="label">Status</span><span class="value">${(poa as any).isActive ? "Active" : "Inactive"}</span></div>
+    <hr />
+    <div class="row"><span class="label">Scope</span><span class="value">${String((poa as any).scope || "-")}</span></div>
+    <div class="row"><span class="label">Restrictions</span><span class="value">${String((poa as any).restrictions || "-")}</span></div>
+    <div class="row"><span class="label">Notes</span><span class="value">${String((poa as any).notes || "-")}</span></div>
+  </body>
+</html>`;
+
+        res.setHeader("Content-Type", "text/html; charset=utf-8");
+        return res.send(html);
+      } catch (error: any) {
+        return res.status(500).send("Error");
+      }
+    },
+  );
 
   return httpServer;
 }

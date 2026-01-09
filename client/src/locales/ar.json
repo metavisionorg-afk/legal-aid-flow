@@ -2,7 +2,63 @@
     "nav": {
       "cases": "القضايا",
       "cases_list": "القضايا",
-      "case_types": "أنواع القضايا"
+      "case_types": "أنواع القضايا",
+      "powers_of_attorney": "الوكالات"
+    },
+    "poa": {
+      "subtitle": "إدارة الوكالات والمرفقات المرتبطة بها.",
+      "table": { "title": "الوكالات" },
+      "search_placeholder": "ابحث برقم الوكالة أو اسم المستفيد...",
+      "filters": {
+        "expiring_30": "تنتهي خلال 30 يوم"
+      },
+      "fields": {
+        "poa_number": "رقم الوكالة",
+        "beneficiary": "المستفيد",
+        "case": "القضية",
+        "lawyer": "المحامي",
+        "issue_date": "تاريخ الإصدار",
+        "expiry_date": "تاريخ الانتهاء",
+        "scope": "النطاق",
+        "restrictions": "القيود",
+        "notes": "ملاحظات",
+        "active": "مفعلة",
+        "attachments": "المرفقات"
+      },
+      "placeholders": {
+        "select_beneficiary": "اختر المستفيد",
+        "select_case_optional": "اختر القضية (اختياري)",
+        "select_lawyer_optional": "اختر المحامي (اختياري)"
+      },
+      "values": {
+        "active": "مفعلة",
+        "inactive": "غير مفعلة",
+        "none": "بدون"
+      },
+      "actions": {
+        "add": "إضافة وكالة",
+        "edit": "تعديل",
+        "delete": "حذف",
+        "print": "طباعة"
+      },
+      "dialog": {
+        "add_title": "إضافة وكالة",
+        "edit_title": "تعديل وكالة"
+      },
+      "toasts": {
+        "created": "تم إنشاء الوكالة",
+        "updated": "تم تحديث الوكالة",
+        "deleted": "تم حذف الوكالة"
+      },
+      "errors": {
+        "beneficiary_required": "المستفيد مطلوب",
+        "scope_required": "النطاق مطلوب",
+        "issue_date_required": "تاريخ الإصدار مطلوب"
+      },
+      "attachments": {
+        "count": "عدد المرفقات الحالية: {{count}}"
+      },
+      "empty": "لا توجد وكالات حتى الآن."
     },
     "case_types": {
       "subtitle": "إدارة قائمة أنواع القضايا المستخدمة في النظام.",
@@ -82,6 +138,7 @@
     "welcome": "مرحباً",
     "my_profile": "ملفي الشخصي",
     "my_cases": "قضاياي",
+    "my_tasks": "مهامي",
     "my_requests": "طلباتي",
     "my_appointments": "مواعيدي",
     "book_appointment": "حجز موعد",
@@ -332,16 +389,50 @@
     "session_number": "رقم الجلسة",
     "session_number_placeholder": "اختياري",
     "gregorian_date": "التاريخ الميلادي",
+    "date_gregorian": "التاريخ (ميلادي)",
+    "time": "الوقت",
     "hijri_date": "التاريخ الهجري",
     "date_required": "التاريخ مطلوب",
+    "time_required": "الوقت مطلوب",
     "date_invalid": "تاريخ غير صالح",
     "location": "المكان",
     "location_placeholder": "اختياري",
     "next_session_date": "تاريخ الجلسة القادمة",
+    "status": "الحالة",
+    "select_status": "اختر الحالة",
+    "status_upcoming": "قادمة",
+    "status_postponed": "مؤجلة",
+    "status_completed": "مكتملة",
+    "status_cancelled": "ملغاة",
+    "session_type": "نوع الجلسة",
+    "select_session_type": "اختر النوع",
+    "type_in_person": "حضوري",
+    "type_remote": "عن بُعد",
+    "type_hybrid": "هجين",
+    "meeting_url": "رابط الاجتماع",
+    "meeting_url_placeholder": "https://...",
+    "meeting_url_required": "رابط الاجتماع مطلوب",
+    "court_name": "اسم المحكمة",
+    "court_name_placeholder": "مطلوب",
+    "court_required": "اسم المحكمة مطلوب",
+    "city": "المدينة",
+    "city_placeholder": "مطلوب",
+    "city_required": "المدينة مطلوبة",
+    "circuit": "الدائرة",
+    "circuit_placeholder": "اختياري",
+    "requirements": "المتطلبات",
+    "requirements_placeholder": "اختياري",
     "notes": "ملاحظات",
     "notes_placeholder": "اختياري",
     "outcome": "النتيجة",
     "outcome_placeholder": "اختياري",
+    "confidential": "سري",
+    "add_to_timeline": "إضافة إلى الخط الزمني",
+    "reminder_minutes": "تذكير (بالدقائق)",
+    "reminder_minutes_placeholder": "اختياري",
+    "attachments": "المرفقات",
+    "attachments_list": "المرفقات المرفوعة",
+    "attachments_uploaded": "تم رفع المرفقات",
     "empty": "لا توجد جلسات",
     "created": "تم إنشاء الجلسة"
   },
@@ -412,6 +503,25 @@
     "under_review": "طلبك قيد المراجعة"
   },
   "cases": {
+    "filters": {
+      "all": "كل القضايا",
+      "active": "النشطة",
+      "pending": "قيد الانتظار",
+      "closed": "المغلقة"
+    },
+    "delete_confirm_title": "تأكيد الحذف",
+    "delete_confirm_description": "هل أنت متأكد من حذف هذه القضية؟ لا يمكن التراجع عن هذا الإجراء.",
+    "deleted": "تم حذف القضية",
+    "validation": {
+      "title_required": "العنوان مطلوب"
+    },
+    "fields": {
+      "title": "العنوان",
+      "description": "الوصف",
+      "opponent_name": "الخصم",
+      "opponent_lawyer": "محامي الخصم",
+      "opponent_contact": "تواصل الخصم"
+    },
     "case_number": "رقم القضية",
     "case_title": "عنوان القضية",
     "add_case": "تقديم قضية",

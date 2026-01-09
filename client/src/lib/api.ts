@@ -302,6 +302,7 @@ export const appointmentsAPI = {
 // Notifications API
 export const notificationsAPI = {
   getAll: () => fetchAPI("/notifications"),
+  getMy: () => fetchAPI("/notifications/my"),
   getUnread: () => fetchAPI("/notifications/unread"),
   markAsRead: (id: string) =>
     fetchAPI(`/notifications/${id}/read`, { method: "PATCH" }),
@@ -376,9 +377,17 @@ export const rulesAPI = {
 // Tasks API (Staff only)
 export const tasksAPI = {
   getAll: () => fetchAPI("/tasks"),
+  // Beneficiary portal
+  getMy: () => fetchAPI("/tasks/my"),
   getOne: (id: string) => fetchAPI(`/tasks/${id}`),
   getByUser: (userId: string) => fetchAPI(`/users/${userId}/tasks`),
   getByCase: (caseId: string) => fetchAPI(`/cases/${caseId}/tasks`),
+  listAttachments: (taskId: string) => fetchAPI(`/tasks/${taskId}/attachments`),
+  addAttachments: (taskId: string, data: { isPublic?: boolean; documents: any[] }) =>
+    fetchAPI(`/tasks/${taskId}/attachments`, {
+      method: "POST",
+      body: JSON.stringify(data),
+    }),
   create: (data: any) =>
     fetchAPI("/tasks", {
       method: "POST",
@@ -431,6 +440,50 @@ export const sessionsAPI = {
 // Enhanced Dashboard API (Staff only)
 export const enhancedDashboardAPI = {
   getStats: () => fetchAPI("/dashboard/enhanced-stats"),
+
+  listAttachments: (taskId: string) => fetchAPI(`/tasks/${taskId}/attachments`),
+  addAttachments: (taskId: string, data: { isPublic?: boolean; documents: any[] }) =>
+    fetchAPI(`/tasks/${taskId}/attachments`, {
+      method: "POST",
+      body: JSON.stringify(data),
+    }),
+};
+
+// Powers of Attorney API (Staff)
+export const powersOfAttorneyAPI = {
+  list: (params?: { caseId?: string; beneficiaryId?: string; expiringDays?: number }) => {
+    const qs = new URLSearchParams();
+    if (params?.caseId) qs.set("caseId", params.caseId);
+    if (params?.beneficiaryId) qs.set("beneficiaryId", params.beneficiaryId);
+    if (typeof params?.expiringDays === "number") qs.set("expiringDays", String(params.expiringDays));
+    const suffix = qs.toString() ? `?${qs.toString()}` : "";
+    return fetchAPI(`/power-of-attorney${suffix}`);
+  },
+  expiring: (days?: number) => {
+    const suffix = typeof days === "number" ? `?days=${encodeURIComponent(String(days))}` : "";
+    return fetchAPI(`/power-of-attorney/expiring${suffix}`);
+  },
+  getOne: (id: string) => fetchAPI(`/power-of-attorney/${id}`),
+  create: (data: any) =>
+    fetchAPI("/power-of-attorney", {
+      method: "POST",
+      body: JSON.stringify(data),
+    }),
+  update: (id: string, data: any) =>
+    fetchAPI(`/power-of-attorney/${id}`,
+      {
+        method: "PATCH",
+        body: JSON.stringify(data),
+      }
+    ),
+  delete: (id: string) => fetchAPI(`/power-of-attorney/${id}`, { method: "DELETE" }),
+  listAttachments: (id: string) => fetchAPI(`/power-of-attorney/${id}/attachments`),
+  addAttachments: (id: string, data: { documents: any[] }) =>
+    fetchAPI(`/power-of-attorney/${id}/attachments`, {
+      method: "POST",
+      body: JSON.stringify(data),
+    }),
+  printUrl: (id: string) => `/api/power-of-attorney/${id}/print`,
 };
 
 // Case Types API (Staff/admin management + active list for authenticated users)

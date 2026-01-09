@@ -30,9 +30,10 @@ export function Sidebar() {
 
   const showLawyerPortal = isLawyer(user);
   const showStaffCasesGroup = Boolean(user && (user as any).userType === "staff");
+  const isAdmin = Boolean(user && ((user as any).role === "admin" || (user as any).role === "super_admin"));
 
   const shouldOpenCasesGroup = useMemo(
-    () => Boolean(location.startsWith("/cases") || location.startsWith("/case-types")),
+    () => Boolean(location.startsWith("/cases") || location.startsWith("/case-types") || location.startsWith("/power-of-attorney")),
     [location],
   );
 
@@ -64,6 +65,7 @@ export function Sidebar() {
 
   const casesListActive = Boolean(location === "/cases" || location.startsWith("/cases/"));
   const caseTypesActive = Boolean(location === "/case-types" || location.startsWith("/case-types/"));
+  const poaActive = Boolean(location === "/power-of-attorney" || location.startsWith("/power-of-attorney/"));
 
   return (
     <div className="h-full w-64 border-r bg-sidebar flex flex-col">
@@ -154,6 +156,21 @@ export function Sidebar() {
                     {t("nav.case_types")}
                   </div>
                 </Link>
+
+                {isAdmin ? (
+                  <Link href="/power-of-attorney">
+                    <div
+                      className={cn(
+                        "flex items-center gap-3 px-3 py-2 rounded-md text-sm font-medium transition-colors cursor-pointer",
+                        poaActive
+                          ? "bg-sidebar-accent text-sidebar-accent-foreground"
+                          : "text-sidebar-foreground/70 hover:bg-sidebar-accent/50 hover:text-sidebar-foreground",
+                      )}
+                    >
+                      {t("nav.powers_of_attorney")}
+                    </div>
+                  </Link>
+                ) : null}
               </div>
             </CollapsibleContent>
           </Collapsible>

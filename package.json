@@ -21,7 +21,9 @@
     "smoke:stage6:clean": "SMOKE_CLEAN=1 tsx scripts/smoke-stage6.ts",
     "smoke:stage1": "tsx scripts/smoke-stage1-cases.ts",
     "smoke:stage2": "tsx scripts/smoke-stage2-docs.ts",
-    "smoke:stage3": "tsx scripts/smoke-stage3-service-requests.ts"
+    "smoke:stage3": "tsx scripts/smoke-stage3-service-requests.ts",
+    "smoke:stage4": "tsx scripts/smoke-stage4-tasks.ts",
+    "smoke:sessions": "tsx scripts/smoke-stage-sessions.ts"
   },
   "dependencies": {
     "@hookform/resolvers": "^3.10.0",

@@ -3,7 +3,7 @@ import { queryClient } from "./lib/queryClient";
 import { QueryClientProvider } from "@tanstack/react-query";
 import { Toaster } from "@/components/ui/toaster";
 import { TooltipProvider } from "@/components/ui/tooltip";
-import { AuthProvider, useAuth } from "./contexts/AuthContext";
+import { AuthProvider, useAuth } from "@/contexts/AuthContext";
 import { PortalLayout } from "@/components/layout/PortalLayout";
 import NotFound from "@/pages/not-found";
 import Login from "@/pages/Login";
@@ -19,6 +19,7 @@ import Tasks from "@/pages/Tasks";
 import Rules from "@/pages/Rules";
 import Consultations from "@/pages/Consultations";
 import Sessions from "@/pages/Sessions";
+import PowersOfAttorney from "@/pages/PowersOfAttorney";
 import Finance from "@/pages/Finance.tsx";
 import Lawyers from "@/pages/Lawyers";
 import LawyerDashboard from "@/pages/lawyer/LawyerDashboard";
@@ -28,6 +29,7 @@ import PortalRegister from "@/pages/portal/PortalRegister";
 import PortalDashboard from "@/pages/portal/PortalDashboard";
 import PortalBookAppointment from "@/pages/portal/PortalBookAppointment";
 import PortalMyCases from "@/pages/portal/PortalMyCases";
+import PortalTasks from "@/pages/portal/PortalTasks";
 import BeneficiaryRegister from "@/pages/BeneficiaryRegister";
 import BeneficiaryPortal from "@/pages/BeneficiaryPortal";
 import RegisterBeneficiary from "@/pages/RegisterBeneficiary";
@@ -130,6 +132,17 @@ function Router() {
           />
         )}
       </Route>
+      <Route path="/power-of-attorney">
+        {() => (
+          <StaffRoute
+            component={() => (
+              <RequireRole role={["admin", "super_admin"]}>
+                <PowersOfAttorney />
+              </RequireRole>
+            )}
+          />
+        )}
+      </Route>
       <Route path="/lawyers">
         {() => <StaffRoute component={Lawyers} />}
       </Route>
@@ -202,6 +215,9 @@ function Router() {
       </Route>
       <Route path="/portal/my-cases">
         {() => <PortalRoute component={PortalMyCases} />}
+      </Route>
+      <Route path="/portal/tasks">
+        {() => <PortalRoute component={PortalTasks} />}
       </Route>
       <Route path="/portal/my-requests">
         {() => <PortalRoute component={PortalDashboard} />}

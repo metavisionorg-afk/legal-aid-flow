@@ -10,14 +10,8 @@ import {
 } from "@/components/ui/table";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
-import { 
-  DropdownMenu, 
-  DropdownMenuContent, 
-  DropdownMenuItem, 
-  DropdownMenuTrigger 
-} from "@/components/ui/dropdown-menu";
 import { Badge } from "@/components/ui/badge";
-import { MoreHorizontal, Search, Filter } from "lucide-react";
+import { Eye, Filter, Pencil, Search, Trash2 } from "lucide-react";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { casesAPI, uploadsAPI, usersAPI } from "@/lib/api";
@@ -42,6 +36,16 @@ import { LawyerPortalLayout } from "@/components/layout/LawyerPortalLayout";
 import { Switch as ToggleSwitch } from "@/components/ui/switch";
 import { getErrorMessage } from "@/lib/errors";
 import { NewCaseDialog } from "@/components/cases/NewCaseDialog";
+import {
+  AlertDialog,
+  AlertDialogAction,
+  AlertDialogCancel,
+  AlertDialogContent,
+  AlertDialogDescription,
+  AlertDialogFooter,
+  AlertDialogHeader,
+  AlertDialogTitle,
+} from "@/components/ui/alert-dialog";
 
 export default function Cases() {
   const { t } = useTranslation();
@@ -52,8 +56,28 @@ export default function Cases() {
 
   const [docsOpen, setDocsOpen] = useState(false);
   const [selectedCase, setSelectedCase] = useState<any>(null);
+  const [caseDialogMode, setCaseDialogMode] = useState<"view" | "edit">("view");
   const [docFile, setDocFile] = useState<File | null>(null);
   const [docIsPublic, setDocIsPublic] = useState<boolean>(false);
+
+  const [deleteDialogOpen, setDeleteDialogOpen] = useState(false);
+  const [pendingDeleteCase, setPendingDeleteCase] = useState<any>(null);
+
+  const [editDraft, setEditDraft] = useState<{
+    title: string;
+    description: string;
+    opponentName: string;
+    opponentLawyer: string;
+    opponentContact: string;
+    priority: "low" | "medium" | "high" | "urgent";
+  }>({
+    title: "",
+    description: "",
+    opponentName: "",
+    opponentLawyer: "",
+    opponentContact: "",
+    priority: "medium",
+  });
 
   const [matchCaseRoute, caseRouteParams] = useRoute("/cases/:id");
   const [matchLawyerCaseRoute, lawyerCaseRouteParams] = useRoute("/lawyer/cases/:id");
@@ -65,6 +89,22 @@ export default function Cases() {
   const canCreate = canCreateCase(user);
   const allowed = isBeneficiary(user) || isAdmin(user) || isLawyer(user);
   const isLawyerPortalRoute = Boolean(isLawyerUser && location.startsWith("/lawyer"));
+
+  const canEditCase = (c: any) => {
+    if (!user || !c) return false;
+    if (isBen) return false;
+    // Admins can edit any case; lawyers only their assigned cases.
+    if (isAdminUser) return true;
+    if (isLawyerUser) return String(c.assignedLawyerId || "") === String(user.id);
+    return false;
+  };
+
+  const canDeleteCase = (c: any) => {
+    if (!user || !c) return false;
+    if (isBen) return false;
+    // Safer default: only admins can delete.
+    return isAdminUser;
+  };
 
   // If a lawyer lands on the staff cases route, keep them inside the lawyer portal.
   useEffect(() => {
@@ -135,8 +175,21 @@ export default function Cases() {
 
     setSelectedCase(found);
     setDocsOpen(true);
+    setCaseDialogMode("view");
     lastOpenedCaseIdRef.current = id;
   }, [matchCaseRoute, (caseRouteParams as any)?.id, matchLawyerCaseRoute, (lawyerCaseRouteParams as any)?.id, cases]);
+
+  useEffect(() => {
+    if (!selectedCase) return;
+    setEditDraft({
+      title: String(selectedCase.title ?? ""),
+      description: String(selectedCase.description ?? ""),
+      opponentName: String(selectedCase.opponentName ?? ""),
+      opponentLawyer: String(selectedCase.opponentLawyer ?? ""),
+      opponentContact: String(selectedCase.opponentContact ?? ""),
+      priority: (String(selectedCase.priority || "medium") as any) || "medium",
+    });
+  }, [selectedCase?.id]);
 
   const { data: caseDocuments, isLoading: loadingDocs } = useQuery({
     queryKey: ["case-documents", selectedCase?.id],
@@ -214,6 +267,62 @@ export default function Cases() {
       await queryClient.invalidateQueries({ queryKey: ["case", selectedCase?.id] });
       await queryClient.invalidateQueries({ queryKey: ["case-timeline", selectedCase?.id] });
       toast({ title: t("common.success") });
+    },
+    onError: (err: any) => {
+      toast({
+        title: t("common.error"),
+        description: getErrorMessage(err, t) || t("common.error"),
+        variant: "destructive",
+      });
+    },
+  });
+
+  const updateCaseMutation = useMutation({
+    mutationFn: async () => {
+      if (!selectedCase?.id) throw new Error("No case selected");
+      if (!canEditCase(selectedCase)) throw new Error("Forbidden");
+      const title = editDraft.title.trim();
+      if (!title) throw new Error(t("cases.validation.title_required", { defaultValue: "Title is required" }));
+
+      return casesAPI.update(String(selectedCase.id), {
+        title,
+        description: String(editDraft.description ?? ""),
+        opponentName: editDraft.opponentName.trim() ? editDraft.opponentName.trim() : null,
+        opponentLawyer: editDraft.opponentLawyer.trim() ? editDraft.opponentLawyer.trim() : null,
+        opponentContact: editDraft.opponentContact.trim() ? editDraft.opponentContact.trim() : null,
+        priority: editDraft.priority,
+      });
+    },
+    onSuccess: async () => {
+      await queryClient.invalidateQueries({ queryKey: ["cases"] });
+      await queryClient.invalidateQueries({ queryKey: ["case", selectedCase?.id] });
+      toast({ title: t("common.success") });
+      setCaseDialogMode("view");
+    },
+    onError: (err: any) => {
+      toast({
+        title: t("common.error"),
+        description: getErrorMessage(err, t) || t("common.error"),
+        variant: "destructive",
+      });
+    },
+  });
+
+  const deleteCaseMutation = useMutation({
+    mutationFn: async () => {
+      if (!pendingDeleteCase?.id) throw new Error("No case selected");
+      if (!canDeleteCase(pendingDeleteCase)) throw new Error("Forbidden");
+      return casesAPI.delete(String(pendingDeleteCase.id));
+    },
+    onSuccess: async () => {
+      setDeleteDialogOpen(false);
+      setPendingDeleteCase(null);
+      if (selectedCase && pendingDeleteCase && String(selectedCase.id) === String(pendingDeleteCase.id)) {
+        setDocsOpen(false);
+        setSelectedCase(null);
+      }
+      await queryClient.invalidateQueries({ queryKey: ["cases"] });
+      toast({ title: t("cases.deleted", { defaultValue: t("common.success") }) });
     },
     onError: (err: any) => {
       toast({
@@ -370,10 +479,10 @@ export default function Cases() {
       <Tabs defaultValue="all" className="w-full">
         <div className="flex flex-col sm:flex-row items-center justify-between gap-4 mb-4">
           <TabsList>
-            <TabsTrigger value="all">All Cases</TabsTrigger>
-            <TabsTrigger value="active">Active</TabsTrigger>
-            <TabsTrigger value="pending">Pending</TabsTrigger>
-            <TabsTrigger value="closed">Closed</TabsTrigger>
+            <TabsTrigger value="all">{t("cases.filters.all")}</TabsTrigger>
+            <TabsTrigger value="active">{t("cases.filters.active")}</TabsTrigger>
+            <TabsTrigger value="pending">{t("cases.filters.pending")}</TabsTrigger>
+            <TabsTrigger value="closed">{t("cases.filters.closed")}</TabsTrigger>
           </TabsList>
 
           <div className="flex items-center gap-2 w-full sm:w-auto">
@@ -494,24 +603,50 @@ export default function Cases() {
                         </div>
                       </TableCell>
                       <TableCell className="text-right rtl:text-left">
-                        <DropdownMenu>
-                          <DropdownMenuTrigger asChild>
-                            <Button variant="ghost" size="icon" data-testid={`button-actions-${c.id}`}>
-                              <MoreHorizontal className="h-4 w-4" />
-                              <span className="sr-only">Actions</span>
-                            </Button>
-                          </DropdownMenuTrigger>
-                          <DropdownMenuContent align="end">
-                            <DropdownMenuItem
-                              onClick={() => {
-                                setSelectedCase(c);
-                                setDocsOpen(true);
-                              }}
-                            >
-                              View Details
-                            </DropdownMenuItem>
-                          </DropdownMenuContent>
-                        </DropdownMenu>
+                        <div className="flex items-center justify-end gap-2">
+                          <Button
+                            variant="secondary"
+                            size="icon"
+                            onClick={() => {
+                              setSelectedCase(c);
+                              setCaseDialogMode("edit");
+                              setDocsOpen(true);
+                            }}
+                            disabled={!canEditCase(c)}
+                            aria-label={t("common.edit")}
+                            data-testid={`button-edit-${c.id}`}
+                          >
+                            <Pencil className="h-4 w-4" />
+                          </Button>
+
+                          <Button
+                            variant="secondary"
+                            size="icon"
+                            onClick={() => {
+                              setSelectedCase(c);
+                              setCaseDialogMode("view");
+                              setDocsOpen(true);
+                            }}
+                            aria-label={t("common.view")}
+                            data-testid={`button-view-${c.id}`}
+                          >
+                            <Eye className="h-4 w-4" />
+                          </Button>
+
+                          <Button
+                            variant="destructive"
+                            size="icon"
+                            onClick={() => {
+                              setPendingDeleteCase(c);
+                              setDeleteDialogOpen(true);
+                            }}
+                            disabled={!canDeleteCase(c) || deleteCaseMutation.isPending}
+                            aria-label={t("common.delete")}
+                            data-testid={`button-delete-${c.id}`}
+                          >
+                            <Trash2 className="h-4 w-4" />
+                          </Button>
+                        </div>
                       </TableCell>
                     </TableRow>
                   ))
@@ -543,6 +678,7 @@ export default function Cases() {
           setDocsOpen(open);
           if (!open) {
             setSelectedCase(null);
+            setCaseDialogMode("view");
             setDocFile(null);
             setDocIsPublic(false);
             setRejectReason("");
@@ -561,6 +697,90 @@ export default function Cases() {
             <div className="text-sm text-muted-foreground">
               {selectedCase?.caseNumber} — {selectedCase?.title}
             </div>
+
+            {!isBen && caseDialogMode === "edit" ? (
+              <div className="rounded-md border p-4 space-y-3">
+                <div className="text-sm font-medium">{t("common.edit")}</div>
+
+                <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                  <div className="space-y-2">
+                    <Label>{t("cases.fields.title", { defaultValue: "Title" })}</Label>
+                    <Input
+                      value={editDraft.title}
+                      onChange={(e) => setEditDraft((p) => ({ ...p, title: e.target.value }))}
+                    />
+                  </div>
+
+                  <div className="space-y-2">
+                    <Label>{t("app.priority")}</Label>
+                    <Select
+                      value={editDraft.priority}
+                      onValueChange={(v) =>
+                        setEditDraft((p) => ({
+                          ...p,
+                          priority: v as any,
+                        }))
+                      }
+                    >
+                      <SelectTrigger>
+                        <SelectValue />
+                      </SelectTrigger>
+                      <SelectContent>
+                        <SelectItem value="low">low</SelectItem>
+                        <SelectItem value="medium">medium</SelectItem>
+                        <SelectItem value="high">high</SelectItem>
+                        <SelectItem value="urgent">urgent</SelectItem>
+                      </SelectContent>
+                    </Select>
+                  </div>
+                </div>
+
+                <div className="space-y-2">
+                  <Label>{t("cases.fields.description", { defaultValue: "Description" })}</Label>
+                  <Textarea
+                    value={editDraft.description}
+                    onChange={(e) => setEditDraft((p) => ({ ...p, description: e.target.value }))}
+                  />
+                </div>
+
+                <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+                  <div className="space-y-2">
+                    <Label>{t("cases.fields.opponent_name", { defaultValue: "Opponent" })}</Label>
+                    <Input
+                      value={editDraft.opponentName}
+                      onChange={(e) => setEditDraft((p) => ({ ...p, opponentName: e.target.value }))}
+                    />
+                  </div>
+                  <div className="space-y-2">
+                    <Label>{t("cases.fields.opponent_lawyer", { defaultValue: "Opponent lawyer" })}</Label>
+                    <Input
+                      value={editDraft.opponentLawyer}
+                      onChange={(e) => setEditDraft((p) => ({ ...p, opponentLawyer: e.target.value }))}
+                    />
+                  </div>
+                  <div className="space-y-2">
+                    <Label>{t("cases.fields.opponent_contact", { defaultValue: "Opponent contact" })}</Label>
+                    <Input
+                      value={editDraft.opponentContact}
+                      onChange={(e) => setEditDraft((p) => ({ ...p, opponentContact: e.target.value }))}
+                    />
+                  </div>
+                </div>
+
+                <div className="flex items-center justify-end gap-2">
+                  <Button variant="outline" onClick={() => setCaseDialogMode("view")}>
+                    {t("common.cancel")}
+                  </Button>
+                  <Button
+                    onClick={() => updateCaseMutation.mutate()}
+                    disabled={updateCaseMutation.isPending || !canEditCase(selectedCase)}
+                    data-testid="button-case-save"
+                  >
+                    {updateCaseMutation.isPending ? t("common.loading") : t("common.save")}
+                  </Button>
+                </div>
+              </div>
+            ) : null}
 
             <div className="flex flex-wrap items-center gap-2">
               <Badge variant={statusVariant(selectedCase?.status)}>
@@ -757,6 +977,30 @@ export default function Cases() {
           </div>
         </DialogContent>
       </Dialog>
+
+      <AlertDialog open={deleteDialogOpen} onOpenChange={setDeleteDialogOpen}>
+        <AlertDialogContent>
+          <AlertDialogHeader>
+            <AlertDialogTitle>{t("cases.delete_confirm_title", { defaultValue: t("common.confirm") })}</AlertDialogTitle>
+            <AlertDialogDescription>
+              {t("cases.delete_confirm_description", {
+                defaultValue: "هل أنت متأكد من حذف هذه القضية؟ لا يمكن التراجع عن هذا الإجراء.",
+              })}
+            </AlertDialogDescription>
+          </AlertDialogHeader>
+          <AlertDialogFooter>
+            <AlertDialogCancel>{t("common.cancel")}</AlertDialogCancel>
+            <AlertDialogAction
+              onClick={(e) => {
+                e.preventDefault();
+                deleteCaseMutation.mutate();
+              }}
+            >
+              {deleteCaseMutation.isPending ? t("common.loading") : t("common.delete")}
+            </AlertDialogAction>
+          </AlertDialogFooter>
+        </AlertDialogContent>
+      </AlertDialog>
     </>
   );
 

@@ -84,6 +84,13 @@ export const documentOwnerTypeEnum = pgEnum("document_owner_type", [
   "task",
 ]);
 export const documentVisibilityEnum = pgEnum("document_visibility", ["INTERNAL", "BENEFICIARY"]);
+
+// Documents Library (separate from case/task/session documents)
+export const libraryDocumentVisibilityEnum = pgEnum("library_document_visibility", [
+  "internal",
+  "case_team",
+  "beneficiary",
+]);
 export const permissionEnum = pgEnum("permission", [
   "view_dashboard", "manage_users", "manage_beneficiaries", "manage_cases",
   "manage_intake", "manage_tasks", "manage_finance", "manage_documents",
@@ -460,6 +467,8 @@ export const tasks = pgTable("tasks", {
   taskType: taskTypeEnum("task_type").notNull(),
   // New (Stage 4): primary target beneficiary. Nullable for backward compatibility.
   beneficiaryId: varchar("beneficiary_id").references(() => beneficiaries.id),
+  // Stage 6: ability to hide from beneficiary portal without deleting.
+  showInPortal: boolean("show_in_portal").notNull().default(true),
   // Optional: linked lawyer (staff user)
   lawyerId: varchar("lawyer_id").references(() => users.id),
   assignedTo: varchar("assigned_to").notNull().references(() => users.id),
@@ -662,6 +671,80 @@ export const documents = pgTable("documents", {
 export const insertDocumentSchema = createInsertSchema(documents).omit({ id: true, createdAt: true });
 export type InsertDocument = z.infer<typeof insertDocumentSchema>;
 export type Document = typeof documents.$inferSelect;
+
+// ===== Documents Library (folders + docs) =====
+
+export const documentFolders = pgTable(
+  "document_folders",
+  {
+    id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
+    name: text("name").notNull(),
+    parentId: varchar("parent_id").references((): any => documentFolders.id),
+    description: text("description"),
+    isArchived: boolean("is_archived").notNull().default(false),
+    createdAt: timestamp("created_at").notNull().defaultNow(),
+    updatedAt: timestamp("updated_at").notNull().defaultNow(),
+  },
+  (t) => ({
+    parentIdIdx: index("document_folders_parent_id_idx").on(t.parentId),
+    isArchivedIdx: index("document_folders_is_archived_idx").on(t.isArchived),
+    createdAtIdx: index("document_folders_created_at_idx").on(t.createdAt),
+  }),
+);
+
+export const insertDocumentFolderSchema = createInsertSchema(documentFolders).omit({
+  id: true,
+  createdAt: true,
+  updatedAt: true,
+});
+export type InsertDocumentFolder = z.infer<typeof insertDocumentFolderSchema>;
+export type DocumentFolder = typeof documentFolders.$inferSelect;
+
+export const libraryDocuments = pgTable(
+  "library_documents",
+  {
+    id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
+    folderId: varchar("folder_id").references(() => documentFolders.id),
+
+    title: text("title").notNull(),
+    docType: text("doc_type"),
+    description: text("description"),
+
+    fileName: text("file_name").notNull(),
+    mimeType: text("mime_type").notNull(),
+    size: integer("size").notNull(),
+    storageKey: text("storage_key").notNull(),
+
+    documentDate: timestamp("document_date"),
+    tags: text("tags").array(),
+
+    visibility: libraryDocumentVisibilityEnum("visibility").notNull().default("internal"),
+
+    beneficiaryId: varchar("beneficiary_id").references(() => beneficiaries.id),
+    caseId: varchar("case_id").references(() => cases.id),
+
+    isArchived: boolean("is_archived").notNull().default(false),
+    createdBy: varchar("created_by").references(() => users.id),
+    createdAt: timestamp("created_at").notNull().defaultNow(),
+    updatedAt: timestamp("updated_at").notNull().defaultNow(),
+  },
+  (t) => ({
+    folderIdIdx: index("library_documents_folder_id_idx").on(t.folderId),
+    beneficiaryIdIdx: index("library_documents_beneficiary_id_idx").on(t.beneficiaryId),
+    caseIdIdx: index("library_documents_case_id_idx").on(t.caseId),
+    visibilityIdx: index("library_documents_visibility_idx").on(t.visibility),
+    createdAtIdx: index("library_documents_created_at_idx").on(t.createdAt),
+    isArchivedIdx: index("library_documents_is_archived_idx").on(t.isArchived),
+  }),
+);
+
+export const insertLibraryDocumentSchema = createInsertSchema(libraryDocuments).omit({
+  id: true,
+  createdAt: true,
+  updatedAt: true,
+});
+export type InsertLibraryDocument = z.infer<typeof insertLibraryDocumentSchema>;
+export type LibraryDocument = typeof libraryDocuments.$inferSelect;
 
 // ====== Shared payload schemas (client + server) ======
 

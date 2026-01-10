@@ -21,6 +21,7 @@ import {
   FilePlus,
   BarChart3,
   ChevronDown,
+  Folder,
 } from "lucide-react";
 
 export function Sidebar() {
@@ -169,6 +170,21 @@ export function Sidebar() {
                     >
                       {t("nav.powers_of_attorney")}
                     </div>
+                {user?.userType === "staff" && isAdmin && (
+                  <Link href="/documents-library">
+                    <div
+                      className={cn(
+                        "flex items-center gap-3 px-3 py-2 rounded-md text-sm font-medium transition-colors cursor-pointer",
+                        location === "/documents-library"
+                          ? "bg-sidebar-accent text-sidebar-accent-foreground"
+                          : "text-sidebar-foreground/70 hover:bg-sidebar-accent/50 hover:text-sidebar-foreground"
+                      )}
+                    >
+                      <Folder className="h-4 w-4 rtl:ml-2 rtl:mr-0" />
+                      {t("sidebar.documentsLibrary")}
+                    </div>
+                  </Link>
+                )}
                   </Link>
                 ) : null}
               </div>

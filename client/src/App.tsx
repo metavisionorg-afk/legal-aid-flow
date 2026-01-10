@@ -1,41 +1,46 @@
-import { Switch, Route, useLocation } from "wouter";
-import { queryClient } from "./lib/queryClient";
+
+
+import React, { lazy, Suspense } from "react";
+import { useLocation } from "wouter";
 import { QueryClientProvider } from "@tanstack/react-query";
-import { Toaster } from "@/components/ui/toaster";
+import { Toaster } from "@/components/ui/sonner";
 import { TooltipProvider } from "@/components/ui/tooltip";
 import { AuthProvider, useAuth } from "@/contexts/AuthContext";
+import { RequireRole } from "@/components/auth/RequireRole";
 import { PortalLayout } from "@/components/layout/PortalLayout";
+import { LawyerPortalLayout } from "@/components/layout/LawyerPortalLayout";
+import LawyerDashboard from "@/pages/lawyer/LawyerDashboard";
+import LawyerCases from "@/pages/lawyer/LawyerCases";
 import NotFound from "@/pages/not-found";
-import Login from "@/pages/Login";
+import Forbidden from "@/pages/Forbidden";
 import Dashboard from "@/pages/Dashboard";
 import Intake from "@/pages/Intake";
 import Beneficiaries from "@/pages/Beneficiaries";
 import Cases from "@/pages/Cases";
 import CaseTypes from "@/pages/CaseTypes";
+import PowersOfAttorney from "@/pages/PowersOfAttorney";
+import Lawyers from "@/pages/Lawyers";
 import CalendarPage from "@/pages/Calendar";
 import Reports from "@/pages/Reports";
-import Settings from "@/pages/Settings";
 import Tasks from "@/pages/Tasks";
+import Finance from "@/pages/Finance";
 import Rules from "@/pages/Rules";
 import Consultations from "@/pages/Consultations";
 import Sessions from "@/pages/Sessions";
-import PowersOfAttorney from "@/pages/PowersOfAttorney";
-import Finance from "@/pages/Finance.tsx";
-import Lawyers from "@/pages/Lawyers";
-import LawyerDashboard from "@/pages/lawyer/LawyerDashboard";
-import LawyerCases from "@/pages/lawyer/LawyerCases";
+import Settings from "@/pages/Settings";
+import RegisterBeneficiary from "@/pages/RegisterBeneficiary";
+import BeneficiaryRegister from "@/pages/BeneficiaryRegister";
+import Login from "@/pages/Login";
 import PortalLogin from "@/pages/portal/PortalLogin";
 import PortalRegister from "@/pages/portal/PortalRegister";
 import PortalDashboard from "@/pages/portal/PortalDashboard";
 import PortalBookAppointment from "@/pages/portal/PortalBookAppointment";
 import PortalMyCases from "@/pages/portal/PortalMyCases";
 import PortalTasks from "@/pages/portal/PortalTasks";
-import BeneficiaryRegister from "@/pages/BeneficiaryRegister";
 import BeneficiaryPortal from "@/pages/BeneficiaryPortal";
-import RegisterBeneficiary from "@/pages/RegisterBeneficiary";
-import Forbidden from "@/pages/Forbidden";
-import { RequireRole } from "@/components/auth/RequireRole";
-import { LawyerPortalLayout } from "@/components/layout/LawyerPortalLayout";
+import DocumentsLibrary from "@/pages/DocumentsLibrary";
+import { queryClient } from "@/lib/queryClient";
+import { Switch, Route } from "wouter";
 
 // Initialize i18n
 import "./i18n";
@@ -99,6 +104,9 @@ function PortalRoute({ component: Component }: any) {
   );
 }
 
+
+// DocumentsLibrary is already imported above for lazy loading if needed.
+
 function Router() {
   return (
     <Switch>
@@ -112,6 +120,19 @@ function Router() {
       <Route path="/login" component={Login} />
       <Route path="/">
         {() => <StaffRoute component={Dashboard} />}
+      </Route>
+      <Route path="/documents-library">
+        {() => (
+          <Suspense fallback={null}>
+            <StaffRoute
+              component={() => (
+                <RequireRole role={["admin", "super_admin"]}>
+                  <DocumentsLibrary />
+                </RequireRole>
+              )}
+            />
+          </Suspense>
+        )}
       </Route>
       <Route path="/intake">
         {() => <StaffRoute component={Intake} />}

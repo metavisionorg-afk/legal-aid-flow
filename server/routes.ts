@@ -838,6 +838,351 @@ export async function registerRoutes(
     }
   });
 
+  // ========== DOCUMENTS LIBRARY ROUTES (STAFF/ADMIN) ==========
+
+  const libraryVisibilitySchema = z.enum(["internal", "case_team", "beneficiary"]);
+
+  // Folders
+  app.get(
+    "/api/doc-folders",
+    requireStaff,
+    requireRole(["admin", "super_admin"]),
+    async (req: AuthRequest, res) => {
+      try {
+        const includeArchived = req.query.includeArchived === "1" || req.query.includeArchived === "true";
+        const folders = await storage.listDocumentFolders({ includeArchived });
+        return res.json(folders);
+      } catch (error: any) {
+        return res.status(500).json({ error: getErrorMessage(error) });
+      }
+    },
+  );
+
+  app.post(
+    "/api/doc-folders",
+    requireStaff,
+    requireRole(["admin", "super_admin"]),
+    async (req: AuthRequest, res) => {
+      try {
+        const parsed = z
+          .object({
+            name: z.string().trim().min(1),
+            parentId: z.string().uuid().optional().nullable(),
+            description: z.string().optional().nullable(),
+          })
+          .safeParse(req.body);
+
+        if (!parsed.success) {
+          return res.status(400).json({ error: fromZodError(parsed.error).message });
+        }
+
+        if (parsed.data.parentId) {
+          const parent = await storage.getDocumentFolder(parsed.data.parentId);
+          if (!parent) return res.status(400).json({ error: "Invalid parent folder" });
+        }
+
+        const created = await storage.createDocumentFolder({
+          name: parsed.data.name,
+          parentId: parsed.data.parentId ?? null,
+          description: parsed.data.description ?? null,
+          isArchived: false,
+        } as any);
+
+        return res.status(201).json(created);
+      } catch (error: any) {
+        return res.status(500).json({ error: getErrorMessage(error) });
+      }
+    },
+  );
+
+  app.patch(
+    "/api/doc-folders/:id",
+    requireStaff,
+    requireRole(["admin", "super_admin"]),
+    async (req: AuthRequest, res) => {
+      try {
+        const parsed = z
+          .object({
+            name: z.string().trim().min(1).optional(),
+            parentId: z.string().uuid().optional().nullable(),
+            description: z.string().optional().nullable(),
+          })
+          .safeParse(req.body);
+
+        if (!parsed.success) {
+          return res.status(400).json({ error: fromZodError(parsed.error).message });
+        }
+
+        if (parsed.data.parentId) {
+          if (parsed.data.parentId === req.params.id) {
+            return res.status(400).json({ error: "Folder cannot be its own parent" });
+          }
+          const parent = await storage.getDocumentFolder(parsed.data.parentId);
+          if (!parent) return res.status(400).json({ error: "Invalid parent folder" });
+        }
+
+        const updated = await storage.updateDocumentFolder(req.params.id, {
+          ...(parsed.data.name !== undefined ? { name: parsed.data.name } : {}),
+          ...(parsed.data.parentId !== undefined ? { parentId: parsed.data.parentId } : {}),
+          ...(parsed.data.description !== undefined ? { description: parsed.data.description } : {}),
+        } as any);
+
+        if (!updated) return res.status(404).json({ error: "Folder not found" });
+        return res.json(updated);
+      } catch (error: any) {
+        return res.status(500).json({ error: getErrorMessage(error) });
+      }
+    },
+  );
+
+  app.patch(
+    "/api/doc-folders/:id/archive",
+    requireStaff,
+    requireRole(["admin", "super_admin"]),
+    async (req: AuthRequest, res) => {
+      try {
+        const parsed = z.object({ isArchived: z.boolean() }).safeParse(req.body);
+        if (!parsed.success) {
+          return res.status(400).json({ error: fromZodError(parsed.error).message });
+        }
+
+        const updated = await storage.toggleDocumentFolderArchive(req.params.id, parsed.data.isArchived);
+        if (!updated) return res.status(404).json({ error: "Folder not found" });
+        return res.json(updated);
+      } catch (error: any) {
+        return res.status(500).json({ error: getErrorMessage(error) });
+      }
+    },
+  );
+
+  app.delete(
+    "/api/doc-folders/:id",
+    requireStaff,
+    requireRole(["admin", "super_admin"]),
+    async (req: AuthRequest, res) => {
+      try {
+        const result = await storage.deleteDocumentFolder(req.params.id);
+        if (!result.ok && result.reason === "not_found") {
+          return res.status(404).json({ error: "Folder not found" });
+        }
+        if (!result.ok && result.reason === "has_children") {
+          return res.status(409).json({ error: "Cannot delete: folder has child folders" });
+        }
+        if (!result.ok && result.reason === "has_documents") {
+          return res.status(409).json({ error: "Cannot delete: folder has documents" });
+        }
+        return res.json({ success: true });
+      } catch (error: any) {
+        return res.status(500).json({ error: getErrorMessage(error) });
+      }
+    },
+  );
+
+  // Library documents
+  app.get(
+    "/api/library-docs",
+    requireStaff,
+    requireRole(["admin", "super_admin"]),
+    async (req: AuthRequest, res) => {
+      try {
+        const q = typeof req.query.q === "string" ? req.query.q : undefined;
+        const folderId = typeof req.query.folderId === "string" ? req.query.folderId : undefined;
+        const beneficiaryId = typeof req.query.beneficiaryId === "string" ? req.query.beneficiaryId : undefined;
+        const caseId = typeof req.query.caseId === "string" ? req.query.caseId : undefined;
+        const visibility = typeof req.query.visibility === "string" ? req.query.visibility : undefined;
+        const includeArchived = req.query.includeArchived === "1" || req.query.includeArchived === "true";
+        const limit = typeof req.query.limit === "string" ? Number(req.query.limit) : undefined;
+
+        const docs = await storage.listLibraryDocuments({
+          q,
+          folderId: folderId || null,
+          beneficiaryId: beneficiaryId || null,
+          caseId: caseId || null,
+          visibility: visibility || null,
+          includeArchived,
+          limit,
+        });
+
+        return res.json(docs);
+      } catch (error: any) {
+        return res.status(500).json({ error: getErrorMessage(error) });
+      }
+    },
+  );
+
+  app.get(
+    "/api/library-docs/:id",
+    requireStaff,
+    requireRole(["admin", "super_admin"]),
+    async (req: AuthRequest, res) => {
+      try {
+        const doc = await storage.getLibraryDocument(req.params.id);
+        if (!doc) return res.status(404).json({ error: "Document not found" });
+        return res.json(doc);
+      } catch (error: any) {
+        return res.status(500).json({ error: getErrorMessage(error) });
+      }
+    },
+  );
+
+  app.post(
+    "/api/library-docs",
+    requireStaff,
+    requireRole(["admin", "super_admin"]),
+    async (req: AuthRequest, res) => {
+      try {
+        const parsed = z
+          .object({
+            folderId: z.string().uuid().optional().nullable(),
+            title: z.string().trim().min(1),
+            docType: z.string().trim().optional().nullable(),
+            description: z.string().optional().nullable(),
+            documentDate: z.union([z.string().datetime(), z.null()]).optional(),
+            tags: z.array(z.string().trim().min(1)).optional().nullable(),
+            visibility: libraryVisibilitySchema.optional().default("internal"),
+            beneficiaryId: z.string().trim().min(1).optional().nullable(),
+            caseId: z.string().trim().min(1).optional().nullable(),
+            file: uploadedFileMetadataSchema,
+          })
+          .safeParse(req.body);
+
+        if (!parsed.success) {
+          return res.status(400).json({ error: fromZodError(parsed.error).message });
+        }
+
+        const input = parsed.data;
+
+        if (input.folderId) {
+          const folder = await storage.getDocumentFolder(input.folderId);
+          if (!folder) return res.status(400).json({ error: "Invalid folder" });
+          if ((folder as any).isArchived) return res.status(400).json({ error: "Folder is archived" });
+        }
+
+        if (input.beneficiaryId) {
+          const b = await storage.getBeneficiary(String(input.beneficiaryId));
+          if (!b) return res.status(400).json({ error: "Invalid beneficiary" });
+        }
+
+        if (input.caseId) {
+          const c = await storage.getCase(String(input.caseId));
+          if (!c) return res.status(400).json({ error: "Invalid case" });
+        }
+
+        const actorId = (req.user as any)?.id;
+
+        const created = await storage.createLibraryDocument({
+          folderId: input.folderId ?? null,
+          title: input.title,
+          docType: input.docType ?? null,
+          description: input.description ?? null,
+          fileName: input.file.fileName,
+          mimeType: input.file.mimeType,
+          size: input.file.size,
+          storageKey: input.file.storageKey,
+          documentDate: input.documentDate ? new Date(input.documentDate) : null,
+          tags: input.tags ?? null,
+          visibility: input.visibility as any,
+          beneficiaryId: input.beneficiaryId ?? null,
+          caseId: input.caseId ?? null,
+          isArchived: false,
+          createdBy: actorId ?? null,
+        } as any);
+
+        return res.status(201).json(created);
+      } catch (error: any) {
+        return res.status(500).json({ error: getErrorMessage(error) });
+      }
+    },
+  );
+
+  app.patch(
+    "/api/library-docs/:id",
+    requireStaff,
+    requireRole(["admin", "super_admin"]),
+    async (req: AuthRequest, res) => {
+      try {
+        const parsed = z
+          .object({
+            folderId: z.string().uuid().optional().nullable(),
+            title: z.string().trim().min(1).optional(),
+            docType: z.string().trim().optional().nullable(),
+            description: z.string().optional().nullable(),
+            documentDate: z.union([z.string().datetime(), z.null()]).optional(),
+            tags: z.array(z.string().trim().min(1)).optional().nullable(),
+            visibility: libraryVisibilitySchema.optional(),
+            beneficiaryId: z.union([z.string().trim().min(1), z.null()]).optional(),
+            caseId: z.union([z.string().trim().min(1), z.null()]).optional(),
+          })
+          .safeParse(req.body);
+
+        if (!parsed.success) {
+          return res.status(400).json({ error: fromZodError(parsed.error).message });
+        }
+
+        const updates: any = { ...parsed.data };
+
+        if (updates.folderId) {
+          const folder = await storage.getDocumentFolder(updates.folderId);
+          if (!folder) return res.status(400).json({ error: "Invalid folder" });
+        }
+
+        if (updates.beneficiaryId && updates.beneficiaryId !== null) {
+          const b = await storage.getBeneficiary(String(updates.beneficiaryId));
+          if (!b) return res.status(400).json({ error: "Invalid beneficiary" });
+        }
+
+        if (updates.caseId && updates.caseId !== null) {
+          const c = await storage.getCase(String(updates.caseId));
+          if (!c) return res.status(400).json({ error: "Invalid case" });
+        }
+
+        if (updates.documentDate !== undefined) {
+          updates.documentDate = typeof updates.documentDate === "string" ? new Date(updates.documentDate) : null;
+        }
+
+        const updated = await storage.updateLibraryDocument(req.params.id, updates);
+        if (!updated) return res.status(404).json({ error: "Document not found" });
+        return res.json(updated);
+      } catch (error: any) {
+        return res.status(500).json({ error: getErrorMessage(error) });
+      }
+    },
+  );
+
+  app.patch(
+    "/api/library-docs/:id/archive",
+    requireStaff,
+    requireRole(["admin", "super_admin"]),
+    async (req: AuthRequest, res) => {
+      try {
+        const parsed = z.object({ isArchived: z.boolean() }).safeParse(req.body);
+        if (!parsed.success) {
+          return res.status(400).json({ error: fromZodError(parsed.error).message });
+        }
+        const updated = await storage.toggleLibraryDocumentArchive(req.params.id, parsed.data.isArchived);
+        if (!updated) return res.status(404).json({ error: "Document not found" });
+        return res.json(updated);
+      } catch (error: any) {
+        return res.status(500).json({ error: getErrorMessage(error) });
+      }
+    },
+  );
+
+  app.delete(
+    "/api/library-docs/:id",
+    requireStaff,
+    requireRole(["admin", "super_admin"]),
+    async (req: AuthRequest, res) => {
+      try {
+        const ok = await storage.deleteLibraryDocument(req.params.id);
+        if (!ok) return res.status(404).json({ error: "Document not found" });
+        return res.json({ success: true });
+      } catch (error: any) {
+        return res.status(500).json({ error: getErrorMessage(error) });
+      }
+    },
+  );
+
   app.get("/api/beneficiaries", requireStaff, async (req, res) => {
     try {
       const beneficiaries = await storage.getAllBeneficiaries();
@@ -2987,6 +3332,8 @@ export async function registerRoutes(
             dueDate: z.union([z.string().datetime(), z.null()]).optional(),
             lawyerId: z.string().trim().min(1).optional().nullable(),
             caseId: z.string().trim().min(1).optional().nullable(),
+            notifyBeneficiary: z.boolean().optional().default(true),
+            showInPortal: z.boolean().optional().default(true),
           })
           .safeParse(req.body);
 
@@ -3022,6 +3369,7 @@ export async function registerRoutes(
           description: parsed.data.description ?? null,
           taskType: parsed.data.taskType as any,
           beneficiaryId: beneficiary.id,
+          showInPortal: parsed.data.showInPortal ?? true,
           lawyerId: parsed.data.lawyerId ?? null,
           caseId: parsed.data.caseId ?? null,
           assignedTo: assignedToUserId,
@@ -3032,13 +3380,15 @@ export async function registerRoutes(
           completedAt: status === "completed" ? new Date() : null,
         } as any);
 
-        await notifyTaskParticipants({
-          task: created,
-          actorUserId: user.id,
-          type: TASK_NOTIFICATION_TYPES.ASSIGNED,
-          title: "Task assigned",
-          message: `New task: ${created.title}`,
-        });
+        if (parsed.data.notifyBeneficiary ?? true) {
+          await notifyTaskParticipants({
+            task: created,
+            actorUserId: user.id,
+            type: TASK_NOTIFICATION_TYPES.ASSIGNED,
+            title: "Task assigned",
+            message: `New task: ${created.title}`,
+          });
+        }
 
         await createAudit(user.id, "create", "task", created.id, `Created task: ${created.title}`, req.ip);
         return res.status(201).json(created);

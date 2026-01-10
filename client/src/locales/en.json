@@ -1,9 +1,64 @@
 {
+      "tasks": {
+        "add": {
+          "title": "Add Task",
+          "beneficiary": "Beneficiary",
+          "lawyerOptional": "Lawyer (optional)",
+          "caseOptional": "Case (optional)",
+          "caseNone": "No case",
+          "titleLabel": "Task title",
+          "dueDate": "Due date (Gregorian)",
+          "hijriDate": "Due date (Hijri)",
+          "hijriPending": "—",
+          "priority": "Priority",
+          "priority_low": "Low",
+          "priority_medium": "Medium",
+          "priority_high": "High",
+          "description": "Description",
+          "attachments": "Attachments",
+          "attachmentsHint": "You can upload multiple files and remove any before saving.",
+          "notifyBeneficiary": "Notify beneficiary",
+          "showInPortal": "Show in beneficiary portal",
+          "submit": "Save task",
+          "uploading": "Uploading files...",
+          "uploadFailed": "Upload failed",
+          "remove": "Remove",
+          "required": "*"
+        },
+        "form": {
+          "title_required": "Task title *",
+          "title_placeholder": "Enter task title",
+          "beneficiary_required": "Beneficiary *",
+          "select_beneficiary": "Select beneficiary",
+          "lawyer_optional": "Lawyer (optional)",
+          "select_lawyer_optional": "Select lawyer (optional)",
+          "case_optional": "Case (optional)",
+          "select_case_optional": "Select case (optional)",
+          "none": "None",
+          "task_type": "Task type",
+          "priority": "Priority",
+          "gregorian_date_required": "Due date (Gregorian) *",
+          "hijri_date": "Due date (Hijri)",
+          "hijri_pending": "—",
+          "description": "Description",
+          "description_placeholder": "Add details (optional)",
+          "attachments": "Attachments",
+          "attachments_empty": "No attachments yet",
+          "notify_beneficiary": "Notify beneficiary",
+          "show_in_portal": "Show in beneficiary portal"
+        },
+        "toasts": {
+          "attachments_uploaded": "Uploaded {{count}} attachment(s)"
+        }
+      },
     "nav": {
       "cases": "Cases",
       "cases_list": "Cases",
       "case_types": "Case Types",
       "powers_of_attorney": "Powers of Attorney"
+    },
+    "sidebar": {
+      "documentsLibrary": "Documents Library"
     },
     "poa": {
       "subtitle": "Manage powers of attorney and their attachments.",

@@ -522,3 +522,67 @@ export const lawyerAPI = {
   },
   listBeneficiaries: () => fetchAPI("/lawyer/beneficiaries"),
 };
+
+// Documents Library Folders API
+export const docFoldersAPI = {
+  list: (params?: { includeArchived?: boolean }) =>
+    fetchAPI(`/doc-folders${params?.includeArchived ? "?includeArchived=1" : ""}`),
+  getOne: (id: string) => fetchAPI(`/doc-folders/${id}`),
+  create: (data: any) =>
+    fetchAPI("/doc-folders", {
+      method: "POST",
+      body: JSON.stringify(data),
+    }),
+  update: (id: string, data: any) =>
+    fetchAPI(`/doc-folders/${id}`, {
+      method: "PATCH",
+      body: JSON.stringify(data),
+    }),
+  archive: (id: string, isArchived: boolean) =>
+    fetchAPI(`/doc-folders/${id}/archive`, {
+      method: "PATCH",
+      body: JSON.stringify({ isArchived }),
+    }),
+  delete: (id: string) => fetchAPI(`/doc-folders/${id}`, { method: "DELETE" }),
+};
+
+// Documents Library Documents API
+export const libraryDocsAPI = {
+  list: (params?: {
+    q?: string;
+    folderId?: string | null;
+    beneficiaryId?: string | null;
+    caseId?: string | null;
+    visibility?: string | null;
+    includeArchived?: boolean;
+    limit?: number;
+  }) => {
+    const qs = new URLSearchParams();
+    if (params?.q) qs.set("q", params.q);
+    if (params?.folderId) qs.set("folderId", params.folderId);
+    if (params?.beneficiaryId) qs.set("beneficiaryId", params.beneficiaryId);
+    if (params?.caseId) qs.set("caseId", params.caseId);
+    if (params?.visibility) qs.set("visibility", params.visibility);
+    if (params?.includeArchived) qs.set("includeArchived", "1");
+    if (params?.limit) qs.set("limit", String(params.limit));
+    const suffix = qs.toString() ? `?${qs.toString()}` : "";
+    return fetchAPI(`/library-docs${suffix}`);
+  },
+  getOne: (id: string) => fetchAPI(`/library-docs/${id}`),
+  create: (data: any) =>
+    fetchAPI("/library-docs", {
+      method: "POST",
+      body: JSON.stringify(data),
+    }),
+  update: (id: string, data: any) =>
+    fetchAPI(`/library-docs/${id}`, {
+      method: "PATCH",
+      body: JSON.stringify(data),
+    }),
+  archive: (id: string, isArchived: boolean) =>
+    fetchAPI(`/library-docs/${id}/archive`, {
+      method: "PATCH",
+      body: JSON.stringify({ isArchived }),
+    }),
+  delete: (id: string) => fetchAPI(`/library-docs/${id}`, { method: "DELETE" }),
+};

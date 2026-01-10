@@ -1,6 +1,8 @@
 import { storage } from "./storage";
 import bcrypt from "bcrypt";
 
+type LibraryVisibility = "internal" | "case_team" | "beneficiary";
+
 async function seed() {
   console.log("🌱 Seeding database...");
 
@@ -10,113 +12,144 @@ async function seed() {
     const lawyerPassword = await bcrypt.hash("lawyer123", 10);
     const expertPassword = await bcrypt.hash("expert123", 10);
 
-    const admin = await storage.createUser({
-      username: "admin",
-      email: "admin@adala.org",
-      password: adminPassword,
-      fullName: "Sarah Ahmed",
-      role: "admin",
-      userType: "staff",
-      emailVerified: true,
-    });
 
-    const lawyer = await storage.createUser({
-      username: "lawyer",
-      email: "lawyer@adala.org",
-      password: lawyerPassword,
-      fullName: "Omar Khalid",
-      role: "lawyer",
-      userType: "staff",
-      emailVerified: true,
-    });
+    // Idempotent user creation
+    let admin = await storage.getUserByUsername("admin");
+    if (!admin) {
+      admin = await storage.createUser({
+        username: "admin",
+        email: "admin@adala.org",
+        password: adminPassword,
+        fullName: "Sarah Ahmed",
+        role: "admin",
+        userType: "staff",
+        emailVerified: true,
+      });
+    }
 
-    const expert = await storage.createUser({
-      username: "expert",
-      email: "expert@adala.org",
-      password: expertPassword,
-      fullName: "Dr. Layla Hassan",
-      role: "expert",
-      userType: "staff",
-      emailVerified: true,
-    });
+    let lawyer = await storage.getUserByUsername("lawyer");
+    if (!lawyer) {
+      lawyer = await storage.createUser({
+        username: "lawyer",
+        email: "lawyer@adala.org",
+        password: lawyerPassword,
+        fullName: "Omar Khalid",
+        role: "lawyer",
+        userType: "staff",
+        emailVerified: true,
+      });
+    }
+
+    let expert = await storage.getUserByUsername("expert");
+    if (!expert) {
+      expert = await storage.createUser({
+        username: "expert",
+        email: "expert@adala.org",
+        password: expertPassword,
+        fullName: "Dr. Layla Hassan",
+        role: "expert",
+        userType: "staff",
+        emailVerified: true,
+      });
+    }
 
     console.log("✅ Created staff users");
 
     // Create expert profile
-    await storage.createExpertProfile({
-      userId: expert.id,
-      bio: "Legal consultant with 15+ years of experience in family law and asylum cases. Fluent in Arabic and English.",
-      specialties: ["Family Law", "Asylum & Refugee", "Civil Rights"],
-      languages: ["Arabic", "English", "French"],
-      isAvailableForBooking: true,
-    });
+
+    // Idempotent expert profile
+    const existingProfile = await storage.getExpertProfile(expert.id);
+    if (!existingProfile) {
+      await storage.createExpertProfile({
+        userId: expert.id,
+        bio: "Legal consultant with 15+ years of experience in family law and asylum cases. Fluent in Arabic and English.",
+        specialties: ["Family Law", "Asylum & Refugee", "Civil Rights"],
+        languages: ["Arabic", "English", "French"],
+        isAvailableForBooking: true,
+      });
+    }
 
     console.log("✅ Created expert profile");
 
-    // Create demo beneficiaries
-    const beneficiary1 = await storage.createBeneficiary({
-      fullName: "Ahmed Salem",
-      idNumber: "987654321",
-      phone: "+962 79 123 4567",
-      email: "ahmed.salem@example.com",
-      address: "Amman, Jordan",
-      dateOfBirth: new Date("1985-05-15T00:00:00Z"),
-      nationality: "Jordanian",
-      gender: "male",
-      status: "active",
-    });
+    // Create demo beneficiaries (idempotent)
+    let beneficiary1 = await storage.getBeneficiaryByIdNumber("987654321");
+    if (!beneficiary1) {
+      beneficiary1 = await storage.createBeneficiary({
+        fullName: "Ahmed Salem",
+        idNumber: "987654321",
+        phone: "+962 79 123 4567",
+        email: "ahmed.salem@example.com",
+        address: "Amman, Jordan",
+        dateOfBirth: new Date("1985-05-15T00:00:00Z"),
+        nationality: "Jordanian",
+        gender: "male",
+        status: "active",
+      });
+    }
 
-    const beneficiary2 = await storage.createBeneficiary({
-      fullName: "Layla Mahmoud",
-      idNumber: "123456789",
-      phone: "+962 78 987 6543",
-      email: "layla.mahmoud@example.com",
-      address: "Zarqa, Jordan",
-      dateOfBirth: new Date("1990-03-22T00:00:00Z"),
-      nationality: "Syrian",
-      gender: "female",
-      status: "active",
-    });
+    let beneficiary2 = await storage.getBeneficiaryByIdNumber("123456789");
+    if (!beneficiary2) {
+      beneficiary2 = await storage.createBeneficiary({
+        fullName: "Layla Mahmoud",
+        idNumber: "123456789",
+        phone: "+962 78 987 6543",
+        email: "layla.mahmoud@example.com",
+        address: "Zarqa, Jordan",
+        dateOfBirth: new Date("1990-03-22T00:00:00Z"),
+        nationality: "Syrian",
+        gender: "female",
+        status: "active",
+      });
+    }
 
-    const beneficiary3 = await storage.createBeneficiary({
-      fullName: "Fatima Hassan",
-      idNumber: "456789123",
-      phone: "+962 77 654 3210",
-      email: "fatima.hassan@example.com",
-      address: "Irbid, Jordan",
-      dateOfBirth: new Date("1988-11-08T00:00:00Z"),
-      nationality: "Jordanian",
-      gender: "female",
-      status: "active",
-    });
+    let beneficiary3 = await storage.getBeneficiaryByIdNumber("456789123");
+    if (!beneficiary3) {
+      beneficiary3 = await storage.createBeneficiary({
+        fullName: "Fatima Hassan",
+        idNumber: "456789123",
+        phone: "+962 77 654 3210",
+        email: "fatima.hassan@example.com",
+        address: "Irbid, Jordan",
+        dateOfBirth: new Date("1988-11-08T00:00:00Z"),
+        nationality: "Jordanian",
+        gender: "female",
+        status: "active",
+      });
+    }
 
     console.log("✅ Created beneficiaries");
 
     // Create beneficiary user accounts
     const beneficiary1Password = await bcrypt.hash("beneficiary123", 10);
-    
-    const beneficiary1User = await storage.createUser({
-      username: "ahmed.salem",
-      email: "ahmed.salem@example.com",
-      password: beneficiary1Password,
-      fullName: "Ahmed Salem",
-      role: "beneficiary",
-      userType: "beneficiary",
-      emailVerified: true,
-    });
 
+    // Idempotent beneficiary user creation for beneficiary1
+    let beneficiary1User = await storage.getUserByUsername("ahmed.salem");
+    if (!beneficiary1User) {
+      beneficiary1User = await storage.createUser({
+        username: "ahmed.salem",
+        email: "ahmed.salem@example.com",
+        password: beneficiary1Password,
+        fullName: "Ahmed Salem",
+        role: "beneficiary",
+        userType: "beneficiary",
+        emailVerified: true,
+      });
+    }
     await storage.updateBeneficiary(beneficiary1.id, { userId: beneficiary1User.id } as any);
 
-    const beneficiary2User = await storage.createUser({
-      username: "layla.mahmoud",
-      email: "layla.mahmoud@example.com",
-      password: beneficiary1Password,
-      fullName: "Layla Mahmoud",
-      role: "beneficiary",
-      userType: "beneficiary",
-      emailVerified: true,
-    });
-
+    // Idempotent beneficiary user creation for beneficiary2
+    let beneficiary2User = await storage.getUserByUsername("layla.mahmoud");
+    if (!beneficiary2User) {
+      beneficiary2User = await storage.createUser({
+        username: "layla.mahmoud",
+        email: "layla.mahmoud@example.com",
+        password: beneficiary1Password,
+        fullName: "Layla Mahmoud",
+        role: "beneficiary",
+        userType: "beneficiary",
+        emailVerified: true,
+      });
+    }
     await storage.updateBeneficiary(beneficiary2.id, { userId: beneficiary2User.id } as any);
 
     console.log("✅ Created beneficiary user accounts");
@@ -189,86 +222,109 @@ async function seed() {
 
     console.log("✅ Created cases");
 
-    // Create hearings
-    const tomorrow = new Date();
-    tomorrow.setDate(tomorrow.getDate() + 1);
-    tomorrow.setHours(9, 0, 0, 0);
 
-    const nextWeek = new Date();
-    nextWeek.setDate(nextWeek.getDate() + 7);
-    nextWeek.setHours(14, 0, 0, 0);
+    // ===== Documents Library Folders and Documents =====
 
-    await storage.createHearing({
-      caseId: case1.id,
-      title: "Initial Labor Court Hearing",
-      scheduledDate: tomorrow,
-      location: "Amman Labor Court, Room 3A",
-      notes: "Bring all wage receipts and employment contract. Client testimony required.",
+    // Idempotent document folders
+    const getOrCreateFolder = async (name: string, parentId: string | null, description: string) => {
+      const folders = await storage.listDocumentFolders();
+      let folder = folders.find(f => f.name === name && f.parentId === parentId);
+      if (!folder) {
+        folder = await storage.createDocumentFolder({ name, parentId, description, isArchived: false });
+      }
+      return folder;
+    };
+
+    const rootFolder = await getOrCreateFolder("Root Documents", null, "Main library folder");
+    const policiesFolder = await getOrCreateFolder("Policies", rootFolder.id, "Policy documents");
+    const templatesFolder = await getOrCreateFolder("Templates", rootFolder.id, "Legal templates");
+    const orphanFolder = await getOrCreateFolder("Orphan Folder", null, "No parent folder");
+
+    console.log("✅ Created document folders");
+
+    // Add sample library documents
+
+    // Idempotent library documents
+    const getOrCreateLibraryDoc = async (doc: {
+      folderId: string | null;
+      title: string;
+      docType: string;
+      fileName: string;
+      mimeType: string;
+      size: number;
+      storageKey: string;
+      description: string;
+      documentDate: Date;
+      tags: string[];
+      visibility: LibraryVisibility;
+      beneficiaryId: string | null;
+      caseId: string | null;
+      isArchived: boolean;
+      createdBy: string;
+    }) => {
+      const docs = await storage.listLibraryDocuments({ limit: 200 });
+      let found = docs.find(d => d.title === doc.title && d.folderId === doc.folderId);
+      if (!found) {
+        found = await storage.createLibraryDocument(doc as any);
+      }
+      return found;
+    };
+
+    await getOrCreateLibraryDoc({
+      folderId: policiesFolder.id,
+      title: "Labor Rights Policy",
+      docType: "policy",
+      description: "Comprehensive labor rights policy document.",
+      fileName: "labor_rights_policy.pdf",
+      mimeType: "application/pdf",
+      size: 123456,
+      storageKey: "labor_rights_policy.pdf",
+      documentDate: new Date(),
+      tags: ["labor", "policy"],
+      visibility: "internal",
+      beneficiaryId: null,
+      caseId: null,
+      isArchived: false,
+      createdBy: admin.id,
     });
 
-    await storage.createHearing({
-      caseId: case3.id,
-      title: "Custody Evaluation Session",
-      scheduledDate: nextWeek,
-      location: "Family Court, Building B",
-      notes: "Social worker evaluation. Prepare character references and home environment documentation.",
+    await getOrCreateLibraryDoc({
+      folderId: templatesFolder.id,
+      title: "Contract Template",
+      docType: "template",
+      description: "Standard contract template for civil cases.",
+      fileName: "contract_template.docx",
+      mimeType: "application/vnd.openxmlformats-officedocument.wordprocessingml.document",
+      size: 45678,
+      storageKey: "contract_template.docx",
+      documentDate: new Date(),
+      tags: ["template", "contract"],
+      visibility: "case_team",
+      beneficiaryId: null,
+      caseId: null,
+      isArchived: false,
+      createdBy: admin.id,
     });
 
-    console.log("✅ Created hearings");
-
-    // Create appointments
-    const appt1Date = new Date();
-    appt1Date.setDate(appt1Date.getDate() + 3);
-    appt1Date.setHours(10, 0, 0, 0);
-
-    const appt2Date = new Date();
-    appt2Date.setDate(appt2Date.getDate() + 5);
-    appt2Date.setHours(14, 30, 0, 0);
-
-    await storage.createAppointment({
-      beneficiaryId: beneficiary1.id,
-      expertId: expert.id,
-      appointmentType: "in_person",
-      scheduledDate: appt1Date,
-      duration: 60,
-      topic: "Legal Consultation - Labor Rights",
-      notes: "Initial consultation to discuss case strategy and next steps",
-      location: "Adala Office, Amman",
-      status: "confirmed",
+    await getOrCreateLibraryDoc({
+      folderId: null,
+      title: "General Info Sheet",
+      docType: "info",
+      description: "General information for all staff.",
+      fileName: "info_sheet.pdf",
+      mimeType: "application/pdf",
+      size: 23456,
+      storageKey: "info_sheet.pdf",
+      documentDate: new Date(),
+      tags: ["info"],
+      visibility: "beneficiary",
+      beneficiaryId: null,
+      caseId: null,
+      isArchived: false,
+      createdBy: admin.id,
     });
 
-    await storage.createAppointment({
-      beneficiaryId: beneficiary2.id,
-      expertId: expert.id,
-      appointmentType: "online",
-      scheduledDate: appt2Date,
-      duration: 45,
-      topic: "Asylum Case Review",
-      notes: "Review documentation requirements and timeline",
-      meetingLink: "https://meet.adala.org/room/abc123",
-      status: "pending",
-    });
-
-    console.log("✅ Created appointments");
-
-    // Create notifications
-    await storage.createNotification({
-      userId: beneficiary1User.id,
-      type: "appointment_confirmed",
-      title: "Appointment Confirmed",
-      message: "Your consultation appointment is confirmed for " + appt1Date.toLocaleDateString(),
-      relatedEntityId: "appt1",
-    });
-
-    await storage.createNotification({
-      userId: expert.id,
-      type: "appointment_request",
-      title: "New Appointment Request",
-      message: "Layla Mahmoud has requested a consultation appointment",
-      relatedEntityId: "appt2",
-    });
-
-    console.log("✅ Created notifications");
+    console.log("✅ Created library documents");
 
     // Create audit logs
     await storage.createAuditLog({

@@ -44,12 +44,20 @@ import type {
   InsertSession,
   CaseType,
   InsertCaseType,
+  DocumentFolder,
+  InsertDocumentFolder,
+  LibraryDocument,
+  InsertLibraryDocument,
 } from "@shared/schema";
 
 export type IntakeRequestWithCaseType = IntakeRequest & {
   caseTypeNameAr?: string | null;
   caseTypeNameEn?: string | null;
   caseTypeName?: string | null;
+};
+
+export type LibraryDocumentWithFolder = LibraryDocument & {
+  folderName?: string | null;
 };
 
 const connectionString =
@@ -347,6 +355,29 @@ export interface IStorage {
   updateCaseType(id: string, updates: Partial<InsertCaseType>): Promise<CaseType | undefined>;
   toggleCaseType(id: string, isActive: boolean): Promise<CaseType | undefined>;
   deleteCaseType(id: string): Promise<{ ok: boolean; reason?: "linked" | "not_found" }>; 
+
+  // ===== Documents Library (folders + docs) =====
+  listDocumentFolders(input?: { includeArchived?: boolean }): Promise<DocumentFolder[]>;
+  getDocumentFolder(id: string): Promise<DocumentFolder | undefined>;
+  createDocumentFolder(input: InsertDocumentFolder): Promise<DocumentFolder>;
+  updateDocumentFolder(id: string, updates: Partial<InsertDocumentFolder>): Promise<DocumentFolder | undefined>;
+  toggleDocumentFolderArchive(id: string, isArchived: boolean): Promise<DocumentFolder | undefined>;
+  deleteDocumentFolder(id: string): Promise<{ ok: boolean; reason?: "not_found" | "has_children" | "has_documents" }>; 
+
+  listLibraryDocuments(input?: {
+    q?: string;
+    folderId?: string | null;
+    beneficiaryId?: string | null;
+    caseId?: string | null;
+    visibility?: string | null;
+    includeArchived?: boolean;
+    limit?: number;
+  }): Promise<LibraryDocumentWithFolder[]>;
+  getLibraryDocument(id: string): Promise<LibraryDocument | undefined>;
+  createLibraryDocument(input: InsertLibraryDocument): Promise<LibraryDocument>;
+  updateLibraryDocument(id: string, updates: Partial<InsertLibraryDocument>): Promise<LibraryDocument | undefined>;
+  toggleLibraryDocumentArchive(id: string, isArchived: boolean): Promise<LibraryDocument | undefined>;
+  deleteLibraryDocument(id: string): Promise<boolean>;
 }
 
 export class DatabaseStorage implements IStorage {
@@ -1672,6 +1703,171 @@ export class DatabaseStorage implements IStorage {
 
     const result = await db.delete(schema.caseTypes).where(eq(schema.caseTypes.id, id));
     return { ok: Boolean(result.rowCount && result.rowCount > 0) };
+  }
+
+  // ===== Documents Library (folders + docs) =====
+
+  async listDocumentFolders(input?: { includeArchived?: boolean }): Promise<DocumentFolder[]> {
+    const includeArchived = Boolean(input?.includeArchived);
+    const query = db.select().from(schema.documentFolders);
+    if (!includeArchived) {
+      return query
+        .where(eq(schema.documentFolders.isArchived, false))
+        .orderBy(asc(schema.documentFolders.createdAt));
+    }
+    return query.orderBy(asc(schema.documentFolders.createdAt));
+  }
+
+  async getDocumentFolder(id: string): Promise<DocumentFolder | undefined> {
+    const [row] = await db.select().from(schema.documentFolders).where(eq(schema.documentFolders.id, id));
+    return row;
+  }
+
+  async createDocumentFolder(input: InsertDocumentFolder): Promise<DocumentFolder> {
+    const [row] = await db
+      .insert(schema.documentFolders)
+      .values({ ...(input as any) })
+      .returning();
+    return row;
+  }
+
+  async updateDocumentFolder(
+    id: string,
+    updates: Partial<InsertDocumentFolder>,
+  ): Promise<DocumentFolder | undefined> {
+    const [row] = await db
+      .update(schema.documentFolders)
+      .set({ ...(updates as any), updatedAt: new Date() })
+      .where(eq(schema.documentFolders.id, id))
+      .returning();
+    return row;
+  }
+
+  async toggleDocumentFolderArchive(id: string, isArchived: boolean): Promise<DocumentFolder | undefined> {
+    const [row] = await db
+      .update(schema.documentFolders)
+      .set({ isArchived, updatedAt: new Date() })
+      .where(eq(schema.documentFolders.id, id))
+      .returning();
+    return row;
+  }
+
+  async deleteDocumentFolder(
+    id: string,
+  ): Promise<{ ok: boolean; reason?: "not_found" | "has_children" | "has_documents" }> {
+    const [existing] = await db.select().from(schema.documentFolders).where(eq(schema.documentFolders.id, id));
+    if (!existing) return { ok: false, reason: "not_found" };
+
+    const [childCountRow] = await db
+      .select({ count: sql<number>`count(*)` })
+      .from(schema.documentFolders)
+      .where(eq(schema.documentFolders.parentId, id));
+    const childCount = Number((childCountRow as any)?.count || 0);
+    if (childCount > 0) return { ok: false, reason: "has_children" };
+
+    const [docCountRow] = await db
+      .select({ count: sql<number>`count(*)` })
+      .from(schema.libraryDocuments)
+      .where(eq(schema.libraryDocuments.folderId, id));
+    const docCount = Number((docCountRow as any)?.count || 0);
+    if (docCount > 0) return { ok: false, reason: "has_documents" };
+
+    const result = await db.delete(schema.documentFolders).where(eq(schema.documentFolders.id, id));
+    return { ok: Boolean(result.rowCount && result.rowCount > 0) };
+  }
+
+  async listLibraryDocuments(input?: {
+    q?: string;
+    folderId?: string | null;
+    beneficiaryId?: string | null;
+    caseId?: string | null;
+    visibility?: string | null;
+    includeArchived?: boolean;
+    limit?: number;
+  }): Promise<LibraryDocumentWithFolder[]> {
+    const q = (input?.q || "").trim().toLowerCase();
+    const includeArchived = Boolean(input?.includeArchived);
+    const folderId = input?.folderId ?? undefined;
+    const beneficiaryId = input?.beneficiaryId ?? undefined;
+    const caseId = input?.caseId ?? undefined;
+    const visibility = input?.visibility ?? undefined;
+    const limit = Number.isFinite(input?.limit as any) ? Math.max(1, Math.min(200, Math.trunc(input!.limit!))) : 200;
+
+    const whereParts: any[] = [];
+    if (!includeArchived) whereParts.push(eq(schema.libraryDocuments.isArchived, false));
+    if (folderId) whereParts.push(eq(schema.libraryDocuments.folderId, folderId));
+    if (beneficiaryId) whereParts.push(eq(schema.libraryDocuments.beneficiaryId, beneficiaryId));
+    if (caseId) whereParts.push(eq(schema.libraryDocuments.caseId, caseId));
+    if (visibility) whereParts.push(eq(schema.libraryDocuments.visibility, visibility as any));
+
+    if (q) {
+      const like = `%${q.replace(/%/g, "\\%").replace(/_/g, "\\_")}%`;
+      whereParts.push(
+        or(
+          sql`lower(${schema.libraryDocuments.title}) like ${like}`,
+          sql`lower(${schema.libraryDocuments.fileName}) like ${like}`,
+          sql`lower(coalesce(${schema.libraryDocuments.description}, '')) like ${like}`,
+          sql`lower(coalesce(${schema.libraryDocuments.docType}, '')) like ${like}`,
+        ),
+      );
+    }
+
+    const whereClause = whereParts.length ? and(...whereParts) : undefined;
+
+    const rows = await db
+      .select({
+        doc: schema.libraryDocuments,
+        folderName: schema.documentFolders.name,
+      })
+      .from(schema.libraryDocuments)
+      .leftJoin(schema.documentFolders, eq(schema.libraryDocuments.folderId, schema.documentFolders.id))
+      .where(whereClause as any)
+      .orderBy(desc(schema.libraryDocuments.createdAt))
+      .limit(limit);
+
+    return rows.map((r) => ({
+      ...(r.doc as any),
+      folderName: r.folderName ?? null,
+    }));
+  }
+
+  async getLibraryDocument(id: string): Promise<LibraryDocument | undefined> {
+    const [row] = await db.select().from(schema.libraryDocuments).where(eq(schema.libraryDocuments.id, id));
+    return row;
+  }
+
+  async createLibraryDocument(input: InsertLibraryDocument): Promise<LibraryDocument> {
+    const [row] = await db
+      .insert(schema.libraryDocuments)
+      .values({ ...(input as any) })
+      .returning();
+    return row;
+  }
+
+  async updateLibraryDocument(
+    id: string,
+    updates: Partial<InsertLibraryDocument>,
+  ): Promise<LibraryDocument | undefined> {
+    const [row] = await db
+      .update(schema.libraryDocuments)
+      .set({ ...(updates as any), updatedAt: new Date() })
+      .where(eq(schema.libraryDocuments.id, id))
+      .returning();
+    return row;
+  }
+
+  async toggleLibraryDocumentArchive(id: string, isArchived: boolean): Promise<LibraryDocument | undefined> {
+    const [row] = await db
+      .update(schema.libraryDocuments)
+      .set({ isArchived, updatedAt: new Date() })
+      .where(eq(schema.libraryDocuments.id, id))
+      .returning();
+    return row;
+  }
+
+  async deleteLibraryDocument(id: string): Promise<boolean> {
+    const result = await db.delete(schema.libraryDocuments).where(eq(schema.libraryDocuments.id, id));
+    return Boolean(result.rowCount && result.rowCount > 0);
   }
 }
 

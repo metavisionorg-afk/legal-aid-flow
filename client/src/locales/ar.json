@@ -1,9 +1,64 @@
 {
+      "tasks": {
+        "add": {
+          "title": "إضافة مهمة",
+          "beneficiary": "المستفيد",
+          "lawyerOptional": "المحامي (اختياري)",
+          "caseOptional": "القضية (اختياري)",
+          "caseNone": "بدون قضية",
+          "titleLabel": "عنوان المهمة",
+          "dueDate": "التاريخ (ميلادي)",
+          "hijriDate": "التاريخ (هجري)",
+          "hijriPending": "—",
+          "priority": "الأولوية",
+          "priority_low": "منخفض",
+          "priority_medium": "متوسط",
+          "priority_high": "مرتفع",
+          "description": "الوصف",
+          "attachments": "المرفقات",
+          "attachmentsHint": "يمكنك رفع عدة ملفات وإزالة أي ملف قبل الحفظ.",
+          "notifyBeneficiary": "إرسال إشعار للمستفيد",
+          "showInPortal": "إظهار في بوابة المستفيد",
+          "submit": "حفظ المهمة",
+          "uploading": "جاري رفع الملفات...",
+          "uploadFailed": "فشل رفع الملفات",
+          "remove": "إزالة",
+          "required": "*"
+        },
+        "form": {
+          "title_required": "عنوان المهمة *",
+          "title_placeholder": "اكتب عنوان المهمة",
+          "beneficiary_required": "المستفيد *",
+          "select_beneficiary": "اختر المستفيد",
+          "lawyer_optional": "المحامي (اختياري)",
+          "select_lawyer_optional": "اختر المحامي (اختياري)",
+          "case_optional": "القضية (اختياري)",
+          "select_case_optional": "اختر القضية (اختياري)",
+          "none": "بدون",
+          "task_type": "نوع المهمة",
+          "priority": "الأولوية",
+          "gregorian_date_required": "التاريخ (ميلادي) *",
+          "hijri_date": "التاريخ (هجري)",
+          "hijri_pending": "—",
+          "description": "الوصف",
+          "description_placeholder": "أضف التفاصيل (اختياري)",
+          "attachments": "المرفقات",
+          "attachments_empty": "لا توجد مرفقات بعد",
+          "notify_beneficiary": "إرسال إشعار للمستفيد",
+          "show_in_portal": "إظهار في بوابة المستفيد"
+        },
+        "toasts": {
+          "attachments_uploaded": "تم رفع {{count}} مرفق(ات)"
+        }
+      },
     "nav": {
       "cases": "القضايا",
       "cases_list": "القضايا",
       "case_types": "أنواع القضايا",
       "powers_of_attorney": "الوكالات"
+    },
+    "sidebar": {
+      "documentsLibrary": "مكتبة المستندات"
     },
     "poa": {
       "subtitle": "إدارة الوكالات والمرفقات المرتبطة بها.",

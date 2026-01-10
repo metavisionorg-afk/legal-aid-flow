@@ -1,4 +1,4 @@
-import { useMemo, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import { useTranslation } from "react-i18next";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 
@@ -34,11 +34,11 @@ import {
 } from "@/components/ui/dialog";
 import { Checkbox } from "@/components/ui/checkbox";
 
-import { beneficiariesAPI, tasksAPI, uploadsAPI, usersAPI } from "@/lib/api";
+import { beneficiariesAPI, casesAPI, tasksAPI, uploadsAPI, usersAPI } from "@/lib/api";
 import { toast } from "sonner";
 import { useAuth } from "@/contexts/AuthContext";
 import { getErrorMessage } from "@/lib/errors";
-import type { Beneficiary, Task, User } from "@shared/schema";
+import type { Beneficiary, Case as CaseRow, Task, User } from "@shared/schema";
 
 type AttachmentRow = {
   id: string;
@@ -59,7 +59,29 @@ const TASK_TYPES = [
   "other",
 ] as const;
 
-const PRIORITIES = ["low", "medium", "high", "urgent"] as const;
+const LAWYER_NONE_VALUE = "__none__";
+const CASE_NONE_VALUE = "__no_case__";
+
+const PRIORITIES = ["low", "medium", "high"] as const;
+
+function toHijriLabel(dateInput: string, t: (key: string, options?: any) => string): string {
+  if (!dateInput) return "";
+  try {
+    // `dateInput` is expected as yyyy-mm-dd
+    const date = new Date(`${dateInput}T00:00:00`);
+    if (Number.isNaN(date.getTime())) return t("tasks.form.hijri_pending");
+
+    // Use built-in Islamic calendar formatting (no extra deps).
+    const fmt = new Intl.DateTimeFormat("ar-SA-u-ca-islamic", {
+      year: "numeric",
+      month: "long",
+      day: "numeric",
+    });
+    return fmt.format(date);
+  } catch {
+    return t("tasks.form.hijri_pending");
+  }
+}
 
 export default function Tasks() {
   const { t } = useTranslation();
@@ -71,9 +93,15 @@ export default function Tasks() {
   const [taskType, setTaskType] = useState<(typeof TASK_TYPES)[number]>("follow_up");
   const [priority, setPriority] = useState<(typeof PRIORITIES)[number]>("medium");
   const [beneficiaryId, setBeneficiaryId] = useState<string>("");
-  const [lawyerId, setLawyerId] = useState<string>("");
-  const [caseId, setCaseId] = useState<string>("");
-  const [dueDate, setDueDate] = useState<string>("");
+  const [lawyerId, setLawyerId] = useState<string | undefined>(undefined);
+  const [caseId, setCaseId] = useState<string | undefined>(undefined);
+  const [dueDate, setDueDate] = useState<string>(""); // yyyy-mm-dd
+  const [hijriDateLabel, setHijriDateLabel] = useState<string>("");
+
+  const [notifyBeneficiary, setNotifyBeneficiary] = useState<boolean>(true);
+  const [showInPortal, setShowInPortal] = useState<boolean>(true);
+
+  const [newAttachments, setNewAttachments] = useState<any[]>([]);
 
   const [attachmentsTaskId, setAttachmentsTaskId] = useState<string | null>(null);
   const [attachIsPublic, setAttachIsPublic] = useState<boolean>(true);
@@ -94,6 +122,11 @@ export default function Tasks() {
     queryFn: async () => (await beneficiariesAPI.getAll()) as Beneficiary[],
   });
 
+  const { data: cases, isLoading: loadingCases } = useQuery({
+    queryKey: ["cases"],
+    queryFn: async () => (await casesAPI.getAll()) as CaseRow[],
+  });
+
   const usersById = useMemo(() => {
     const map = new Map<string, Omit<User, "password">>();
     (users || []).forEach((u) => map.set(u.id, u));
@@ -110,31 +143,77 @@ export default function Tasks() {
     return (users || []).filter((u) => u.userType === "staff" && (u as any).role === "lawyer");
   }, [users]);
 
+  const casesForBeneficiary = useMemo(() => {
+    const all = cases || [];
+    if (!beneficiaryId) return all;
+    return all.filter((c) => String((c as any).beneficiaryId || "") === String(beneficiaryId));
+  }, [cases, beneficiaryId]);
+
+  useEffect(() => {
+    if (!dueDate) {
+      setHijriDateLabel("");
+      return;
+    }
+    setHijriDateLabel(toHijriLabel(dueDate, t));
+  }, [dueDate, t]);
+
+  const uploadAttachmentsMutation = useMutation({
+    mutationFn: async (files: File[]) => {
+      const uploaded: any[] = [];
+      for (const file of files) {
+        uploaded.push(await uploadsAPI.upload(file));
+      }
+      return uploaded;
+    },
+    onSuccess: (uploaded) => {
+      if (!uploaded.length) return;
+      setNewAttachments((prev) => [...prev, ...uploaded]);
+      toast.success(t("tasks.toasts.attachments_uploaded", { count: uploaded.length }));
+    },
+    onError: (err) => toast.error(getErrorMessage(err, t)),
+  });
+
   const createTaskMutation = useMutation({
     mutationFn: async () => {
       if (!user?.id) throw new Error("Not authenticated");
       if (!title.trim()) throw new Error("Title is required");
       if (!beneficiaryId) throw new Error("Beneficiary is required");
+      if (!dueDate) throw new Error("Gregorian date is required");
 
-      return tasksAPI.create({
+      const created = await tasksAPI.create({
         beneficiaryId,
         title: title.trim(),
         description: description.trim() || null,
         taskType,
         priority,
-        lawyerId: lawyerId || null,
-        caseId: caseId.trim() ? caseId.trim() : null,
-        dueDate: dueDate ? new Date(dueDate).toISOString() : null,
+        lawyerId: lawyerId ?? null,
+        caseId: caseId ? caseId : null,
+        dueDate: new Date(`${dueDate}T00:00:00`).toISOString(),
+        notifyBeneficiary,
+        showInPortal,
       });
+
+      if (newAttachments.length) {
+        await tasksAPI.addAttachments(String((created as any).id), {
+          isPublic: showInPortal,
+          documents: newAttachments,
+        });
+      }
+
+      return created;
     },
     onSuccess: async () => {
       toast.success("Task created");
       setTitle("");
       setDescription("");
       setBeneficiaryId("");
-      setLawyerId("");
-      setCaseId("");
+      setLawyerId(undefined);
+      setCaseId(undefined);
       setDueDate("");
+      setHijriDateLabel("");
+      setNotifyBeneficiary(true);
+      setShowInPortal(true);
+      setNewAttachments([]);
       await queryClient.invalidateQueries({ queryKey: ["tasks"] });
     },
     onError: (err) => toast.error(getErrorMessage(err, t)),
@@ -198,16 +277,24 @@ export default function Tasks() {
           <CardContent className="space-y-4">
             <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
               <div className="space-y-2">
-                <Label>{t("app.actions")}</Label>
-                <Input value={title} onChange={(e) => setTitle(e.target.value)} placeholder="Title" />
+                <Label>{t("tasks.form.title_required")}</Label>
+                <Input
+                  value={title}
+                  onChange={(e) => setTitle(e.target.value)}
+                  placeholder={t("tasks.form.title_placeholder")}
+                />
               </div>
 
               <div className="space-y-2">
-                <Label>{t("app.assigned_to")}</Label>
+                <Label>{t("tasks.form.beneficiary_required")}</Label>
                 <Select value={beneficiaryId} onValueChange={setBeneficiaryId}>
                   <SelectTrigger>
                     <SelectValue
-                      placeholder={loadingBeneficiaries ? t("common.loading") : "Select beneficiary"}
+                      placeholder={
+                        loadingBeneficiaries
+                          ? t("common.loading")
+                          : t("tasks.form.select_beneficiary")
+                      }
                     />
                   </SelectTrigger>
                   <SelectContent>
@@ -221,13 +308,20 @@ export default function Tasks() {
               </div>
 
               <div className="space-y-2">
-                <Label>Lawyer (optional)</Label>
-                <Select value={lawyerId} onValueChange={setLawyerId}>
+                <Label>{t("tasks.form.lawyer_optional")}</Label>
+                <Select
+                  value={lawyerId}
+                  onValueChange={(v) => setLawyerId(v === LAWYER_NONE_VALUE ? undefined : v)}
+                >
                   <SelectTrigger>
-                    <SelectValue placeholder={loadingUsers ? t("common.loading") : "Select lawyer"} />
+                    <SelectValue
+                      placeholder={
+                        loadingUsers ? t("common.loading") : t("tasks.form.select_lawyer_optional")
+                      }
+                    />
                   </SelectTrigger>
                   <SelectContent>
-                    <SelectItem value="">None</SelectItem>
+                    <SelectItem value={LAWYER_NONE_VALUE}>{t("tasks.form.none")}</SelectItem>
                     {lawyers.map((u) => (
                       <SelectItem key={u.id} value={u.id}>
                         {u.fullName}
@@ -238,7 +332,7 @@ export default function Tasks() {
               </div>
 
               <div className="space-y-2">
-                <Label>{t("app.status")}</Label>
+                <Label>{t("tasks.form.task_type")}</Label>
                 <Select value={taskType} onValueChange={(v) => setTaskType(v as any)}>
                   <SelectTrigger>
                     <SelectValue />
@@ -246,7 +340,7 @@ export default function Tasks() {
                   <SelectContent>
                     {TASK_TYPES.map((tt) => (
                       <SelectItem key={tt} value={tt}>
-                        {tt}
+                        {t(`tasks.types.${tt}`)}
                       </SelectItem>
                     ))}
                   </SelectContent>
@@ -254,7 +348,7 @@ export default function Tasks() {
               </div>
 
               <div className="space-y-2">
-                <Label>{t("app.priority")}</Label>
+                <Label>{t("tasks.form.priority")}</Label>
                 <Select value={priority} onValueChange={(v) => setPriority(v as any)}>
                   <SelectTrigger>
                     <SelectValue />
@@ -262,7 +356,7 @@ export default function Tasks() {
                   <SelectContent>
                     {PRIORITIES.map((p) => (
                       <SelectItem key={p} value={p}>
-                        {p}
+                        {t(`tasks.priority.${p}`)}
                       </SelectItem>
                     ))}
                   </SelectContent>
@@ -270,18 +364,109 @@ export default function Tasks() {
               </div>
 
               <div className="space-y-2">
-                <Label>{t("app.date")}</Label>
+                <Label>{t("tasks.form.gregorian_date_required")}</Label>
                 <Input type="date" value={dueDate} onChange={(e) => setDueDate(e.target.value)} />
+                <div className="text-sm text-muted-foreground">
+                  <span className="font-medium text-foreground">{t("tasks.form.hijri_date")}: </span>
+                  {hijriDateLabel || t("tasks.form.hijri_pending")}
+                </div>
               </div>
 
               <div className="space-y-2">
-                <Label>Case ID (optional)</Label>
-                <Input value={caseId} onChange={(e) => setCaseId(e.target.value)} placeholder="case uuid" />
+                <Label>{t("tasks.form.case_optional")}</Label>
+                <Select
+                  value={caseId ?? CASE_NONE_VALUE}
+                  onValueChange={(v) => setCaseId(v === CASE_NONE_VALUE ? undefined : v)}
+                >
+                  <SelectTrigger>
+                    <SelectValue
+                      placeholder={loadingCases ? t("common.loading") : t("tasks.form.select_case_optional")}
+                    />
+                  </SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value={CASE_NONE_VALUE}>{t("tasks.form.none")}</SelectItem>
+                    {(casesForBeneficiary || []).map((c) => (
+                      <SelectItem key={(c as any).id} value={String((c as any).id)}>
+                        {String((c as any).caseNumber || "")}
+                        {" — "}
+                        {String((c as any).title || "")}
+                      </SelectItem>
+                    ))}
+                  </SelectContent>
+                </Select>
               </div>
 
               <div className="space-y-2 md:col-span-2">
-                <Label>{t("intake.description")}</Label>
-                <Textarea value={description} onChange={(e) => setDescription(e.target.value)} placeholder="Description" />
+                <Label>{t("tasks.form.description")}</Label>
+                <Textarea
+                  value={description}
+                  onChange={(e) => setDescription(e.target.value)}
+                  placeholder={t("tasks.form.description_placeholder")}
+                />
+              </div>
+
+              <div className="space-y-2 md:col-span-2">
+                <Label>{t("tasks.form.attachments")}</Label>
+                <div className="flex flex-col gap-3">
+                  <Input
+                    type="file"
+                    multiple
+                    onChange={(e) => {
+                      const files = Array.from(e.target.files || []);
+                      if (!files.length) return;
+                      uploadAttachmentsMutation.mutate(files);
+                      // allow selecting same files again later
+                      e.currentTarget.value = "";
+                    }}
+                  />
+
+                  {(newAttachments || []).length === 0 ? (
+                    <div className="text-sm text-muted-foreground">{t("tasks.form.attachments_empty")}</div>
+                  ) : (
+                    <div className="space-y-2">
+                      {newAttachments.map((a: any) => (
+                        <div
+                          key={String(a.storageKey || a.fileUrl || a.fileName)}
+                          className="flex items-center justify-between gap-3 rounded-md border p-3"
+                        >
+                          <div className="min-w-0">
+                            <div className="font-medium text-sm truncate">{String(a.fileName || "")}</div>
+                            <div className="text-xs text-muted-foreground truncate">{String(a.fileUrl || "")}</div>
+                          </div>
+                          <Button
+                            type="button"
+                            variant="outline"
+                            size="sm"
+                            onClick={() =>
+                              setNewAttachments((prev) =>
+                                prev.filter((x: any) => String(x.storageKey || x.fileUrl) !== String(a.storageKey || a.fileUrl)),
+                              )
+                            }
+                          >
+                            {t("common.delete")}
+                          </Button>
+                        </div>
+                      ))}
+                    </div>
+                  )}
+                </div>
+              </div>
+
+              <div className="space-y-3 md:col-span-2">
+                <div className="flex items-center gap-2">
+                  <Checkbox
+                    checked={notifyBeneficiary}
+                    onCheckedChange={(v) => setNotifyBeneficiary(Boolean(v))}
+                  />
+                  <span className="text-sm">{t("tasks.form.notify_beneficiary")}</span>
+                </div>
+                <div className="flex items-center gap-2">
+                  <Checkbox
+                    checked={showInPortal}
+                    onCheckedChange={(v) => setShowInPortal(Boolean(v))}
+                  />
+                  <span className="text-sm">{t("tasks.form.show_in_portal")}</span>
+                </div>
               </div>
             </div>
 

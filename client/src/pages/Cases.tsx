@@ -430,6 +430,8 @@ export default function Cases() {
     "closed_admin",
   ] as const;
 
+  const ACTION_SELECT_VALUE = "__action__";
+
   const listUpdateStatusMutation = useMutation({
     mutationFn: async (input: { caseId: string; status: string }) => {
       return casesAPI.updateStatus(input.caseId, input.status);
@@ -547,7 +549,7 @@ export default function Cases() {
                           </Badge>
                           {isAdminUser ? (
                             <Select
-                              value={""}
+                              value={ACTION_SELECT_VALUE}
                               onValueChange={(next) =>
                                 listUpdateStatusMutation.mutate({
                                   caseId: String(c.id),
@@ -559,6 +561,9 @@ export default function Cases() {
                                 <SelectValue placeholder={t("cases.change_status")} />
                               </SelectTrigger>
                               <SelectContent>
+                                <SelectItem value={ACTION_SELECT_VALUE} disabled className="hidden">
+                                  {t("cases.change_status")}
+                                </SelectItem>
                                 {ADMIN_STATUSES.filter((s) => s !== String(c.status)).map((s) => (
                                   <SelectItem key={s} value={s}>
                                     {statusLabel(s)}
@@ -580,7 +585,7 @@ export default function Cases() {
 
                           {isAdminUser ? (
                             <Select
-                              value={""}
+                              value={ACTION_SELECT_VALUE}
                               onValueChange={(next) =>
                                 listAssignLawyerMutation.mutate({
                                   caseId: String(c.id),
@@ -592,6 +597,9 @@ export default function Cases() {
                                 <SelectValue placeholder={t("cases.select_lawyer")} />
                               </SelectTrigger>
                               <SelectContent onCloseAutoFocus={(e) => e.preventDefault()}>
+                                <SelectItem value={ACTION_SELECT_VALUE} disabled className="hidden">
+                                  {t("cases.select_lawyer")}
+                                </SelectItem>
                                 {lawyers.map((u: any) => (
                                   <SelectItem key={u.id} value={String(u.id)}>
                                     {String(u.fullName || u.username || u.email || u.id)}

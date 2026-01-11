@@ -4,6 +4,7 @@ import { useToast } from "@/hooks/use-toast";
 import { useTranslation } from "react-i18next";
 import { useLocation } from "wouter";
 import { Folder, FileText, Search, Loader2, Plus, Upload, Download, Archive, Trash2, RefreshCw } from "lucide-react";
+import { Layout } from "@/components/layout/Layout";
 
 import { Button } from "@/components/ui/button";
 import { Card } from "@/components/ui/card";
@@ -393,31 +394,103 @@ export default function DocumentsLibrary() {
   }
 
   return (
-    <div className="flex h-full min-h-[80vh]">
-      <aside className="w-72 border-r bg-muted/30 p-4">
-        <div className="flex items-center justify-between gap-2 mb-3">
-          <div className="font-semibold flex items-center gap-2">
-            <Folder className="w-5 h-5" />
-            {t("documents.library_title", "مكتبة المستندات")}
-          </div>
+    <Layout>
+      <div className="flex flex-col sm:flex-row items-start sm:items-center justify-between gap-4">
+        <h1 className="text-3xl font-bold tracking-tight">{t("documents.library_title", "مكتبة المستندات")}</h1>
 
-          <Button variant="ghost" size="icon" onClick={loadFolders} disabled={foldersLoading}>
-            <RefreshCw className={cn("w-4 h-4", foldersLoading && "animate-spin")} />
-          </Button>
-        </div>
+        <div className="flex items-center gap-2">
+          <Dialog open={uploadOpen} onOpenChange={setUploadOpen}>
+            <DialogTrigger asChild>
+              <Button>
+                <Upload className="mr-2 h-4 w-4 rtl:ml-2 rtl:mr-0" />
+                {t("documents.upload", "رفع مستند")}
+              </Button>
+            </DialogTrigger>
+            <DialogContent>
+              <DialogHeader>
+                <DialogTitle>{t("documents.upload", "رفع مستند")}</DialogTitle>
+                <DialogDescription>
+                  {t(
+                    "documents.upload_desc",
+                    "ارفع ملفًا ثم أدخل بياناته ليُضاف إلى مكتبة المستندات",
+                  )}
+                </DialogDescription>
+              </DialogHeader>
 
-        <div className="flex items-center justify-between gap-2 mb-4">
-          <div className="flex items-center gap-2">
-            <Switch id="includeArchived" checked={includeArchived} onCheckedChange={setIncludeArchived} />
-            <Label htmlFor="includeArchived">{t("documents.include_archived", "عرض المؤرشف")}</Label>
-          </div>
-        </div>
+              <div className="space-y-3">
+                <div className="space-y-2">
+                  <Label>{t("documents.file", "الملف")}</Label>
+                  <Input
+                    type="file"
+                    onChange={(e) => {
+                      const f = e.target.files?.[0] || null;
+                      setUploadFile(f);
+                      if (f && !uploadTitle.trim()) setUploadTitle(f.name);
+                    }}
+                  />
+                  <div className="text-xs text-muted-foreground">
+                    {t("documents.upload_hint", "الرفع يدعم: PDF، صور، Word (حسب إعدادات السيرفر)")}
+                  </div>
+                </div>
 
-        <div className="flex gap-2 mb-4">
+                <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
+                  <div className="space-y-2">
+                    <Label>{t("documents.title", "العنوان")}</Label>
+                    <Input value={uploadTitle} onChange={(e) => setUploadTitle(e.target.value)} />
+                  </div>
+                  <div className="space-y-2">
+                    <Label>{t("documents.doc_type", "نوع المستند")}</Label>
+                    <Input value={uploadDocType} onChange={(e) => setUploadDocType(e.target.value)} />
+                  </div>
+                </div>
+
+                <div className="space-y-2">
+                  <Label>{t("common.description", "الوصف")}</Label>
+                  <Textarea value={uploadDescription} onChange={(e) => setUploadDescription(e.target.value)} />
+                </div>
+
+                <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
+                  <div className="space-y-2">
+                    <Label>{t("documents.tags", "وسوم")}</Label>
+                    <Input
+                      placeholder={t("documents.tags_hint", "مثال: عقد, فاتورة, قضية")}
+                      value={uploadTags}
+                      onChange={(e) => setUploadTags(e.target.value)}
+                    />
+                  </div>
+
+                  <div className="space-y-2">
+                    <Label>{t("documents.visibility", "الظهور")}</Label>
+                    <Select value={uploadVisibility} onValueChange={(v) => setUploadVisibility(v as any)}>
+                      <SelectTrigger>
+                        <SelectValue placeholder="internal" />
+                      </SelectTrigger>
+                      <SelectContent>
+                        <SelectItem value="internal">internal</SelectItem>
+                        <SelectItem value="case_team">case_team</SelectItem>
+                        <SelectItem value="beneficiary">beneficiary</SelectItem>
+                      </SelectContent>
+                    </Select>
+                  </div>
+                </div>
+              </div>
+
+              <DialogFooter>
+                <Button variant="outline" onClick={() => setUploadOpen(false)} disabled={uploadBusy}>
+                  {t("common.cancel", "إلغاء")}
+                </Button>
+                <Button onClick={onUploadDoc} disabled={uploadBusy}>
+                  {uploadBusy ? <Loader2 className="w-4 h-4 animate-spin mr-2" /> : null}
+                  {t("documents.upload", "رفع")}
+                </Button>
+              </DialogFooter>
+            </DialogContent>
+          </Dialog>
+
           <Dialog open={createFolderOpen} onOpenChange={setCreateFolderOpen}>
             <DialogTrigger asChild>
-              <Button className="w-full" variant="secondary">
-                <Plus className="w-4 h-4 mr-2" />
+              <Button variant="outline">
+                <Plus className="mr-2 h-4 w-4 rtl:ml-2 rtl:mr-0" />
                 {t("documents.new_folder", "مجلد جديد")}
               </Button>
             </DialogTrigger>
@@ -425,7 +498,9 @@ export default function DocumentsLibrary() {
               <DialogHeader>
                 <DialogTitle>{t("documents.new_folder", "مجلد جديد")}</DialogTitle>
                 <DialogDescription>
-                  {selectedFolder ? t("documents.new_folder_in", "سيتم إنشاء المجلد داخل") + `: ${selectedFolder.name}` : t("documents.new_folder_desc", "أنشئ مجلدًا لتنظيم المستندات")}
+                  {selectedFolder
+                    ? t("documents.new_folder_in", "سيتم إنشاء المجلد داخل") + `: ${selectedFolder.name}`
+                    : t("documents.new_folder_desc", "أنشئ مجلدًا لتنظيم المستندات")}
                 </DialogDescription>
               </DialogHeader>
 
@@ -452,325 +527,264 @@ export default function DocumentsLibrary() {
             </DialogContent>
           </Dialog>
         </div>
+      </div>
 
-        <div className="text-xs text-muted-foreground mb-2">{t("documents.folders", "المجلدات")}</div>
-        <ul className="space-y-1">
-          <li>
-            <button
-              className={cn(
-                "w-full text-right px-2 py-2 rounded hover:bg-muted flex items-center justify-between gap-2",
-                !selectedFolderId && "bg-muted font-semibold",
-              )}
-              onClick={() => setSelectedFolderId(null)}
-            >
-              <span className="inline-flex items-center gap-2">
-                <Folder className="w-4 h-4" />
-                {t("documents.all_documents", "جميع المستندات")}
-              </span>
-            </button>
-          </li>
+      <div className="flex flex-col gap-3 md:flex-row md:items-center md:justify-between">
+        <div className="relative flex-1 max-w-sm">
+          <Search className="absolute left-2.5 top-2.5 h-4 w-4 text-muted-foreground rtl:right-2.5 rtl:left-auto" />
+          <Input
+            placeholder={t("documents.search_placeholder", "ابحث عن مستند...")}
+            className="pl-9 rtl:pr-9 rtl:pl-3"
+            value={search}
+            onChange={(e) => setSearch(e.target.value)}
+          />
+        </div>
 
-          {folders.map((f) => (
-            <li key={f.id}>
-              <div
-                className={cn(
-                  "w-full px-2 py-2 rounded hover:bg-muted flex items-center justify-between gap-2",
-                  selectedFolderId === f.id && "bg-muted font-semibold",
-                )}
-              >
+        <div className="flex items-center gap-2">
+          <Label className="text-xs text-muted-foreground">{t("documents.visibility", "الظهور")}</Label>
+          <Select value={visibility} onValueChange={setVisibility}>
+            <SelectTrigger className="w-44">
+              <SelectValue placeholder="all" />
+            </SelectTrigger>
+            <SelectContent>
+              <SelectItem value="all">all</SelectItem>
+              <SelectItem value="internal">internal</SelectItem>
+              <SelectItem value="case_team">case_team</SelectItem>
+              <SelectItem value="beneficiary">beneficiary</SelectItem>
+            </SelectContent>
+          </Select>
+
+          <Button variant="outline" onClick={loadDocs} disabled={docsLoading}>
+            {docsLoading ? (
+              <Loader2 className="w-4 h-4 animate-spin mr-2" />
+            ) : (
+              <RefreshCw className="w-4 h-4 mr-2" />
+            )}
+            {t("common.refresh", "تحديث")}
+          </Button>
+        </div>
+      </div>
+
+      <div className="rounded-md border bg-card overflow-hidden">
+        <div className="grid grid-cols-1 lg:grid-cols-[18rem_1fr]">
+          <aside className="border-b lg:border-b-0 lg:border-r bg-muted/30 p-4">
+            <div className="flex items-center justify-between gap-2 mb-3">
+              <div className="font-semibold flex items-center gap-2">
+                <Folder className="w-5 h-5" />
+                {t("documents.folders", "المجلدات")}
+              </div>
+
+              <Button variant="ghost" size="icon" onClick={loadFolders} disabled={foldersLoading}>
+                <RefreshCw className={cn("w-4 h-4", foldersLoading && "animate-spin")} />
+              </Button>
+            </div>
+
+            <div className="flex items-center justify-between gap-2 mb-4">
+              <div className="flex items-center gap-2">
+                <Switch id="includeArchived" checked={includeArchived} onCheckedChange={setIncludeArchived} />
+                <Label htmlFor="includeArchived">{t("documents.include_archived", "عرض المؤرشف")}</Label>
+              </div>
+            </div>
+
+            <ul className="space-y-1">
+              <li>
                 <button
-                  className="flex-1 text-right inline-flex items-center gap-2"
-                  onClick={() => setSelectedFolderId(f.id)}
+                  className={cn(
+                    "w-full px-2 py-2 rounded hover:bg-muted flex items-center justify-between gap-2 text-left rtl:text-right",
+                    !selectedFolderId && "bg-muted font-semibold",
+                  )}
+                  onClick={() => setSelectedFolderId(null)}
                 >
-                  <Folder className="w-4 h-4" />
-                  <span className="truncate" title={f.name}>
-                    {f.name}
+                  <span className="inline-flex items-center gap-2">
+                    <Folder className="w-4 h-4" />
+                    {t("documents.all_documents", "جميع المستندات")}
                   </span>
-                  {f.isArchived ? <Badge variant="outline">{t("common.archived", "مؤرشف")}</Badge> : null}
                 </button>
+              </li>
 
-                <DropdownMenu>
-                  <DropdownMenuTrigger asChild>
-                    <Button variant="ghost" size="icon">
-                      <span className="sr-only">{t("common.actions", "إجراءات")}</span>
-                      <span className="text-xl leading-none">⋯</span>
-                    </Button>
-                  </DropdownMenuTrigger>
-                  <DropdownMenuContent align="end">
-                    <DropdownMenuItem onClick={() => onToggleFolderArchive(f.id, !f.isArchived)}>
-                      <Archive className="w-4 h-4 mr-2" />
-                      {f.isArchived ? t("common.unarchive", "إلغاء الأرشفة") : t("common.archive", "أرشفة")}
-                    </DropdownMenuItem>
-                    <DropdownMenuSeparator />
-                    <DropdownMenuItem className="text-destructive" onClick={() => onDeleteFolder(f.id)}>
-                      <Trash2 className="w-4 h-4 mr-2" />
-                      {t("common.delete", "حذف")}
-                    </DropdownMenuItem>
-                  </DropdownMenuContent>
-                </DropdownMenu>
-              </div>
-            </li>
-          ))}
-        </ul>
-      </aside>
+              {folders.map((f) => (
+                <li key={f.id}>
+                  <div
+                    className={cn(
+                      "w-full px-2 py-2 rounded hover:bg-muted flex items-center justify-between gap-2",
+                      selectedFolderId === f.id && "bg-muted font-semibold",
+                    )}
+                  >
+                    <button
+                      className="flex-1 inline-flex items-center gap-2 text-left rtl:text-right"
+                      onClick={() => setSelectedFolderId(f.id)}
+                    >
+                      <Folder className="w-4 h-4" />
+                      <span className="truncate" title={f.name}>
+                        {f.name}
+                      </span>
+                      {f.isArchived ? <Badge variant="outline">{t("common.archived", "مؤرشف")}</Badge> : null}
+                    </button>
 
-      <main className="flex-1 p-6">
-        {(foldersError || docsError) && !docsLoading ? (
-          <Card className="p-4 mb-4 border-destructive/40">
-            <div className="flex items-start justify-between gap-4">
-              <div>
-                <div className="font-semibold text-destructive">{t("common.error", "خطأ")}</div>
-                <div className="text-sm text-muted-foreground mt-1">
-                  {docsError || foldersError}
+                    <DropdownMenu>
+                      <DropdownMenuTrigger asChild>
+                        <Button variant="ghost" size="icon">
+                          <span className="sr-only">{t("common.actions", "إجراءات")}</span>
+                          <span className="text-xl leading-none">⋯</span>
+                        </Button>
+                      </DropdownMenuTrigger>
+                      <DropdownMenuContent align="end">
+                        <DropdownMenuItem onClick={() => onToggleFolderArchive(f.id, !f.isArchived)}>
+                          <Archive className="w-4 h-4 mr-2" />
+                          {f.isArchived ? t("common.unarchive", "إلغاء الأرشفة") : t("common.archive", "أرشفة")}
+                        </DropdownMenuItem>
+                        <DropdownMenuSeparator />
+                        <DropdownMenuItem className="text-destructive" onClick={() => onDeleteFolder(f.id)}>
+                          <Trash2 className="w-4 h-4 mr-2" />
+                          {t("common.delete", "حذف")}
+                        </DropdownMenuItem>
+                      </DropdownMenuContent>
+                    </DropdownMenu>
+                  </div>
+                </li>
+              ))}
+            </ul>
+          </aside>
+
+          <main className="p-6">
+            {(foldersError || docsError) && !docsLoading ? (
+              <Card className="p-4 mb-4 border-destructive/40">
+                <div className="flex items-start justify-between gap-4">
+                  <div>
+                    <div className="font-semibold text-destructive">{t("common.error", "خطأ")}</div>
+                    <div className="text-sm text-muted-foreground mt-1">{docsError || foldersError}</div>
+                  </div>
+                  <Button
+                    variant="outline"
+                    onClick={() => {
+                      loadFolders();
+                      loadDocs();
+                    }}
+                  >
+                    <RefreshCw className="w-4 h-4 mr-2" />
+                    {t("common.retry", "إعادة المحاولة")}
+                  </Button>
                 </div>
-              </div>
-              <Button variant="outline" onClick={() => { loadFolders(); loadDocs(); }}>
-                <RefreshCw className="w-4 h-4 mr-2" />
-                {t("common.retry", "إعادة المحاولة")}
-              </Button>
-            </div>
-          </Card>
-        ) : null}
-
-        <div className="flex flex-col gap-3 md:flex-row md:items-center md:justify-between mb-4">
-          <div>
-            <div className="text-lg font-semibold">
-              {selectedFolder ? selectedFolder.name : t("documents.all_documents", "جميع المستندات")}
-            </div>
-            <div className="text-sm text-muted-foreground">
-              {t("documents.docs_count", "عدد المستندات")}: {docs.length}
-            </div>
-          </div>
-
-          <div className="flex gap-2">
-            {canArchiveSelectedFolder ? (
-              <Button
-                variant="outline"
-                onClick={() => onToggleFolderArchive(selectedFolder!.id, !selectedFolder!.isArchived)}
-                disabled={foldersLoading}
-              >
-                <Archive className="w-4 h-4 mr-2" />
-                {selectedFolder!.isArchived ? t("common.unarchive", "إلغاء الأرشفة") : t("common.archive", "أرشفة")}
-              </Button>
+              </Card>
             ) : null}
 
-            <Dialog open={uploadOpen} onOpenChange={setUploadOpen}>
-              <DialogTrigger asChild>
-                <Button>
-                  <Upload className="w-4 h-4 mr-2" />
-                  {t("documents.upload", "رفع مستند")}
-                </Button>
-              </DialogTrigger>
-              <DialogContent>
-                <DialogHeader>
-                  <DialogTitle>{t("documents.upload", "رفع مستند")}</DialogTitle>
-                  <DialogDescription>
-                    {t(
-                      "documents.upload_desc",
-                      "ارفع ملفًا ثم أدخل بياناته ليُضاف إلى مكتبة المستندات",
-                    )}
-                  </DialogDescription>
-                </DialogHeader>
-
-                <div className="space-y-3">
-                  <div className="space-y-2">
-                    <Label>{t("documents.file", "الملف")}</Label>
-                    <Input
-                      type="file"
-                      onChange={(e) => {
-                        const f = e.target.files?.[0] || null;
-                        setUploadFile(f);
-                        if (f && !uploadTitle.trim()) setUploadTitle(f.name);
-                      }}
-                    />
-                    <div className="text-xs text-muted-foreground">
-                      {t("documents.upload_hint", "الرفع يدعم: PDF، صور، Word (حسب إعدادات السيرفر)")}
-                    </div>
-                  </div>
-
-                  <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
-                    <div className="space-y-2">
-                      <Label>{t("documents.title", "العنوان")}</Label>
-                      <Input value={uploadTitle} onChange={(e) => setUploadTitle(e.target.value)} />
-                    </div>
-                    <div className="space-y-2">
-                      <Label>{t("documents.doc_type", "نوع المستند")}</Label>
-                      <Input value={uploadDocType} onChange={(e) => setUploadDocType(e.target.value)} />
-                    </div>
-                  </div>
-
-                  <div className="space-y-2">
-                    <Label>{t("common.description", "الوصف")}</Label>
-                    <Textarea value={uploadDescription} onChange={(e) => setUploadDescription(e.target.value)} />
-                  </div>
-
-                  <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
-                    <div className="space-y-2">
-                      <Label>{t("documents.tags", "وسوم")}</Label>
-                      <Input
-                        placeholder={t("documents.tags_hint", "مثال: عقد, فاتورة, قضية")}
-                        value={uploadTags}
-                        onChange={(e) => setUploadTags(e.target.value)}
-                      />
-                    </div>
-
-                    <div className="space-y-2">
-                      <Label>{t("documents.visibility", "الظهور")}</Label>
-                      <Select value={uploadVisibility} onValueChange={(v) => setUploadVisibility(v as any)}>
-                        <SelectTrigger>
-                          <SelectValue placeholder="internal" />
-                        </SelectTrigger>
-                        <SelectContent>
-                          <SelectItem value="internal">internal</SelectItem>
-                          <SelectItem value="case_team">case_team</SelectItem>
-                          <SelectItem value="beneficiary">beneficiary</SelectItem>
-                        </SelectContent>
-                      </Select>
-                    </div>
-                  </div>
+            <div className="flex flex-col gap-3 md:flex-row md:items-center md:justify-between mb-4">
+              <div>
+                <div className="text-lg font-semibold">
+                  {selectedFolder ? selectedFolder.name : t("documents.all_documents", "جميع المستندات")}
                 </div>
+                <div className="text-sm text-muted-foreground">
+                  {t("documents.docs_count", "عدد المستندات")}: {docs.length}
+                </div>
+              </div>
 
-                <DialogFooter>
-                  <Button variant="outline" onClick={() => setUploadOpen(false)} disabled={uploadBusy}>
-                    {t("common.cancel", "إلغاء")}
+              <div className="flex gap-2">
+                {canArchiveSelectedFolder ? (
+                  <Button
+                    variant="outline"
+                    onClick={() => onToggleFolderArchive(selectedFolder!.id, !selectedFolder!.isArchived)}
+                    disabled={foldersLoading}
+                  >
+                    <Archive className="w-4 h-4 mr-2" />
+                    {selectedFolder!.isArchived ? t("common.unarchive", "إلغاء الأرشفة") : t("common.archive", "أرشفة")}
                   </Button>
-                  <Button onClick={onUploadDoc} disabled={uploadBusy}>
-                    {uploadBusy ? <Loader2 className="w-4 h-4 animate-spin mr-2" /> : null}
-                    {t("documents.upload", "رفع")}
-                  </Button>
-                </DialogFooter>
-              </DialogContent>
-            </Dialog>
-          </div>
-        </div>
-
-        <div className="flex flex-col gap-3 md:flex-row md:items-center md:justify-between mb-4">
-          <div className="flex items-center gap-2">
-            <Search className="w-4 h-4 text-muted-foreground" />
-            <Input
-              className="w-full md:w-96"
-              placeholder={t("documents.search_placeholder", "ابحث عن مستند...")}
-              value={search}
-              onChange={(e) => setSearch(e.target.value)}
-            />
-          </div>
-
-          <div className="flex items-center gap-2">
-            <Label className="text-xs text-muted-foreground">{t("documents.visibility", "الظهور")}</Label>
-            <Select value={visibility} onValueChange={setVisibility}>
-              <SelectTrigger className="w-44">
-                <SelectValue placeholder="all" />
-              </SelectTrigger>
-              <SelectContent>
-                <SelectItem value="all">all</SelectItem>
-                <SelectItem value="internal">internal</SelectItem>
-                <SelectItem value="case_team">case_team</SelectItem>
-                <SelectItem value="beneficiary">beneficiary</SelectItem>
-              </SelectContent>
-            </Select>
-
-            <Button variant="outline" onClick={loadDocs} disabled={docsLoading}>
-              {docsLoading ? <Loader2 className="w-4 h-4 animate-spin mr-2" /> : <RefreshCw className="w-4 h-4 mr-2" />}
-              {t("common.refresh", "تحديث")}
-            </Button>
-          </div>
-        </div>
-
-        <Card className="p-0">
-          {docsLoading ? (
-            <div className="p-6 text-muted-foreground flex items-center gap-2">
-              <Loader2 className="w-4 h-4 animate-spin" />
-              {t("common.loading", "جاري التحميل...")}
+                ) : null}
+              </div>
             </div>
-          ) : docs.length === 0 ? (
-            <div className="p-10 text-center text-muted-foreground">
-              {t("documents.no_documents", "لا توجد مستندات")}
-            </div>
-          ) : (
-            <Table>
-              <TableHeader>
-                <TableRow>
-                  <TableHead>{t("documents.title", "العنوان")}</TableHead>
-                  <TableHead>{t("documents.folder", "المجلد")}</TableHead>
-                  <TableHead>{t("documents.visibility", "الظهور")}</TableHead>
-                  <TableHead>{t("documents.file", "الملف")}</TableHead>
-                  <TableHead className="w-[140px]">{t("common.actions", "إجراءات")}</TableHead>
-                </TableRow>
-              </TableHeader>
-              <TableBody>
-                {docs.map((doc) => {
-                  const v = visibilityLabel(String(doc.visibility));
-                  return (
-                    <TableRow key={doc.id} className={doc.isArchived ? "opacity-70" : ""}>
-                      <TableCell>
-                        <div className="flex items-center gap-2">
-                          <FileText className="w-4 h-4 text-primary" />
-                          <div className="min-w-0">
-                            <div className="font-medium truncate" title={doc.title}>
-                              {doc.title}
-                            </div>
-                            {doc.docType ? (
-                              <div className="text-xs text-muted-foreground truncate">{doc.docType}</div>
-                            ) : null}
-                          </div>
-                          {doc.isArchived ? <Badge variant="outline">{t("common.archived", "مؤرشف")}</Badge> : null}
-                        </div>
-                        {doc.description ? (
-                          <div className="text-xs text-muted-foreground mt-1 truncate" title={doc.description || ""}>
-                            {doc.description}
-                          </div>
-                        ) : null}
-                      </TableCell>
-                      <TableCell>
-                        <span className="text-sm text-muted-foreground">
-                          {doc.folderName || (doc.folderId ? t("documents.folder", "مجلد") : "—")}
-                        </span>
-                      </TableCell>
-                      <TableCell>
-                        <Badge variant={v.variant}>{v.text}</Badge>
-                      </TableCell>
-                      <TableCell>
-                        <div className="text-sm">
-                          <div className="truncate" title={doc.fileName}>
-                            {doc.fileName}
-                          </div>
-                          <div className="text-xs text-muted-foreground">{formatFileSize(doc.size)}</div>
-                        </div>
-                      </TableCell>
-                      <TableCell>
-                        <div className="flex gap-2">
-                          <Button size="sm" variant="outline" onClick={() => handleDownload(doc)}>
-                            <Download className="w-4 h-4 mr-1" />
-                            {t("documents.download", "تنزيل")}
-                          </Button>
-                          <DropdownMenu>
-                            <DropdownMenuTrigger asChild>
-                              <Button size="sm" variant="ghost">
-                                ⋯
-                              </Button>
-                            </DropdownMenuTrigger>
-                            <DropdownMenuContent align="end">
-                              <DropdownMenuItem onClick={() => onToggleDocArchive(doc.id, !doc.isArchived)}>
-                                <Archive className="w-4 h-4 mr-2" />
-                                {doc.isArchived ? t("common.unarchive", "إلغاء الأرشفة") : t("common.archive", "أرشفة")}
-                              </DropdownMenuItem>
-                              <DropdownMenuSeparator />
-                              <DropdownMenuItem className="text-destructive" onClick={() => onDeleteDoc(doc.id)}>
-                                <Trash2 className="w-4 h-4 mr-2" />
-                                {t("common.delete", "حذف")}
-                              </DropdownMenuItem>
-                            </DropdownMenuContent>
-                          </DropdownMenu>
-                        </div>
-                      </TableCell>
+
+            <Card className="p-0">
+              {docsLoading ? (
+                <div className="p-6 text-muted-foreground flex items-center gap-2">
+                  <Loader2 className="w-4 h-4 animate-spin" />
+                  {t("common.loading", "جاري التحميل...")}
+                </div>
+              ) : docs.length === 0 ? (
+                <div className="p-10 text-center text-muted-foreground">{t("documents.no_documents", "لا توجد مستندات")}</div>
+              ) : (
+                <Table>
+                  <TableHeader>
+                    <TableRow>
+                      <TableHead>{t("documents.title", "العنوان")}</TableHead>
+                      <TableHead>{t("documents.folder", "المجلد")}</TableHead>
+                      <TableHead>{t("documents.visibility", "الظهور")}</TableHead>
+                      <TableHead>{t("documents.file", "الملف")}</TableHead>
+                      <TableHead className="w-[140px]">{t("common.actions", "إجراءات")}</TableHead>
                     </TableRow>
-                  );
-                })}
-              </TableBody>
-            </Table>
-          )}
-        </Card>
-      </main>
-    </div>
+                  </TableHeader>
+                  <TableBody>
+                    {docs.map((doc) => {
+                      const v = visibilityLabel(String(doc.visibility));
+                      return (
+                        <TableRow key={doc.id} className={doc.isArchived ? "opacity-70" : ""}>
+                          <TableCell>
+                            <div className="flex items-center gap-2">
+                              <FileText className="w-4 h-4 text-primary" />
+                              <div className="min-w-0">
+                                <div className="font-medium truncate" title={doc.title}>
+                                  {doc.title}
+                                </div>
+                                {doc.docType ? <div className="text-xs text-muted-foreground truncate">{doc.docType}</div> : null}
+                              </div>
+                              {doc.isArchived ? <Badge variant="outline">{t("common.archived", "مؤرشف")}</Badge> : null}
+                            </div>
+                            {doc.description ? (
+                              <div className="text-xs text-muted-foreground mt-1 truncate" title={doc.description || ""}>
+                                {doc.description}
+                              </div>
+                            ) : null}
+                          </TableCell>
+                          <TableCell>
+                            <span className="text-sm text-muted-foreground">
+                              {doc.folderName || (doc.folderId ? t("documents.folder", "مجلد") : "—")}
+                            </span>
+                          </TableCell>
+                          <TableCell>
+                            <Badge variant={v.variant}>{v.text}</Badge>
+                          </TableCell>
+                          <TableCell>
+                            <div className="text-sm">
+                              <div className="truncate" title={doc.fileName}>
+                                {doc.fileName}
+                              </div>
+                              <div className="text-xs text-muted-foreground">{formatFileSize(doc.size)}</div>
+                            </div>
+                          </TableCell>
+                          <TableCell>
+                            <div className="flex gap-2">
+                              <Button size="sm" variant="outline" onClick={() => handleDownload(doc)}>
+                                <Download className="w-4 h-4 mr-1" />
+                                {t("documents.download", "تنزيل")}
+                              </Button>
+                              <DropdownMenu>
+                                <DropdownMenuTrigger asChild>
+                                  <Button size="sm" variant="ghost">
+                                    ⋯
+                                  </Button>
+                                </DropdownMenuTrigger>
+                                <DropdownMenuContent align="end">
+                                  <DropdownMenuItem onClick={() => onToggleDocArchive(doc.id, !doc.isArchived)}>
+                                    <Archive className="w-4 h-4 mr-2" />
+                                    {doc.isArchived ? t("common.unarchive", "إلغاء الأرشفة") : t("common.archive", "أرشفة")}
+                                  </DropdownMenuItem>
+                                  <DropdownMenuSeparator />
+                                  <DropdownMenuItem className="text-destructive" onClick={() => onDeleteDoc(doc.id)}>
+                                    <Trash2 className="w-4 h-4 mr-2" />
+                                    {t("common.delete", "حذف")}
+                                  </DropdownMenuItem>
+                                </DropdownMenuContent>
+                              </DropdownMenu>
+                            </div>
+                          </TableCell>
+                        </TableRow>
+                      );
+                    })}
+                  </TableBody>
+                </Table>
+              )}
+            </Card>
+          </main>
+        </div>
+      </div>
+    </Layout>
   );
 }

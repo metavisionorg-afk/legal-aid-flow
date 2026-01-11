@@ -7,6 +7,7 @@ import { registerRoutes } from "./routes";
 import { serveStatic } from "./static";
 import { createServer } from "http";
 import path from "path";
+import { storage } from "./storage";
 
 const app = express();
 const httpServer = createServer(app);
@@ -159,24 +160,42 @@ app.use((req, res, next) => {
     }),
   );
 
-  if (sessionDebug) {
-    app.get("/api/auth/me", (req, res) => {
-      const user = (req as any).user ?? null;
-      res.json({
-        ok: true,
-        session: Boolean((req as any).session),
-        sessionID: (req as any).sessionID ?? null,
-        hasCookieHeader: Boolean(req.headers.cookie),
-        cookieHeaderSample: req.headers.cookie ? req.headers.cookie.slice(0, 120) : null,
-        protocol: req.protocol,
-        secure: (req as any).secure,
-        xForwardedProto: req.headers["x-forwarded-proto"] ?? null,
-        origin: req.headers.origin ?? null,
-        corsOrigins,
-        user,
-      });
-    });
+  app.get("/api/auth/me", async (req, res) => {
+  // user من الجلسة (الموديل عندكم يعتمد userId في session)
+  let user: any = null;
+
+  try {
+    if ((req as any).session?.userId) {
+      // إذا عندك storage موجود هنا:
+      const u = await storage.getUser((req as any).session.userId);
+      if (u) {
+        const { password: _pw, ...safe } = u as any;
+        user = safe;
+      }
+    }
+  } catch {
+    user = null;
   }
+
+  const payload: any = { ok: true, user };
+
+  // Debug extras (اختياري) إذا SESSION_DEBUG=1
+  if (sessionDebug) {
+    payload.debug = {
+      session: Boolean((req as any).session),
+      sessionID: (req as any).sessionID ?? null,
+      hasCookieHeader: Boolean(req.headers.cookie),
+      cookieHeaderSample: req.headers.cookie ? req.headers.cookie.slice(0, 120) : null,
+      protocol: req.protocol,
+      secure: (req as any).secure,
+      xForwardedProto: req.headers["x-forwarded-proto"] ?? null,
+      origin: req.headers.origin ?? null,
+      corsOrigins,
+    };
+  }
+
+  return res.status(200).json(payload);
+});
 
   await registerRoutes(httpServer, app);
 

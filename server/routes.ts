@@ -314,18 +314,18 @@ export async function registerRoutes(
     });
   });
 
-  app.get("/api/auth/me", requireAuth, async (req, res) => {
-    try {
-      const user = await storage.getUser(req.session.userId!);
-      if (!user) {
-        return res.status(404).json({ error: "User not found" });
-      }
-      const { password: _, ...userWithoutPassword } = user;
-      res.json(userWithoutPassword);
-    } catch (error: any) {
-      res.status(500).json({ error: error.message });
-    }
-  });
+  //app.get("/api/auth/me", requireAuth, async (req, res) => {
+    //try {
+      //const user = await storage.getUser(req.session.userId!);
+      //if (!user) {
+        //return res.status(404).json({ error: "User not found" });
+     // }
+     // const { password: _, ...userWithoutPassword } = user;
+      //res.json(userWithoutPassword);
+    //} catch (error: any) {
+      //res.status(500).json({ error: error.message });
+    //}
+  //});
 
   // ========== PUBLIC UPLOADS (REGISTRATION) ==========
 

@@ -12,6 +12,24 @@ export default function Forbidden({ redirectTo = "/portal" }: Props) {
   const { t } = useTranslation();
   const [, setLocation] = useLocation();
 
+  const handleGoToPortal = () => {
+    const primary = redirectTo || "/portal";
+    try {
+      setLocation(primary);
+    } catch {
+      setLocation("/login");
+    }
+
+    // Extra hard fallback for environments where SPA navigation may not kick in.
+    if (typeof window !== "undefined") {
+      window.setTimeout(() => {
+        if (window.location.pathname === "/unauthorized") {
+          window.location.assign("/login");
+        }
+      }, 50);
+    }
+  };
+
   return (
     <div className="min-h-screen flex items-center justify-center p-4">
       <Card className="w-full max-w-md">
@@ -20,7 +38,7 @@ export default function Forbidden({ redirectTo = "/portal" }: Props) {
         </CardHeader>
         <CardContent className="space-y-4">
           <p className="text-sm text-muted-foreground">{t("common.forbidden_description")}</p>
-          <Button onClick={() => setLocation(redirectTo)}>{t("common.go_to_portal")}</Button>
+          <Button onClick={handleGoToPortal}>{t("common.go_to_portal")}</Button>
         </CardContent>
       </Card>
     </div>

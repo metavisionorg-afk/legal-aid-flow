@@ -1,4 +1,4 @@
-import React from "react";
+import React, { useEffect } from "react";
 import { useLocation, Switch, Route } from "wouter";
 import { QueryClientProvider } from "@tanstack/react-query";
 import { Toaster } from "@/components/ui/sonner";
@@ -44,16 +44,81 @@ import { queryClient } from "@/lib/queryClient";
 // Initialize i18n
 import "./i18n";
 
+function FullPageSpinner() {
+  return (
+    <div className="min-h-screen flex items-center justify-center">
+      <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-primary" />
+    </div>
+  );
+}
+
+// Landing behavior:
+// - Not logged in => always go to beneficiary portal entry.
+// - Beneficiary => portal.
+// - Staff => staff dashboard.
+function RootRedirect() {
+  const { user, loading } = useAuth();
+  const [, setLocation] = useLocation();
+
+  useEffect(() => {
+    if (loading) return;
+
+    if (!user) {
+      setLocation("/portal");
+      return;
+    }
+
+    const role = (user as any)?.role;
+    if (user.userType === "beneficiary" || role === "beneficiary") {
+      setLocation("/portal");
+      return;
+    }
+
+    if (role === "lawyer") {
+      setLocation("/lawyer/dashboard");
+      return;
+    }
+
+    setLocation("/dashboard");
+  }, [loading, user, setLocation]);
+
+  if (loading) return <FullPageSpinner />;
+  return null;
+}
+
+// Public portal entry.
+// - Not logged in => show portal login.
+// - Beneficiary => show portal dashboard.
+// - Staff => go to staff dashboard.
+function PortalIndex() {
+  const { user, loading } = useAuth();
+  const [, setLocation] = useLocation();
+
+  useEffect(() => {
+    if (loading) return;
+    if (!user) return;
+    if (user.userType !== "beneficiary") {
+      setLocation("/dashboard");
+    }
+  }, [loading, user, setLocation]);
+
+  if (loading) return <FullPageSpinner />;
+  if (!user) return <PortalLogin />;
+  if (user.userType !== "beneficiary") return null;
+
+  return (
+    <PortalLayout>
+      <PortalDashboard />
+    </PortalLayout>
+  );
+}
+
 function StaffRoute({ component: Component }: any) {
   const { user, loading } = useAuth();
   const [location, setLocation] = useLocation();
 
   if (loading) {
-    return (
-      <div className="min-h-screen flex items-center justify-center">
-        <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-primary" />
-      </div>
-    );
+    return <FullPageSpinner />;
   }
 
   if (!user) {
@@ -79,11 +144,7 @@ function PortalRoute({ component: Component }: any) {
   const [, setLocation] = useLocation();
 
   if (loading) {
-    return (
-      <div className="min-h-screen flex items-center justify-center">
-        <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-primary" />
-      </div>
-    );
+    return <FullPageSpinner />;
   }
 
   if (!user) {
@@ -110,16 +171,15 @@ function Router() {
   return (
     <Switch>
       <Route path="/unauthorized">
-        {() => <Forbidden redirectTo="/" />}
+        {() => <Forbidden redirectTo="/portal" />}
       </Route>
       <Route path="/register" component={RegisterBeneficiary} />
       <Route path="/beneficiary/register" component={BeneficiaryRegister} />
 
       {/* Staff Routes */}
       <Route path="/login" component={Login} />
-      <Route path="/">
-        {() => <StaffRoute component={Dashboard} />}
-      </Route>
+      <Route path="/dashboard">{() => <StaffRoute component={Dashboard} />}</Route>
+      <Route path="/">{() => <RootRedirect />}</Route>
       <Route path="/documents-library">
         {() =>
           (
@@ -238,9 +298,7 @@ function Router() {
       <Route path="/beneficiary/dashboard">
         {() => <PortalRoute component={BeneficiaryPortal} />}
       </Route>
-      <Route path="/portal">
-        {() => <PortalRoute component={PortalDashboard} />}
-      </Route>
+      <Route path="/portal">{() => <PortalIndex />}</Route>
       <Route path="/portal/book-appointment">
         {() => <PortalRoute component={PortalBookAppointment} />}
       </Route>

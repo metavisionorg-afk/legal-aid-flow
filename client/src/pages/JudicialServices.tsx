@@ -1,6 +1,9 @@
 import { useEffect, useMemo, useState } from "react";
 import { useTranslation } from "react-i18next";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
+import { z } from "zod";
+import { zodResolver } from "@hookform/resolvers/zod";
+import { useForm } from "react-hook-form";
 
 import { Layout } from "@/components/layout/Layout";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
@@ -14,9 +17,11 @@ import {
   TableHeader,
   TableRow,
 } from "@/components/ui/table";
-import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/ui/dialog";
+import { Dialog, DialogContent, DialogFooter, DialogHeader, DialogTitle } from "@/components/ui/dialog";
 import { Skeleton } from "@/components/ui/skeleton";
 import { Label } from "@/components/ui/label";
+import { Input } from "@/components/ui/input";
+import { Textarea } from "@/components/ui/textarea";
 import {
   Select,
   SelectContent,
@@ -25,7 +30,23 @@ import {
   SelectValue,
 } from "@/components/ui/select";
 
-import { configAPI, judicialServicesAPI, usersAPI } from "@/lib/api";
+import {
+  Form,
+  FormControl,
+  FormField,
+  FormItem,
+  FormLabel,
+  FormMessage,
+} from "@/components/ui/form";
+
+import {
+  beneficiariesAPI,
+  configAPI,
+  judicialServicesAPI,
+  judicialServiceTypesAPI,
+  uploadsAPI,
+  usersAPI,
+} from "@/lib/api";
 import { getErrorMessage } from "@/lib/errors";
 import { useToast } from "@/hooks/use-toast";
 import { useAuth } from "@/contexts/AuthContext";
@@ -34,6 +55,8 @@ type JudicialServiceRow = any;
 type DocumentRow = any;
 
 type LawyerUser = { id: string; fullName: string; role?: string; userType?: string };
+type BeneficiaryRow = { id: string; fullName?: string; idNumber?: string };
+type JudicialServiceTypeRow = { id: string; nameAr?: string | null; nameEn?: string | null; isActive?: boolean };
 
 const ADMIN_STATUS_VALUES = [
   "pending_review",
@@ -46,6 +69,19 @@ const ADMIN_STATUS_VALUES = [
   "cancelled",
 ] as const;
 
+const CREATE_PRIORITY_VALUES = ["low", "medium", "high", "urgent"] as const;
+
+const createJudicialServiceSchema = z.object({
+  beneficiaryId: z.string().min(1, "Beneficiary is required"),
+  serviceTypeId: z.string().min(1, "Service type is required"),
+  title: z.string().trim().min(1, "Title is required"),
+  description: z.string().trim().optional().nullable(),
+  priority: z.enum(CREATE_PRIORITY_VALUES).default("medium"),
+  lawyerId: z.string().optional().nullable(),
+});
+
+type CreateJudicialServiceValues = z.infer<typeof createJudicialServiceSchema>;
+
 export default function JudicialServices() {
   const { t } = useTranslation();
   const { toast } = useToast();
@@ -54,8 +90,24 @@ export default function JudicialServices() {
 
   const [blocked401, setBlocked401] = useState(false);
 
+  const [createOpen, setCreateOpen] = useState(false);
+  const [createFiles, setCreateFiles] = useState<File[]>([]);
+
   const [open, setOpen] = useState(false);
   const [active, setActive] = useState<JudicialServiceRow | null>(null);
+
+  const createForm = useForm<CreateJudicialServiceValues>({
+    resolver: zodResolver(createJudicialServiceSchema),
+    defaultValues: {
+      beneficiaryId: "",
+      serviceTypeId: "",
+      title: "",
+      description: "",
+      priority: "medium",
+      lawyerId: null,
+    },
+    mode: "onTouched",
+  });
 
   const { data: features, isLoading: loadingFeatures } = useQuery({
     queryKey: ["config", "features"],
@@ -106,6 +158,34 @@ export default function JudicialServices() {
     if ((lawyersError as any)?.response?.status === 401) setBlocked401(true);
   }, [lawyersError]);
 
+  const { data: serviceTypes, error: serviceTypesError } = useQuery({
+    queryKey: ["judicial-service-types", "active"],
+    enabled: canQuery && createOpen,
+    queryFn: async () => (await judicialServiceTypesAPI.listActive()) as JudicialServiceTypeRow[],
+    retry: (failureCount, err: any) => {
+      if (err?.response?.status === 401) return false;
+      return failureCount < 1;
+    },
+  });
+
+  useEffect(() => {
+    if ((serviceTypesError as any)?.response?.status === 401) setBlocked401(true);
+  }, [serviceTypesError]);
+
+  const { data: beneficiaries, error: beneficiariesError } = useQuery({
+    queryKey: ["beneficiaries"],
+    enabled: canQuery && createOpen,
+    queryFn: async () => (await beneficiariesAPI.getAll()) as BeneficiaryRow[],
+    retry: (failureCount, err: any) => {
+      if (err?.response?.status === 401) return false;
+      return failureCount < 1;
+    },
+  });
+
+  useEffect(() => {
+    if ((beneficiariesError as any)?.response?.status === 401) setBlocked401(true);
+  }, [beneficiariesError]);
+
   const {
     data: attachments,
     isLoading: loadingAttachments,
@@ -148,6 +228,69 @@ export default function JudicialServices() {
       toast({ title: t("common.success") ?? "Success", description: "Status updated." });
     },
     onError: (err) => {
+      toast({
+        title: t("common.error") ?? "Error",
+        description: getErrorMessage(err, t),
+        variant: "destructive" as any,
+      });
+    },
+  });
+
+  const createServiceMutation = useMutation({
+    mutationFn: async (values: CreateJudicialServiceValues) => {
+      const created = await judicialServicesAPI.create({
+        beneficiaryId: values.beneficiaryId,
+        title: values.title.trim(),
+        description: values.description?.trim() ? values.description.trim() : null,
+        serviceTypeId: values.serviceTypeId,
+        priority: values.priority,
+      });
+
+      const serviceId = String((created as any)?.id);
+      const warnings: string[] = [];
+
+      if (values.lawyerId && values.lawyerId.trim()) {
+        try {
+          await judicialServicesAPI.assignLawyer(serviceId, values.lawyerId.trim());
+        } catch (err: any) {
+          if (err?.response?.status === 401) setBlocked401(true);
+          warnings.push(t("judicial_services.assign_lawyer_failed", { defaultValue: "Failed to assign lawyer" }) as any);
+        }
+      }
+
+      if (createFiles.length) {
+        try {
+          const uploaded = await Promise.all(createFiles.map((f) => uploadsAPI.upload(f)));
+          await judicialServicesAPI.addAttachments(serviceId, {
+            isPublic: true,
+            documents: uploaded,
+          });
+        } catch (err: any) {
+          if (err?.response?.status === 401) setBlocked401(true);
+          warnings.push(t("judicial_services.attachments_failed", { defaultValue: "Failed to upload/attach files" }) as any);
+        }
+      }
+
+      return { created, warnings };
+    },
+    onSuccess: async (result: any) => {
+      await queryClient.invalidateQueries({ queryKey: ["judicial-services", "staff"] });
+
+      const warnings = Array.isArray(result?.warnings) ? (result.warnings as string[]) : [];
+      toast({
+        title: t("common.success") ?? "Success",
+        description:
+          warnings.length > 0
+            ? `${t("judicial_services.created", { defaultValue: "Service created." })} ${warnings.join(". ")}`
+            : (t("judicial_services.created", { defaultValue: "Service created." }) as any),
+      });
+
+      setCreateOpen(false);
+      createForm.reset();
+      setCreateFiles([]);
+    },
+    onError: (err: any) => {
+      if (err?.response?.status === 401) setBlocked401(true);
       toast({
         title: t("common.error") ?? "Error",
         description: getErrorMessage(err, t),
@@ -213,16 +356,27 @@ export default function JudicialServices() {
         <Card>
           <CardHeader className="flex flex-row items-center justify-between">
             <CardTitle>{t("judicial_services.title")}</CardTitle>
-            <Button
-              variant="outline"
-              disabled={!canQuery}
-              onClick={() => {
-                if (!canQuery) return;
-                refetch();
-              }}
-            >
-              {t("common.refresh") ?? "Refresh"}
-            </Button>
+            <div className="flex items-center gap-2">
+              <Button
+                disabled={!canQuery}
+                onClick={() => {
+                  if (!canQuery) return;
+                  setCreateOpen(true);
+                }}
+              >
+                + إضافة خدمة جديدة
+              </Button>
+              <Button
+                variant="outline"
+                disabled={!canQuery}
+                onClick={() => {
+                  if (!canQuery) return;
+                  refetch();
+                }}
+              >
+                {t("common.refresh") ?? "Refresh"}
+              </Button>
+            </div>
           </CardHeader>
           <CardContent>
             {!canQuery ? (
@@ -294,6 +448,202 @@ export default function JudicialServices() {
             )}
           </CardContent>
         </Card>
+
+        <Dialog
+          open={createOpen}
+          onOpenChange={(next) => {
+            setCreateOpen(next);
+            if (!next) {
+              createForm.reset();
+              setCreateFiles([]);
+            }
+          }}
+        >
+          <DialogContent className="max-w-2xl">
+            <DialogHeader>
+              <DialogTitle>{t("judicial_services.add_new", { defaultValue: "إضافة خدمة جديدة" })}</DialogTitle>
+            </DialogHeader>
+
+            <Form {...createForm}>
+              <form
+                className="space-y-4"
+                onSubmit={createForm.handleSubmit((values) => createServiceMutation.mutate(values))}
+              >
+                <div className="grid grid-cols-1 gap-4 md:grid-cols-2">
+                  <FormField
+                    control={createForm.control}
+                    name="beneficiaryId"
+                    render={({ field }) => (
+                      <FormItem>
+                        <FormLabel>{t("beneficiaries.title", { defaultValue: "Beneficiary" })}</FormLabel>
+                        <Select value={field.value} onValueChange={field.onChange}>
+                          <FormControl>
+                            <SelectTrigger>
+                              <SelectValue placeholder={t("judicial_services.select_beneficiary", { defaultValue: "Select beneficiary" })} />
+                            </SelectTrigger>
+                          </FormControl>
+                          <SelectContent>
+                            {(beneficiaries || []).map((b: any) => (
+                              <SelectItem key={String(b.id)} value={String(b.id)}>
+                                {String(b.fullName || "")} {b.idNumber ? `— ${String(b.idNumber)}` : ""}
+                              </SelectItem>
+                            ))}
+                          </SelectContent>
+                        </Select>
+                        <FormMessage />
+                      </FormItem>
+                    )}
+                  />
+
+                  <FormField
+                    control={createForm.control}
+                    name="serviceTypeId"
+                    render={({ field }) => (
+                      <FormItem>
+                        <FormLabel>{t("judicial_services.service_type", { defaultValue: "Service type" })}</FormLabel>
+                        <Select value={field.value} onValueChange={field.onChange}>
+                          <FormControl>
+                            <SelectTrigger>
+                              <SelectValue placeholder={t("judicial_services.select_service_type", { defaultValue: "Select type" })} />
+                            </SelectTrigger>
+                          </FormControl>
+                          <SelectContent>
+                            {(serviceTypes || []).map((st: any) => (
+                              <SelectItem key={String(st.id)} value={String(st.id)}>
+                                {String(st.nameAr || st.nameEn || st.id)}
+                              </SelectItem>
+                            ))}
+                          </SelectContent>
+                        </Select>
+                        <FormMessage />
+                      </FormItem>
+                    )}
+                  />
+                </div>
+
+                <FormField
+                  control={createForm.control}
+                  name="title"
+                  render={({ field }) => (
+                    <FormItem>
+                      <FormLabel>{t("app.title", { defaultValue: "Title" })}</FormLabel>
+                      <FormControl>
+                        <Input placeholder={t("judicial_services.title_placeholder", { defaultValue: "Enter title" })} {...field} />
+                      </FormControl>
+                      <FormMessage />
+                    </FormItem>
+                  )}
+                />
+
+                <FormField
+                  control={createForm.control}
+                  name="description"
+                  render={({ field }) => (
+                    <FormItem>
+                      <FormLabel>{t("app.description", { defaultValue: "Description" })}</FormLabel>
+                      <FormControl>
+                        <Textarea
+                          placeholder={t("judicial_services.description_placeholder", { defaultValue: "Optional" })}
+                          value={field.value ?? ""}
+                          onChange={field.onChange}
+                        />
+                      </FormControl>
+                      <FormMessage />
+                    </FormItem>
+                  )}
+                />
+
+                <div className="grid grid-cols-1 gap-4 md:grid-cols-2">
+                  <FormField
+                    control={createForm.control}
+                    name="priority"
+                    render={({ field }) => (
+                      <FormItem>
+                        <FormLabel>{t("app.priority", { defaultValue: "Priority" })}</FormLabel>
+                        <Select value={String(field.value)} onValueChange={field.onChange as any}>
+                          <FormControl>
+                            <SelectTrigger>
+                              <SelectValue placeholder={t("judicial_services.select_priority", { defaultValue: "Select priority" })} />
+                            </SelectTrigger>
+                          </FormControl>
+                          <SelectContent>
+                            {CREATE_PRIORITY_VALUES.map((p) => (
+                              <SelectItem key={p} value={p}>
+                                {p}
+                              </SelectItem>
+                            ))}
+                          </SelectContent>
+                        </Select>
+                        <FormMessage />
+                      </FormItem>
+                    )}
+                  />
+
+                  <FormField
+                    control={createForm.control}
+                    name="lawyerId"
+                    render={({ field }) => (
+                      <FormItem>
+                        <FormLabel>{t("judicial_services.assign_lawyer", { defaultValue: "Assign lawyer (optional)" })}</FormLabel>
+                        <Select
+                          value={field.value ? String(field.value) : ""}
+                          onValueChange={(v) => field.onChange(v)}
+                        >
+                          <FormControl>
+                            <SelectTrigger>
+                              <SelectValue placeholder={t("judicial_services.select_lawyer", { defaultValue: "Select lawyer" })} />
+                            </SelectTrigger>
+                          </FormControl>
+                          <SelectContent>
+                            {(lawyers || []).map((l) => (
+                              <SelectItem key={l.id} value={l.id}>
+                                {l.fullName}
+                              </SelectItem>
+                            ))}
+                          </SelectContent>
+                        </Select>
+                        <FormMessage />
+                      </FormItem>
+                    )}
+                  />
+                </div>
+
+                <div className="space-y-2">
+                  <Label>{t("documents.attachments", { defaultValue: "Attachments" })}</Label>
+                  <Input
+                    type="file"
+                    multiple
+                    onChange={(e) => {
+                      const files = Array.from(e.target.files || []);
+                      setCreateFiles(files);
+                    }}
+                  />
+                  {createFiles.length ? (
+                    <div className="text-xs text-muted-foreground">
+                      {createFiles.map((f) => f.name).join(", ")}
+                    </div>
+                  ) : null}
+                </div>
+
+                <DialogFooter>
+                  <Button
+                    type="button"
+                    variant="outline"
+                    onClick={() => setCreateOpen(false)}
+                    disabled={createServiceMutation.isPending}
+                  >
+                    {t("common.cancel", { defaultValue: "Cancel" })}
+                  </Button>
+                  <Button type="submit" disabled={createServiceMutation.isPending || !canQuery}>
+                    {createServiceMutation.isPending
+                      ? (t("common.loading", { defaultValue: "Loading…" }) as any)
+                      : t("common.create", { defaultValue: "Create" })}
+                  </Button>
+                </DialogFooter>
+              </form>
+            </Form>
+          </DialogContent>
+        </Dialog>
 
         <Dialog
           open={open}

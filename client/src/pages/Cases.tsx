@@ -33,6 +33,7 @@ import { useAuth } from "@/contexts/AuthContext";
 import { canCreateCase, isAdmin, isBeneficiary, isLawyer } from "@/lib/authz";
 import { PortalLayout } from "@/components/layout/PortalLayout";
 import { LawyerPortalLayout } from "@/components/layout/LawyerPortalLayout";
+import Forbidden from "@/pages/Forbidden";
 import { Switch as ToggleSwitch } from "@/components/ui/switch";
 import { getErrorMessage } from "@/lib/errors";
 import { NewCaseDialog } from "@/components/cases/NewCaseDialog";
@@ -146,12 +147,9 @@ export default function Cases() {
   };
 
   useEffect(() => {
-    if (!loading && !user) setLocation("/login");
+    if (loading) return;
+    if (!user) setLocation("/portal", { replace: true });
   }, [loading, user, setLocation]);
-
-  useEffect(() => {
-    if (!loading && user && !allowed) setLocation("/unauthorized");
-  }, [loading, user, allowed, setLocation]);
 
   const { data: cases, isLoading } = useQuery({
     queryKey: ["cases", isBen ? "my" : "all"],
@@ -468,7 +466,7 @@ export default function Cases() {
   }
 
   if (!allowed) {
-    return null;
+    return <Forbidden redirectTo="/portal" />;
   }
 
   const page = (

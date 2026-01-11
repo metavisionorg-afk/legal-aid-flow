@@ -4,11 +4,12 @@ import { useTranslation } from "react-i18next";
 import { cn } from "@/lib/utils";
 import { LanguageSwitcher } from "@/components/LanguageSwitcher";
 import { LayoutDashboard, Briefcase, LogOut } from "lucide-react";
-import { authAPI } from "@/lib/api";
+import { useAuth } from "@/contexts/AuthContext";
 
 export function LawyerPortalLayout({ children }: { children: ReactNode }) {
-  const [location] = useLocation();
+  const [location, setLocation] = useLocation();
   const { t } = useTranslation();
+  const { logout } = useAuth();
 
   const navItems = [
     { icon: LayoutDashboard, label: t("lawyer.dashboard"), href: "/lawyer/dashboard" },
@@ -49,8 +50,8 @@ export function LawyerPortalLayout({ children }: { children: ReactNode }) {
           <div
             className="flex items-center gap-3 px-3 py-2 rounded-md text-sm font-medium text-sidebar-foreground/70 hover:bg-sidebar-accent/50 hover:text-sidebar-foreground transition-colors cursor-pointer"
             onClick={async () => {
-              await authAPI.logout();
-              window.location.href = "/login";
+              await logout();
+              setLocation("/portal", { replace: true });
             }}
           >
             <LogOut className="h-4 w-4 rtl:ml-2 rtl:mr-0" />

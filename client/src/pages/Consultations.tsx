@@ -33,6 +33,7 @@ import { getErrorMessage } from "@/lib/errors";
 import { toast } from "sonner";
 import { useAuth } from "@/contexts/AuthContext";
 import { isAdmin, isBeneficiary, isLawyer } from "@/lib/authz";
+import Forbidden from "@/pages/Forbidden";
 
 const SERVICE_TYPES = [
   "legal_consultation",
@@ -61,11 +62,8 @@ export default function Consultations() {
   useEffect(() => {
     if (!isReady) return;
     if (!isAuthed) {
-      setLocation("/login");
+      setLocation("/portal", { replace: true });
       return;
-    }
-    if (!allowed) {
-      setLocation("/unauthorized");
     }
   }, [allowed, isAuthed, isReady, setLocation]);
 
@@ -157,8 +155,12 @@ export default function Consultations() {
     );
   }
 
-  if (!user || !allowed) {
+  if (!user) {
     return null;
+  }
+
+  if (!allowed) {
+    return <Forbidden redirectTo="/portal" />;
   }
 
   const page = (

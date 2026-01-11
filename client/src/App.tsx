@@ -64,22 +64,23 @@ function RootRedirect() {
     if (loading) return;
 
     if (!user) {
-      setLocation("/portal");
+      if (import.meta.env.DEV) console.debug("[auth] guest -> /portal (root)");
+      setLocation("/portal", { replace: true });
       return;
     }
 
     const role = (user as any)?.role;
     if (user.userType === "beneficiary" || role === "beneficiary") {
-      setLocation("/portal");
+      setLocation("/portal", { replace: true });
       return;
     }
 
     if (role === "lawyer") {
-      setLocation("/lawyer/dashboard");
+      setLocation("/lawyer/dashboard", { replace: true });
       return;
     }
 
-    setLocation("/dashboard");
+    setLocation("/dashboard", { replace: true });
   }, [loading, user, setLocation]);
 
   if (loading) return <FullPageSpinner />;
@@ -98,7 +99,8 @@ function PortalIndex() {
     if (loading) return;
     if (!user) return;
     if (user.userType !== "beneficiary") {
-      setLocation("/dashboard");
+      if (import.meta.env.DEV) console.debug("[auth] staff tried /portal -> /dashboard");
+      setLocation("/dashboard", { replace: true });
     }
   }, [loading, user, setLocation]);
 
@@ -122,17 +124,19 @@ function StaffRoute({ component: Component }: any) {
   }
 
   if (!user) {
-    setLocation("/login");
+    if (import.meta.env.DEV) console.debug("[auth] guest -> /portal (staff route)");
+    setLocation("/portal", { replace: true });
     return null;
   }
 
   if (user.userType !== "staff") {
-    return <Forbidden redirectTo={user.userType === "beneficiary" ? "/beneficiary/portal" : "/portal"} />;
+    if (import.meta.env.DEV) console.debug("[auth] forbidden: non-staff tried staff route", { path: location });
+    return <Forbidden redirectTo="/portal" />;
   }
 
   // Lawyers should use the dedicated lawyer portal, not the staff UI.
   if ((user as any).role === "lawyer" && !location.startsWith("/lawyer")) {
-    setLocation("/lawyer/dashboard");
+    setLocation("/lawyer/dashboard", { replace: true });
     return null;
   }
 
@@ -141,20 +145,21 @@ function StaffRoute({ component: Component }: any) {
 
 function PortalRoute({ component: Component }: any) {
   const { user, loading } = useAuth();
-  const [, setLocation] = useLocation();
+  const [location, setLocation] = useLocation();
 
   if (loading) {
     return <FullPageSpinner />;
   }
 
   if (!user) {
-    setLocation("/portal/login");
+    if (import.meta.env.DEV) console.debug("[auth] guest -> /portal (portal route)", { path: location });
+    setLocation("/portal", { replace: true });
     return null;
   }
 
   if (user.userType !== "beneficiary") {
-    setLocation("/");
-    return null;
+    if (import.meta.env.DEV) console.debug("[auth] forbidden: staff tried portal route", { path: location });
+    return <Forbidden redirectTo="/" />;
   }
 
   return (
@@ -170,9 +175,6 @@ function PortalRoute({ component: Component }: any) {
 function Router() {
   return (
     <Switch>
-      <Route path="/unauthorized">
-        {() => <Forbidden redirectTo="/portal" />}
-      </Route>
       <Route path="/register" component={RegisterBeneficiary} />
       <Route path="/beneficiary/register" component={BeneficiaryRegister} />
 

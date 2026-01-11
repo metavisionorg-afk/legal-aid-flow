@@ -1,5 +1,6 @@
 import { useEffect, useMemo, useState } from "react";
 import { useTranslation } from "react-i18next";
+import { useLocation } from "wouter";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { z } from "zod";
 import { zodResolver } from "@hookform/resolvers/zod";
@@ -84,6 +85,7 @@ type CreateJudicialServiceValues = z.infer<typeof createJudicialServiceSchema>;
 
 export default function JudicialServices() {
   const { t } = useTranslation();
+  const [, setLocation] = useLocation();
   const { toast } = useToast();
   const queryClient = useQueryClient();
   const { user, loading: authLoading } = useAuth();
@@ -342,8 +344,8 @@ export default function JudicialServices() {
                 {t("common.please_login_again", { defaultValue: "Please log in again to continue." })}
               </div>
               <div className="mt-4 flex gap-2">
-                <Button asChild>
-                  <a href="/login">{t("auth.login", { defaultValue: "Login" })}</a>
+                <Button onClick={() => setLocation("/portal", { replace: true })}>
+                  {t("auth.login", { defaultValue: "Login" })}
                 </Button>
                 <Button variant="outline" onClick={() => setBlocked401(false)}>
                   {t("common.retry", { defaultValue: "Retry" })}

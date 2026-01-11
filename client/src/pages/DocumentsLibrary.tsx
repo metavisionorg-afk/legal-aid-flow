@@ -138,7 +138,7 @@ export default function DocumentsLibrary() {
           description: t("common.unauthorized_desc", "يلزم تسجيل الدخول للمتابعة"),
           variant: "destructive",
         });
-        setLocation("/login");
+        setLocation("/portal", { replace: true });
         return;
       }
 
@@ -178,7 +178,7 @@ export default function DocumentsLibrary() {
           description: t("common.unauthorized_desc", "يلزم تسجيل الدخول للمتابعة"),
           variant: "destructive",
         });
-        setLocation("/login");
+        setLocation("/portal", { replace: true });
         return;
       }
 

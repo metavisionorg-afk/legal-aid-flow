@@ -15,18 +15,13 @@ export default function Forbidden({ redirectTo = "/portal" }: Props) {
   const handleGoToPortal = () => {
     const primary = redirectTo || "/portal";
     try {
-      setLocation(primary);
+      if (import.meta.env.DEV) {
+        console.debug("[auth] Forbidden: navigate", { to: primary });
+      }
+      setLocation(primary, { replace: true });
     } catch {
-      setLocation("/login");
-    }
-
-    // Extra hard fallback for environments where SPA navigation may not kick in.
-    if (typeof window !== "undefined") {
-      window.setTimeout(() => {
-        if (window.location.pathname === "/unauthorized") {
-          window.location.assign("/login");
-        }
-      }, 50);
+      // Fallback to hard navigation (still no /login redirects).
+      window.location.replace(primary);
     }
   };
 

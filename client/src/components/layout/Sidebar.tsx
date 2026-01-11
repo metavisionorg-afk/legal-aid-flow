@@ -25,9 +25,9 @@ import {
 } from "lucide-react";
 
 export function Sidebar() {
-  const [location] = useLocation();
+  const [location, setLocation] = useLocation();
   const { t } = useTranslation();
-  const { user } = useAuth();
+  const { user, logout } = useAuth();
 
   const showLawyerPortal = isLawyer(user);
   const showStaffCasesGroup = Boolean(user && (user as any).userType === "staff");
@@ -230,9 +230,8 @@ export function Sidebar() {
         <div 
           className="flex items-center gap-3 px-3 py-2 rounded-md text-sm font-medium text-sidebar-foreground/70 hover:bg-sidebar-accent/50 hover:text-sidebar-foreground transition-colors cursor-pointer"
           onClick={async () => {
-            const { authAPI } = await import("@/lib/api");
-            await authAPI.logout();
-            window.location.href = "/login";
+            await logout();
+            setLocation("/portal", { replace: true });
           }}
         >
           <LogOut className="h-4 w-4 rtl:ml-2 rtl:mr-0" />

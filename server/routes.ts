@@ -43,6 +43,8 @@ export async function registerRoutes(
   app: Express
 ): Promise<Server> {
 
+  const sessionDebug = process.env.SESSION_DEBUG === "1";
+
   function getErrorMessage(err: unknown): string {
     if (err instanceof Error && err.message) return err.message;
     if (err && typeof err === "object") {
@@ -312,6 +314,44 @@ export async function registerRoutes(
       }
       res.json({ success: true });
     });
+  });
+
+  // Auth state probe
+  // Always returns 200 with `{ ok: true, user: User | null }`.
+  // This avoids client-side "Unauthorized loops" when the user is simply logged out.
+  app.get("/api/auth/me", async (req, res) => {
+    res.setHeader("Cache-Control", "no-store");
+    res.setHeader("Vary", "Cookie");
+
+    let user: any = null;
+    try {
+      const userId = (req as any).session?.userId;
+      if (userId) {
+        const u = await storage.getUser(String(userId));
+        if (u) {
+          const { password: _pw, ...safe } = u as any;
+          user = safe;
+        }
+      }
+    } catch {
+      user = null;
+    }
+
+    const payload: any = { ok: true, user };
+    if (sessionDebug) {
+      payload.debug = {
+        session: Boolean((req as any).session),
+        sessionID: (req as any).sessionID ?? null,
+        hasCookieHeader: Boolean(req.headers.cookie),
+        cookieHeaderSample: req.headers.cookie ? String(req.headers.cookie).slice(0, 200) : null,
+        protocol: req.protocol,
+        secure: (req as any).secure,
+        xForwardedProto: req.headers["x-forwarded-proto"] ?? null,
+        origin: req.headers.origin ?? null,
+      };
+    }
+
+    return res.status(200).json(payload);
   });
 
   //app.get("/api/auth/me", requireAuth, async (req, res) => {

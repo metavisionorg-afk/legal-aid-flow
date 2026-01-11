@@ -19,11 +19,12 @@ async function waitForServer(baseUrl: string, timeoutMs = 60_000) {
   const started = Date.now();
   const url = `${baseUrl}/api/auth/me`;
 
-  // /api/auth/me returns 401 when not logged in; that's fine.
+  // /api/auth/me should always return 200 (even when logged out).
+  // For readiness, we only care that the server responds (not the auth state).
   while (Date.now() - started < timeoutMs) {
     try {
       const res = await fetch(url, { method: "GET" });
-      if (res.status === 401 || (res.status >= 200 && res.status < 500)) return;
+      if (res.status >= 200 && res.status < 500) return;
     } catch {
       // ignore
     }

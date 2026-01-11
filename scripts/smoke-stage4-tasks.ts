@@ -127,8 +127,10 @@ export async function run() {
     body: JSON.stringify({ username: lawyerUsername, password: lawyerPassword }),
   });
 
-  const lawyerMe = await lawyerClient.request<{ id?: string }>("/api/auth/me", { method: "GET" });
-  if (!lawyerMe?.id) throw new Error("Missing lawyer id");
+  const meRes = await lawyerClient.request<any>("/api/auth/me", { method: "GET" });
+  const me = meRes && typeof meRes === "object" && "user" in meRes ? (meRes as any).user : meRes;
+  const userId = String(me?.id || "");
+  if (!userId) throw new Error("Missing lawyer id");
 
   // Beneficiary registration (Stage 3 flat payload) auto-logs in.
   const benUsername = randomId("smoke_stage4_ben");
@@ -161,7 +163,7 @@ export async function run() {
     method: "POST",
     body: JSON.stringify({
       beneficiaryId,
-      lawyerId: lawyerMe.id,
+      lawyerId: userId,
       caseId: null,
       title: taskTitle,
       description: "Smoke stage4 task",
@@ -245,7 +247,7 @@ export async function run() {
     baseUrl,
     beneficiaryId,
     beneficiaryUserId,
-    lawyerId: lawyerMe.id,
+    lawyerId: userId,
     taskId: createdTask.id,
   });
 }

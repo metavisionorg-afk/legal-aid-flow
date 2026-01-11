@@ -23,8 +23,9 @@ export function AuthProvider({ children }: { children: ReactNode }) {
 
   const checkAuth = async () => {
     try {
-      const userData = await authAPI.me();
-      setUser(userData);
+      const me = await authAPI.me();
+      const userData = me && typeof me === "object" && "user" in (me as any) ? ((me as any).user as any) : (me as any);
+      setUser(userData || null);
     } catch (error) {
       setUser(null);
     } finally {

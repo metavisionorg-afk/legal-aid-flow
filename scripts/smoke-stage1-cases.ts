@@ -91,7 +91,8 @@ export async function run() {
     body: JSON.stringify({ username: adminUsername, password: adminPassword }),
   });
 
-  const adminMe = await adminClient.request<{ userType?: string; role?: string }>("/api/auth/me", { method: "GET" });
+  const adminMeRes = await adminClient.request<any>("/api/auth/me", { method: "GET" });
+  const adminMe = adminMeRes && typeof adminMeRes === "object" && "user" in adminMeRes ? (adminMeRes as any).user : adminMeRes;
   if (adminMe?.userType !== "staff" || !["admin", "super_admin"].includes(adminMe?.role || "")) {
     throw new Error(`Admin session invalid: userType=${adminMe?.userType} role=${adminMe?.role}`);
   }
@@ -138,7 +139,8 @@ export async function run() {
     throw new Error("register-beneficiary response missing beneficiary.id");
   }
 
-  const adminMe2 = await adminClient.request<{ userType?: string; role?: string }>("/api/auth/me", { method: "GET" });
+  const adminMe2Res = await adminClient.request<any>("/api/auth/me", { method: "GET" });
+  const adminMe2 = adminMe2Res && typeof adminMe2Res === "object" && "user" in adminMe2Res ? (adminMe2Res as any).user : adminMe2Res;
   if (adminMe2?.userType !== "staff") {
     throw new Error(`Admin session changed unexpectedly: userType=${adminMe2?.userType} role=${adminMe2?.role}`);
   }

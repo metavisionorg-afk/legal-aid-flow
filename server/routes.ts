@@ -89,6 +89,8 @@ export async function registerRoutes(
     FEATURE_AI_SUGGESTIONS: process.env.FEATURE_AI_SUGGESTIONS === "1",
     FEATURE_SLA: process.env.FEATURE_SLA === "1",
     FEATURE_2FA: process.env.FEATURE_2FA === "1",
+    // Core feature flag; enabled by default unless explicitly disabled.
+    FEATURE_JUDICIAL_SERVICES: process.env.FEATURE_JUDICIAL_SERVICES !== "0",
   } as const;
 
   app.get("/api/config/features", (_req, res) => {
@@ -833,6 +835,654 @@ export async function registerRoutes(
       }
 
       return res.json({ success: true });
+    } catch (error: any) {
+      return res.status(500).json({ error: getErrorMessage(error) });
+    }
+  });
+
+  // ========== JUDICIAL SERVICE TYPES ROUTES (STAFF/ADMIN) ==========
+
+  app.get(
+    "/api/judicial-service-types",
+    requireStaff,
+    requireRole(["admin", "super_admin"]),
+    async (_req: AuthRequest, res) => {
+      try {
+        const rows = await storage.getAllJudicialServiceTypes();
+        return res.json(rows);
+      } catch (error: any) {
+        return res.status(500).json({ error: getErrorMessage(error) });
+      }
+    },
+  );
+
+  // Active types are safe to expose to any authenticated user
+  app.get("/api/judicial-service-types/active", requireAuth, async (_req: AuthRequest, res) => {
+    try {
+      const rows = await storage.getActiveJudicialServiceTypes();
+      return res.json(rows);
+    } catch (error: any) {
+      return res.status(500).json({ error: getErrorMessage(error) });
+    }
+  });
+
+  app.post(
+    "/api/judicial-service-types",
+    requireStaff,
+    requireRole(["admin", "super_admin"]),
+    async (req: AuthRequest, res) => {
+      try {
+        const parsed = z
+          .object({
+            nameAr: z.string().trim().min(1),
+            nameEn: z.string().trim().optional().nullable(),
+            sortOrder: z.number().int().optional().nullable(),
+          })
+          .safeParse(req.body);
+
+        if (!parsed.success) {
+          return res.status(400).json({ error: fromZodError(parsed.error).message });
+        }
+
+        const created = await storage.createJudicialServiceType({
+          nameAr: parsed.data.nameAr,
+          nameEn: parsed.data.nameEn ?? null,
+          sortOrder: parsed.data.sortOrder ?? 0,
+          isActive: true,
+        } as any);
+
+        return res.status(201).json(created);
+      } catch (error: any) {
+        return res.status(500).json({ error: getErrorMessage(error) });
+      }
+    },
+  );
+
+  app.patch(
+    "/api/judicial-service-types/:id",
+    requireStaff,
+    requireRole(["admin", "super_admin"]),
+    async (req: AuthRequest, res) => {
+      try {
+        const parsed = z
+          .object({
+            nameAr: z.string().trim().min(1).optional(),
+            nameEn: z.string().trim().optional().nullable(),
+            sortOrder: z.number().int().optional().nullable(),
+          })
+          .safeParse(req.body);
+
+        if (!parsed.success) {
+          return res.status(400).json({ error: fromZodError(parsed.error).message });
+        }
+
+        const updated = await storage.updateJudicialServiceType(req.params.id, {
+          ...(parsed.data.nameAr != null ? { nameAr: parsed.data.nameAr } : {}),
+          ...(parsed.data.nameEn !== undefined ? { nameEn: parsed.data.nameEn } : {}),
+          ...(parsed.data.sortOrder !== undefined ? { sortOrder: parsed.data.sortOrder ?? 0 } : {}),
+        } as any);
+
+        if (!updated) return res.status(404).json({ error: "Service type not found" });
+        return res.json(updated);
+      } catch (error: any) {
+        return res.status(500).json({ error: getErrorMessage(error) });
+      }
+    },
+  );
+
+  app.patch(
+    "/api/judicial-service-types/:id/toggle",
+    requireStaff,
+    requireRole(["admin", "super_admin"]),
+    async (req: AuthRequest, res) => {
+      try {
+        const parsed = z.object({ isActive: z.boolean() }).safeParse(req.body);
+        if (!parsed.success) {
+          return res.status(400).json({ error: fromZodError(parsed.error).message });
+        }
+
+        const updated = await storage.toggleJudicialServiceType(req.params.id, parsed.data.isActive);
+        if (!updated) return res.status(404).json({ error: "Service type not found" });
+        return res.json(updated);
+      } catch (error: any) {
+        return res.status(500).json({ error: getErrorMessage(error) });
+      }
+    },
+  );
+
+  app.delete(
+    "/api/judicial-service-types/:id",
+    requireStaff,
+    requireRole(["admin", "super_admin"]),
+    async (req: AuthRequest, res) => {
+      try {
+        const result = await storage.deleteJudicialServiceType(req.params.id);
+        if (!result.ok && result.reason === "not_found") {
+          return res.status(404).json({ error: "Service type not found" });
+        }
+        if (!result.ok && result.reason === "linked") {
+          return res.status(409).json({ error: "Cannot delete: service type is linked to existing services" });
+        }
+        return res.json({ success: true });
+      } catch (error: any) {
+        return res.status(500).json({ error: getErrorMessage(error) });
+      }
+    },
+  );
+
+  // ========== JUDICIAL SERVICES ROUTES (STAGE 5) ==========
+
+  const judicialServiceStatusSchema = z.enum([
+    "pending_review",
+    "accepted",
+    "assigned",
+    "in_progress",
+    "awaiting_documents",
+    "completed",
+    "rejected",
+    "cancelled",
+  ]);
+
+  const judicialServiceOperatingStatusSchema = z.enum(["in_progress", "awaiting_documents", "completed"]);
+
+  function canStaffAccessJudicialService(user: User, js: any): boolean {
+    if (user.role === "admin" || user.role === "super_admin") return true;
+    if (user.role === "lawyer") {
+      return Boolean((js as any).assignedLawyerId && String((js as any).assignedLawyerId) === String(user.id));
+    }
+    return false;
+  }
+
+  async function notifyJudicialServiceParticipants(input: {
+    judicialService: any;
+    actorUserId: string;
+    type: string;
+    title: string;
+    message: string;
+  }) {
+    const recipientIds = new Set<string>();
+
+    if (input.judicialService?.assignedLawyerId) {
+      recipientIds.add(String(input.judicialService.assignedLawyerId));
+    }
+
+    if (input.judicialService?.beneficiaryId) {
+      const b = await storage.getBeneficiary(String(input.judicialService.beneficiaryId));
+      const beneficiaryUserId = (b as any)?.userId ? String((b as any).userId) : null;
+      if (beneficiaryUserId) recipientIds.add(beneficiaryUserId);
+    }
+
+    recipientIds.delete(String(input.actorUserId));
+
+    await Promise.all(
+      Array.from(recipientIds).map(async (userId) => {
+        const u = await storage.getUser(String(userId));
+        const url = u?.userType === "beneficiary" ? "/portal/judicial-services" : "/judicial-services";
+        return storage.createNotification({
+          userId,
+          type: input.type,
+          title: input.title,
+          message: input.message,
+          url,
+          relatedEntityId: String(input.judicialService.id),
+        } as any);
+      }),
+    );
+  }
+
+  // Beneficiary portal: list my judicial services
+  app.get("/api/judicial-services/my", requireBeneficiary, async (req: AuthRequest, res) => {
+    try {
+      const beneficiary = req.beneficiary!;
+      const rows = await storage.getJudicialServicesByBeneficiary(beneficiary.id);
+      return res.json(rows);
+    } catch (error: any) {
+      return res.status(500).json({ error: getErrorMessage(error) });
+    }
+  });
+
+  // Staff list + beneficiary list (single endpoint)
+  app.get("/api/judicial-services", requireAuth, async (req: AuthRequest, res) => {
+    try {
+      const user = await storage.getUser(req.session.userId!);
+      if (!user) return res.status(404).json({ error: "User not found" });
+
+      if (user.userType === "beneficiary") {
+        const beneficiary = await storage.getBeneficiaryByUserId(user.id);
+        if (!beneficiary) return res.json([]);
+        const rows = await storage.getJudicialServicesByBeneficiary(beneficiary.id);
+        return res.json(rows);
+      }
+
+      const isAllowedStaff = user.role === "admin" || user.role === "super_admin" || user.role === "lawyer";
+      if (!isAllowedStaff) return res.status(403).json({ error: "Forbidden" });
+
+      if (user.role === "lawyer") {
+        const rows = await storage.getJudicialServicesByLawyer(user.id);
+        return res.json(rows);
+      }
+
+      const rows = await storage.getAllJudicialServices();
+      return res.json(rows);
+    } catch (error: any) {
+      return res.status(500).json({ error: getErrorMessage(error) });
+    }
+  });
+
+  // Create judicial service
+  app.post("/api/judicial-services", requireAuth, async (req: AuthRequest, res) => {
+    try {
+      const user = await storage.getUser(req.session.userId!);
+      if (!user) return res.status(404).json({ error: "User not found" });
+
+      const resolveTypeSnapshot = async (serviceTypeIdRaw: unknown) => {
+        const serviceTypeId = typeof serviceTypeIdRaw === "string" && serviceTypeIdRaw.trim() ? serviceTypeIdRaw.trim() : null;
+        if (!serviceTypeId) return null;
+        const st = await storage.getJudicialServiceType(serviceTypeId);
+        if (!st) throw new Error("Invalid service type");
+        if (!(st as any).isActive) throw new Error("Service type is disabled");
+        return {
+          serviceTypeId: st.id,
+          serviceTypeNameAr: (st as any).nameAr,
+          serviceTypeNameEn: (st as any).nameEn ?? null,
+        };
+      };
+
+      // Beneficiary creates a request
+      if (user.userType === "beneficiary" || user.role === "beneficiary") {
+        const beneficiary = await storage.getBeneficiaryByUserId(user.id);
+        if (!beneficiary) return res.status(404).json({ error: "Beneficiary profile not found" });
+
+        const parsed = z
+          .object({
+            title: z.string().trim().min(1),
+            description: z.string().trim().min(1),
+            serviceTypeId: z.string().uuid().optional().nullable(),
+            priority: z.enum(["low", "medium", "high", "urgent"]).optional().nullable(),
+          })
+          .safeParse(req.body);
+
+        if (!parsed.success) return res.status(400).json({ error: fromZodError(parsed.error).message });
+
+        const snapshot = await resolveTypeSnapshot(parsed.data.serviceTypeId);
+        const serviceNumber = `JS-${Date.now()}`;
+
+        const created = await storage.createJudicialService({
+          serviceNumber,
+          title: parsed.data.title,
+          description: parsed.data.description,
+          beneficiaryId: beneficiary.id,
+          serviceTypeId: snapshot?.serviceTypeId ?? null,
+          serviceTypeNameAr: snapshot?.serviceTypeNameAr ?? null,
+          serviceTypeNameEn: snapshot?.serviceTypeNameEn ?? null,
+          status: "pending_review" as any,
+          priority: (parsed.data.priority as any) ?? "medium",
+          assignedLawyerId: null,
+          createdByUserId: user.id,
+          acceptedByUserId: null,
+          acceptedAt: null,
+          completedAt: null,
+        } as any);
+
+        // Notify admins
+        const allUsers = await storage.getAllUsers();
+        const adminIds = allUsers
+          .filter((u) => u.userType === "staff" && (u.role === "admin" || u.role === "super_admin"))
+          .map((u) => u.id)
+          .filter((id) => String(id) !== String(user.id));
+
+        await Promise.all(
+          adminIds.map((adminId) =>
+            storage.createNotification({
+              userId: adminId,
+              type: "JUDICIAL_SERVICE_NEW",
+              title: "New judicial service request",
+              message: `New request: ${created.title}`,
+              url: "/judicial-services",
+              relatedEntityId: String(created.id),
+            } as any),
+          ),
+        );
+
+        await createAudit(user.id, "create", "judicial_service", created.id, `Created judicial service: ${created.serviceNumber}`, req.ip);
+        return res.status(201).json(created);
+      }
+
+      // Staff create (admin only)
+      if (user.userType !== "staff" || !(user.role === "admin" || user.role === "super_admin")) {
+        return res.status(403).json({ error: "Forbidden" });
+      }
+
+      const parsed = z
+        .object({
+          beneficiaryId: z.string().trim().min(1),
+          title: z.string().trim().min(1),
+          description: z.string().optional().nullable(),
+          serviceTypeId: z.string().uuid().optional().nullable(),
+          priority: z.enum(["low", "medium", "high", "urgent"]).optional().nullable(),
+        })
+        .safeParse(req.body);
+      if (!parsed.success) return res.status(400).json({ error: fromZodError(parsed.error).message });
+
+      const beneficiary = await storage.getBeneficiary(parsed.data.beneficiaryId);
+      if (!beneficiary) return res.status(400).json({ error: "Beneficiary not found" });
+
+      const snapshot = await resolveTypeSnapshot(parsed.data.serviceTypeId);
+      const serviceNumber = `JS-${Date.now()}`;
+
+      const created = await storage.createJudicialService({
+        serviceNumber,
+        title: parsed.data.title,
+        description: parsed.data.description ?? null,
+        beneficiaryId: beneficiary.id,
+        serviceTypeId: snapshot?.serviceTypeId ?? null,
+        serviceTypeNameAr: snapshot?.serviceTypeNameAr ?? null,
+        serviceTypeNameEn: snapshot?.serviceTypeNameEn ?? null,
+        status: "accepted" as any,
+        priority: (parsed.data.priority as any) ?? "medium",
+        assignedLawyerId: null,
+        createdByUserId: user.id,
+        acceptedByUserId: user.id,
+        acceptedAt: new Date(),
+        completedAt: null,
+      } as any);
+
+      await notifyJudicialServiceParticipants({
+        judicialService: created,
+        actorUserId: user.id,
+        type: "JUDICIAL_SERVICE_CREATED",
+        title: "Judicial service created",
+        message: `Service created: ${created.title}`,
+      });
+
+      await createAudit(user.id, "create", "judicial_service", created.id, `Created judicial service: ${created.serviceNumber}`, req.ip);
+      return res.status(201).json(created);
+    } catch (error: any) {
+      return res.status(500).json({ error: getErrorMessage(error) });
+    }
+  });
+
+  // Get one
+  app.get("/api/judicial-services/:id", requireAuth, async (req: AuthRequest, res) => {
+    try {
+      const user = await storage.getUser(req.session.userId!);
+      if (!user) return res.status(404).json({ error: "User not found" });
+
+      const js = await storage.getJudicialService(req.params.id);
+      if (!js) return res.status(404).json({ error: "Judicial service not found" });
+
+      if (user.userType === "beneficiary") {
+        const beneficiary = await storage.getBeneficiaryByUserId(user.id);
+        if (!beneficiary || String((js as any).beneficiaryId) !== String(beneficiary.id)) {
+          return res.status(403).json({ error: "Forbidden" });
+        }
+        return res.json(js);
+      }
+
+      const isAllowedStaff = user.role === "admin" || user.role === "super_admin" || user.role === "lawyer";
+      if (!isAllowedStaff) return res.status(403).json({ error: "Forbidden" });
+      if (!canStaffAccessJudicialService(user, js)) return res.status(403).json({ error: "Forbidden" });
+      return res.json(js);
+    } catch (error: any) {
+      return res.status(500).json({ error: getErrorMessage(error) });
+    }
+  });
+
+  // Admin: assign lawyer
+  app.patch(
+    "/api/judicial-services/:id/assign-lawyer",
+    requireStaff,
+    requireRole(["admin", "super_admin"]),
+    async (req: AuthRequest, res) => {
+      try {
+        const user = req.user as User;
+        const existing = await storage.getJudicialService(req.params.id);
+        if (!existing) return res.status(404).json({ error: "Judicial service not found" });
+
+        const parsed = z.object({ lawyerId: z.string().min(1) }).safeParse(req.body);
+        if (!parsed.success) {
+          return res.status(400).json({ error: fromZodError(parsed.error).message });
+        }
+
+        const lawyer = await storage.getUser(parsed.data.lawyerId);
+        if (!lawyer || lawyer.userType !== "staff" || lawyer.role !== "lawyer") {
+          return res.status(400).json({ error: "Invalid lawyer" });
+        }
+
+        const updated = await storage.updateJudicialService(existing.id, {
+          assignedLawyerId: lawyer.id,
+          status: "assigned" as any,
+        } as any);
+
+        await notifyJudicialServiceParticipants({
+          judicialService: updated || existing,
+          actorUserId: user.id,
+          type: "JUDICIAL_SERVICE_ASSIGNED",
+          title: "Judicial service assigned",
+          message: `Assigned to lawyer`,
+        });
+
+        await createAudit(user.id, "assign", "judicial_service", existing.id, `Assigned lawyer ${lawyer.id}`, req.ip);
+        return res.json(updated);
+      } catch (error: any) {
+        return res.status(500).json({ error: getErrorMessage(error) });
+      }
+    },
+  );
+
+  // Update status
+  app.patch("/api/judicial-services/:id/status", requireStaff, async (req: AuthRequest, res) => {
+    try {
+      const user = req.user as User;
+      const existing = await storage.getJudicialService(req.params.id);
+      if (!existing) return res.status(404).json({ error: "Judicial service not found" });
+
+      const isAdmin = user.role === "admin" || user.role === "super_admin";
+      const isAssignedLawyer = Boolean((existing as any).assignedLawyerId && String((existing as any).assignedLawyerId) === String(user.id));
+
+      const parsed = z
+        .object({
+          status: z.string().min(1),
+          note: z.string().trim().max(1000).optional().nullable(),
+        })
+        .safeParse(req.body);
+      if (!parsed.success) {
+        return res.status(400).json({ error: fromZodError(parsed.error).message });
+      }
+
+      const nextStatus = parsed.data.status;
+      if (isAdmin) {
+        const ok = judicialServiceStatusSchema.safeParse(nextStatus);
+        if (!ok.success) return res.status(400).json({ error: "Invalid status" });
+        if (nextStatus === "assigned" && !(existing as any).assignedLawyerId) {
+          return res.status(400).json({ error: "Cannot set assigned without lawyer" });
+        }
+      } else {
+        if (user.role !== "lawyer" || !isAssignedLawyer) {
+          return res.status(403).json({ error: "Only assigned lawyer can update status" });
+        }
+        const ok = judicialServiceOperatingStatusSchema.safeParse(nextStatus);
+        if (!ok.success) return res.status(400).json({ error: "Invalid status" });
+      }
+
+      const updates: any = { status: nextStatus as any };
+      if (nextStatus === "completed") updates.completedAt = new Date();
+      if (nextStatus === "accepted") {
+        updates.acceptedAt = new Date();
+        updates.acceptedByUserId = user.id;
+      }
+
+      const updated = await storage.updateJudicialService(existing.id, updates);
+
+      await notifyJudicialServiceParticipants({
+        judicialService: updated || existing,
+        actorUserId: user.id,
+        type: "JUDICIAL_SERVICE_STATUS_CHANGED",
+        title: "Judicial service status updated",
+        message: `Status: ${nextStatus}`,
+      });
+
+      await createAudit(user.id, "update_status", "judicial_service", existing.id, `Status -> ${nextStatus}`, req.ip);
+      return res.json(updated);
+    } catch (error: any) {
+      return res.status(500).json({ error: getErrorMessage(error) });
+    }
+  });
+
+  // Admin update fields
+  app.patch(
+    "/api/judicial-services/:id",
+    requireStaff,
+    requireRole(["admin", "super_admin"]),
+    async (req: AuthRequest, res) => {
+      try {
+        const user = req.user as User;
+        const existing = await storage.getJudicialService(req.params.id);
+        if (!existing) return res.status(404).json({ error: "Judicial service not found" });
+
+        const parsed = z
+          .object({
+            title: z.string().trim().min(1).optional(),
+            description: z.union([z.string().trim(), z.null()]).optional(),
+            priority: z.enum(["low", "medium", "high", "urgent"]).optional(),
+            serviceTypeId: z.union([z.string().uuid(), z.null()]).optional(),
+          })
+          .safeParse(req.body);
+        if (!parsed.success) {
+          return res.status(400).json({ error: fromZodError(parsed.error).message });
+        }
+
+        const updates: any = { ...parsed.data };
+        if (updates.serviceTypeId !== undefined) {
+          if (updates.serviceTypeId === null) {
+            updates.serviceTypeId = null;
+            updates.serviceTypeNameAr = null;
+            updates.serviceTypeNameEn = null;
+          } else {
+            const st = await storage.getJudicialServiceType(String(updates.serviceTypeId));
+            if (!st) return res.status(400).json({ error: "Invalid service type" });
+            if (!(st as any).isActive) return res.status(400).json({ error: "Service type is disabled" });
+            updates.serviceTypeNameAr = (st as any).nameAr;
+            updates.serviceTypeNameEn = (st as any).nameEn ?? null;
+          }
+        }
+
+        const updated = await storage.updateJudicialService(existing.id, updates);
+        await createAudit(user.id, "update", "judicial_service", existing.id, `Updated judicial service: ${existing.serviceNumber}`, req.ip);
+        return res.json(updated);
+      } catch (error: any) {
+        return res.status(500).json({ error: getErrorMessage(error) });
+      }
+    },
+  );
+
+  // Admin delete
+  app.delete(
+    "/api/judicial-services/:id",
+    requireStaff,
+    requireRole(["admin", "super_admin"]),
+    async (req: AuthRequest, res) => {
+      try {
+        const user = req.user as User;
+        const ok = await storage.deleteJudicialService(req.params.id);
+        if (!ok) return res.status(404).json({ error: "Judicial service not found" });
+        await createAudit(user.id, "delete", "judicial_service", req.params.id, "Deleted judicial service", req.ip);
+        return res.json({ success: true });
+      } catch (error: any) {
+        return res.status(500).json({ error: getErrorMessage(error) });
+      }
+    },
+  );
+
+  // Attachments list
+  app.get("/api/judicial-services/:id/attachments", requireAuth, async (req: AuthRequest, res) => {
+    try {
+      const user = await storage.getUser(req.session.userId!);
+      if (!user) return res.status(404).json({ error: "User not found" });
+      const js = await storage.getJudicialService(req.params.id);
+      if (!js) return res.status(404).json({ error: "Judicial service not found" });
+
+      if (user.userType === "beneficiary") {
+        const beneficiary = await storage.getBeneficiaryByUserId(user.id);
+        if (!beneficiary || String((js as any).beneficiaryId) !== String(beneficiary.id)) {
+          return res.status(403).json({ error: "Forbidden" });
+        }
+        const docs = await storage.getDocumentsByJudicialService(js.id);
+        return res.json((docs as any[]).filter((d) => Boolean((d as any).isPublic)));
+      }
+
+      if (!canStaffAccessJudicialService(user, js)) return res.status(403).json({ error: "Forbidden" });
+      const docs = await storage.getDocumentsByJudicialService(js.id);
+      return res.json(docs);
+    } catch (error: any) {
+      return res.status(500).json({ error: getErrorMessage(error) });
+    }
+  });
+
+  // Attachments add
+  app.post("/api/judicial-services/:id/attachments", requireAuth, async (req: AuthRequest, res) => {
+    try {
+      const user = await storage.getUser(req.session.userId!);
+      if (!user) return res.status(404).json({ error: "User not found" });
+      const js = await storage.getJudicialService(req.params.id);
+      if (!js) return res.status(404).json({ error: "Judicial service not found" });
+
+      const parsed = z
+        .object({
+          isPublic: z.boolean().optional(),
+          documents: z.array(uploadedFileMetadataSchema).min(1),
+        })
+        .safeParse(req.body);
+
+      if (!parsed.success) {
+        return res.status(400).json({ error: fromZodError(parsed.error).message });
+      }
+
+      if (user.userType === "beneficiary") {
+        const beneficiary = await storage.getBeneficiaryByUserId(user.id);
+        if (!beneficiary || String((js as any).beneficiaryId) !== String(beneficiary.id)) {
+          return res.status(403).json({ error: "Forbidden" });
+        }
+        const docs = await storage.attachDocumentsToJudicialService({
+          uploadedBy: user.id,
+          beneficiaryId: beneficiary.id,
+          judicialServiceId: js.id,
+          isPublic: true,
+          documents: parsed.data.documents,
+        });
+
+        await notifyJudicialServiceParticipants({
+          judicialService: js,
+          actorUserId: user.id,
+          type: "JUDICIAL_SERVICE_ATTACHMENT_ADDED",
+          title: "Attachment added",
+          message: `Attachment added to service: ${String((js as any).title || "")}`,
+        });
+
+        return res.status(201).json({ success: true, documents: docs });
+      }
+
+      if (!canStaffAccessJudicialService(user, js)) return res.status(403).json({ error: "Forbidden" });
+
+      const beneficiaryIdForDoc = String((js as any).beneficiaryId);
+      const isPublic = parsed.data.isPublic ?? true;
+      const docs = await storage.attachDocumentsToJudicialService({
+        uploadedBy: user.id,
+        beneficiaryId: beneficiaryIdForDoc,
+        judicialServiceId: js.id,
+        isPublic,
+        documents: parsed.data.documents,
+      });
+
+      await notifyJudicialServiceParticipants({
+        judicialService: js,
+        actorUserId: user.id,
+        type: "JUDICIAL_SERVICE_ATTACHMENT_ADDED",
+        title: "Attachment added",
+        message: `Attachment added to service: ${String((js as any).title || "")}`,
+      });
+
+      return res.status(201).json({ success: true, documents: docs });
     } catch (error: any) {
       return res.status(500).json({ error: getErrorMessage(error) });
     }
@@ -2948,6 +3598,22 @@ export async function registerRoutes(
       res.status(500).json({ error: error.message });
     }
   });
+
+  // Admin-only: list lawyer users (lightweight; avoids fetching all users client-side)
+  app.get(
+    "/api/users/lawyers",
+    requireStaff,
+    requireRole(["admin", "super_admin"]),
+    async (_req: AuthRequest, res) => {
+      try {
+        const lawyers = await storage.getLawyerUsers();
+        const withoutPasswords = (lawyers || []).map(({ password, ...u }) => u);
+        return res.json(withoutPasswords);
+      } catch (error: any) {
+        return res.status(500).json({ error: getErrorMessage(error) });
+      }
+    },
+  );
 
   // Admin-only: create a lawyer user
   app.post(

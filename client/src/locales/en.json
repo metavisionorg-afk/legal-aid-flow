@@ -58,7 +58,8 @@
       "powers_of_attorney": "Powers of Attorney"
     },
     "sidebar": {
-      "documentsLibrary": "Documents Library"
+      "documentsLibrary": "Documents Library",
+      "judicialServices": "Judicial Services"
     },
     "poa": {
       "subtitle": "Manage powers of attorney and their attachments.",
@@ -780,6 +781,14 @@
       "completed": "Completed"
     }
   },
+  "judicial_services": {
+    "title": "Judicial Services",
+    "manage_title": "Manage service",
+    "assign_lawyer": "Assign lawyer",
+    "select_lawyer": "Select a lawyer",
+    "update_status": "Update status",
+    "select_status": "Select status"
+  },
   "common": {
     "loading": "Loading...",
     "error": "Error",
@@ -801,7 +810,13 @@
     "actions": "Actions",
     "open": "Open",
     "all": "All",
+    "refresh": "Refresh",
+    "retry": "Retry",
+    "empty": "Empty",
     "no_data": "No data",
+    "feature_disabled": "This feature is currently disabled.",
+    "session_expired": "Session expired",
+    "please_login_again": "Please log in again to continue.",
     "unauthorized_title": "Unauthorized",
     "unauthorized_desc": "You don't have permission to access this page.",
     "forbidden_title": "Forbidden",

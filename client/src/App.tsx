@@ -1,7 +1,5 @@
-
-
-import React, { lazy, Suspense } from "react";
-import { useLocation } from "wouter";
+import React from "react";
+import { useLocation, Switch, Route } from "wouter";
 import { QueryClientProvider } from "@tanstack/react-query";
 import { Toaster } from "@/components/ui/sonner";
 import { TooltipProvider } from "@/components/ui/tooltip";
@@ -28,6 +26,8 @@ import Rules from "@/pages/Rules";
 import Consultations from "@/pages/Consultations";
 import Sessions from "@/pages/Sessions";
 import Settings from "@/pages/Settings";
+import DocumentsLibrary from "@/pages/DocumentsLibrary";
+import JudicialServices from "@/pages/JudicialServices";
 import RegisterBeneficiary from "@/pages/RegisterBeneficiary";
 import BeneficiaryRegister from "@/pages/BeneficiaryRegister";
 import Login from "@/pages/Login";
@@ -36,11 +36,10 @@ import PortalRegister from "@/pages/portal/PortalRegister";
 import PortalDashboard from "@/pages/portal/PortalDashboard";
 import PortalBookAppointment from "@/pages/portal/PortalBookAppointment";
 import PortalMyCases from "@/pages/portal/PortalMyCases";
+import PortalMyRequests from "@/pages/portal/PortalMyRequests";
 import PortalTasks from "@/pages/portal/PortalTasks";
 import BeneficiaryPortal from "@/pages/BeneficiaryPortal";
-import DocumentsLibrary from "@/pages/DocumentsLibrary";
 import { queryClient } from "@/lib/queryClient";
-import { Switch, Route } from "wouter";
 
 // Initialize i18n
 import "./i18n";
@@ -122,8 +121,8 @@ function Router() {
         {() => <StaffRoute component={Dashboard} />}
       </Route>
       <Route path="/documents-library">
-        {() => (
-          <Suspense fallback={null}>
+        {() =>
+          (
             <StaffRoute
               component={() => (
                 <RequireRole role={["admin", "super_admin"]}>
@@ -131,7 +130,18 @@ function Router() {
                 </RequireRole>
               )}
             />
-          </Suspense>
+          )
+        }
+      </Route>
+      <Route path="/judicial-services">
+        {() => (
+          <StaffRoute
+            component={() => (
+              <RequireRole role={["admin", "super_admin"]}>
+                <JudicialServices />
+              </RequireRole>
+            )}
+          />
         )}
       </Route>
       <Route path="/intake">
@@ -241,7 +251,7 @@ function Router() {
         {() => <PortalRoute component={PortalTasks} />}
       </Route>
       <Route path="/portal/my-requests">
-        {() => <PortalRoute component={PortalDashboard} />}
+        {() => <PortalRoute component={PortalMyRequests} />}
       </Route>
       <Route path="/portal/my-appointments">
         {() => <PortalRoute component={PortalDashboard} />}

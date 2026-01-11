@@ -52,12 +52,10 @@ export function Sidebar() {
   const navItems = [
     { icon: LayoutDashboard, label: t('app.dashboard'), href: "/" },
     { icon: Users, label: t('app.beneficiaries'), href: "/beneficiaries" },
-    { icon: FilePlus, label: t('app.intake'), href: "/intake" },
     { icon: Scale, label: t('app.lawyers'), href: "/lawyers" },
     { icon: Gavel, label: t('app.sessions'), href: "/sessions" },
     { icon: MessageSquare, label: t('app.consultations'), href: "/consultations" },
     { icon: ClipboardList, label: t('app.tasks'), href: "/tasks" },
-    { icon: Wallet, label: t('app.finance'), href: "/finance" },
     { icon: Shield, label: t('app.rules'), href: "/rules" },
     { icon: Calendar, label: t('app.calendar'), href: "/calendar" },
     { icon: BarChart3, label: t('app.reports'), href: "/reports" },
@@ -67,6 +65,8 @@ export function Sidebar() {
   const casesListActive = Boolean(location === "/cases" || location.startsWith("/cases/"));
   const caseTypesActive = Boolean(location === "/case-types" || location.startsWith("/case-types/"));
   const poaActive = Boolean(location === "/power-of-attorney" || location.startsWith("/power-of-attorney/"));
+  const documentsLibraryActive = Boolean(location === "/documents-library" || location.startsWith("/documents-library/"));
+  const judicialServicesActive = Boolean(location === "/judicial-services" || location.startsWith("/judicial-services/"));
 
   return (
     <div className="h-full w-64 border-r bg-sidebar flex flex-col">
@@ -170,26 +170,43 @@ export function Sidebar() {
                     >
                       {t("nav.powers_of_attorney")}
                     </div>
-                {user?.userType === "staff" && isAdmin && (
-                  <Link href="/documents-library">
-                    <div
-                      className={cn(
-                        "flex items-center gap-3 px-3 py-2 rounded-md text-sm font-medium transition-colors cursor-pointer",
-                        location === "/documents-library"
-                          ? "bg-sidebar-accent text-sidebar-accent-foreground"
-                          : "text-sidebar-foreground/70 hover:bg-sidebar-accent/50 hover:text-sidebar-foreground"
-                      )}
-                    >
-                      <Folder className="h-4 w-4 rtl:ml-2 rtl:mr-0" />
-                      {t("sidebar.documentsLibrary")}
-                    </div>
-                  </Link>
-                )}
                   </Link>
                 ) : null}
               </div>
             </CollapsibleContent>
           </Collapsible>
+        ) : null}
+
+        {user?.userType === "staff" && isAdmin ? (
+          <Link href="/documents-library">
+            <div
+              className={cn(
+                "w-full flex items-center gap-3 px-3 py-2 rounded-md text-sm font-medium transition-colors",
+                documentsLibraryActive
+                  ? "bg-sidebar-accent text-sidebar-accent-foreground"
+                  : "text-sidebar-foreground/70 hover:bg-sidebar-accent/50 hover:text-sidebar-foreground",
+              )}
+            >
+              <Folder className="h-4 w-4 rtl:ml-2 rtl:mr-0" />
+              {t("sidebar.documentsLibrary")}
+            </div>
+          </Link>
+        ) : null}
+
+        {user?.userType === "staff" && isAdmin ? (
+          <Link href="/judicial-services">
+            <div
+              className={cn(
+                "w-full flex items-center gap-3 px-3 py-2 rounded-md text-sm font-medium transition-colors",
+                judicialServicesActive
+                  ? "bg-sidebar-accent text-sidebar-accent-foreground"
+                  : "text-sidebar-foreground/70 hover:bg-sidebar-accent/50 hover:text-sidebar-foreground",
+              )}
+            >
+              <Gavel className="h-4 w-4 rtl:ml-2 rtl:mr-0" />
+              {t("sidebar.judicialServices")}
+            </div>
+          </Link>
         ) : null}
 
         {navItems.map((item) => (

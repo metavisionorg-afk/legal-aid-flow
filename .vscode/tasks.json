@@ -1,0 +1,17 @@
+{
+	"version": "2.0.0",
+	"tasks": [
+		{
+			"label": "scan-useQuery-onError",
+			"type": "shell",
+			"command": "cd ${workspaceFolder} && node scripts/scan-useQuery-onError.cjs",
+			"isBackground": false
+		},
+		{
+			"label": "typecheck",
+			"type": "shell",
+			"command": "cd ${workspaceFolder} && npm run check",
+			"isBackground": false
+		}
+	]
+}

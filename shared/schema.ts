@@ -82,6 +82,7 @@ export const documentOwnerTypeEnum = pgEnum("document_owner_type", [
   "session",
   "power_of_attorney",
   "task",
+  "judicial_service",
 ]);
 export const documentVisibilityEnum = pgEnum("document_visibility", ["INTERNAL", "BENEFICIARY"]);
 
@@ -745,6 +746,80 @@ export const insertLibraryDocumentSchema = createInsertSchema(libraryDocuments).
 });
 export type InsertLibraryDocument = z.infer<typeof insertLibraryDocumentSchema>;
 export type LibraryDocument = typeof libraryDocuments.$inferSelect;
+
+// ===== Judicial Services (Stage 5) =====
+
+// Dynamic list of judicial service types managed by staff
+export const judicialServiceTypes = pgTable("judicial_service_types", {
+  id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
+  nameAr: text("name_ar").notNull(),
+  nameEn: text("name_en"),
+  isActive: boolean("is_active").notNull().default(true),
+  sortOrder: integer("sort_order").notNull().default(0),
+  createdAt: timestamp("created_at").notNull().defaultNow(),
+  updatedAt: timestamp("updated_at").notNull().defaultNow(),
+});
+
+export const insertJudicialServiceTypeSchema = createInsertSchema(judicialServiceTypes).omit({
+  id: true,
+  createdAt: true,
+  updatedAt: true,
+});
+export type InsertJudicialServiceType = z.infer<typeof insertJudicialServiceTypeSchema>;
+export type JudicialServiceType = typeof judicialServiceTypes.$inferSelect;
+
+export const judicialServiceStatusEnum = pgEnum("judicial_service_status", [
+  "pending_review",
+  "accepted",
+  "assigned",
+  "in_progress",
+  "awaiting_documents",
+  "completed",
+  "rejected",
+  "cancelled",
+]);
+
+export const judicialServices = pgTable(
+  "judicial_services",
+  {
+    id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
+    serviceNumber: text("service_number").notNull().unique(),
+    title: text("title").notNull(),
+    description: text("description"),
+
+    beneficiaryId: varchar("beneficiary_id").notNull().references(() => beneficiaries.id),
+    serviceTypeId: varchar("service_type_id").references(() => judicialServiceTypes.id),
+    serviceTypeNameAr: text("service_type_name_ar"),
+    serviceTypeNameEn: text("service_type_name_en"),
+
+    status: judicialServiceStatusEnum("status").notNull().default("pending_review"),
+    priority: priorityEnum("priority").notNull().default("medium"),
+
+    assignedLawyerId: varchar("assigned_lawyer_id").references(() => users.id),
+    createdByUserId: varchar("created_by_user_id").references(() => users.id),
+
+    acceptedByUserId: varchar("accepted_by_user_id").references(() => users.id),
+    acceptedAt: timestamp("accepted_at"),
+    completedAt: timestamp("completed_at"),
+
+    createdAt: timestamp("created_at").notNull().defaultNow(),
+    updatedAt: timestamp("updated_at").notNull().defaultNow(),
+  },
+  (t) => ({
+    beneficiaryIdx: index("judicial_services_beneficiary_id_idx").on(t.beneficiaryId),
+    statusIdx: index("judicial_services_status_idx").on(t.status),
+    typeIdx: index("judicial_services_type_id_idx").on(t.serviceTypeId),
+    assignedLawyerIdx: index("judicial_services_assigned_lawyer_id_idx").on(t.assignedLawyerId),
+  }),
+);
+
+export const insertJudicialServiceSchema = createInsertSchema(judicialServices).omit({
+  id: true,
+  createdAt: true,
+  updatedAt: true,
+});
+export type InsertJudicialService = z.infer<typeof insertJudicialServiceSchema>;
+export type JudicialService = typeof judicialServices.$inferSelect;
 
 // ====== Shared payload schemas (client + server) ======
 

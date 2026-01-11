@@ -48,6 +48,10 @@ import type {
   InsertDocumentFolder,
   LibraryDocument,
   InsertLibraryDocument,
+  JudicialServiceType,
+  InsertJudicialServiceType,
+  JudicialService,
+  InsertJudicialService,
 } from "@shared/schema";
 
 export type IntakeRequestWithCaseType = IntakeRequest & {
@@ -58,6 +62,10 @@ export type IntakeRequestWithCaseType = IntakeRequest & {
 
 export type LibraryDocumentWithFolder = LibraryDocument & {
   folderName?: string | null;
+};
+
+export type JudicialServiceTypeWithCount = JudicialServiceType & {
+  servicesCount: number;
 };
 
 const connectionString =
@@ -79,6 +87,7 @@ export interface IStorage {
   updateUser(id: string, updates: Partial<InsertUser>): Promise<User | undefined>;
   getAllUsers(): Promise<User[]>;
   getStaffUsers(): Promise<User[]>;
+  getLawyerUsers(): Promise<User[]>;
   getExpertUsers(): Promise<User[]>;
 
   // Expert Profiles
@@ -378,6 +387,40 @@ export interface IStorage {
   updateLibraryDocument(id: string, updates: Partial<InsertLibraryDocument>): Promise<LibraryDocument | undefined>;
   toggleLibraryDocumentArchive(id: string, isArchived: boolean): Promise<LibraryDocument | undefined>;
   deleteLibraryDocument(id: string): Promise<boolean>;
+
+  // ===== Judicial Service Types (dynamic) =====
+  getAllJudicialServiceTypes(): Promise<JudicialServiceTypeWithCount[]>;
+  getActiveJudicialServiceTypes(): Promise<JudicialServiceType[]>;
+  getJudicialServiceType(id: string): Promise<JudicialServiceType | undefined>;
+  createJudicialServiceType(input: InsertJudicialServiceType): Promise<JudicialServiceType>;
+  updateJudicialServiceType(id: string, updates: Partial<InsertJudicialServiceType>): Promise<JudicialServiceType | undefined>;
+  toggleJudicialServiceType(id: string, isActive: boolean): Promise<JudicialServiceType | undefined>;
+  deleteJudicialServiceType(id: string): Promise<{ ok: boolean; reason?: "linked" | "not_found" }>;
+
+  // ===== Judicial Services =====
+  getJudicialService(id: string): Promise<JudicialService | undefined>;
+  getAllJudicialServices(): Promise<JudicialService[]>;
+  getJudicialServicesByBeneficiary(beneficiaryId: string): Promise<JudicialService[]>;
+  getJudicialServicesByLawyer(lawyerId: string): Promise<JudicialService[]>;
+  createJudicialService(input: InsertJudicialService): Promise<JudicialService>;
+  updateJudicialService(id: string, updates: Partial<InsertJudicialService>): Promise<JudicialService | undefined>;
+  deleteJudicialService(id: string): Promise<boolean>;
+
+  // Judicial service attachments (documents)
+  attachDocumentsToJudicialService(input: {
+    uploadedBy: string;
+    beneficiaryId: string;
+    judicialServiceId: string;
+    isPublic: boolean;
+    documents: Array<{
+      storageKey: string;
+      fileUrl: string;
+      fileName: string;
+      mimeType: string;
+      size: number;
+    }>;
+  }): Promise<Document[]>;
+  getDocumentsByJudicialService(judicialServiceId: string): Promise<Document[]>;
 }
 
 export class DatabaseStorage implements IStorage {
@@ -417,6 +460,13 @@ export class DatabaseStorage implements IStorage {
 
   async getStaffUsers(): Promise<User[]> {
     return db.select().from(schema.users).where(eq(schema.users.userType, "staff"));
+  }
+
+  async getLawyerUsers(): Promise<User[]> {
+    return db
+      .select()
+      .from(schema.users)
+      .where(and(eq(schema.users.userType, "staff"), eq(schema.users.role, "lawyer"), eq(schema.users.isActive, true)));
   }
 
   async getExpertUsers(): Promise<User[]> {
@@ -1868,6 +1918,181 @@ export class DatabaseStorage implements IStorage {
   async deleteLibraryDocument(id: string): Promise<boolean> {
     const result = await db.delete(schema.libraryDocuments).where(eq(schema.libraryDocuments.id, id));
     return Boolean(result.rowCount && result.rowCount > 0);
+  }
+
+  // ===== Judicial Service Types =====
+
+  async getAllJudicialServiceTypes(): Promise<JudicialServiceTypeWithCount[]> {
+    const rows = await db
+      .select({
+        serviceType: schema.judicialServiceTypes,
+        servicesCount: sql<number>`count(${schema.judicialServices.id})`,
+      })
+      .from(schema.judicialServiceTypes)
+      .leftJoin(schema.judicialServices, eq(schema.judicialServices.serviceTypeId, schema.judicialServiceTypes.id))
+      .groupBy(schema.judicialServiceTypes.id)
+      .orderBy(asc(schema.judicialServiceTypes.sortOrder), asc(schema.judicialServiceTypes.createdAt));
+
+    return rows.map((r) => ({
+      ...(r.serviceType as any),
+      servicesCount: Number(r.servicesCount || 0),
+    }));
+  }
+
+  async getActiveJudicialServiceTypes(): Promise<JudicialServiceType[]> {
+    return db
+      .select()
+      .from(schema.judicialServiceTypes)
+      .where(eq(schema.judicialServiceTypes.isActive, true))
+      .orderBy(asc(schema.judicialServiceTypes.sortOrder), asc(schema.judicialServiceTypes.createdAt));
+  }
+
+  async getJudicialServiceType(id: string): Promise<JudicialServiceType | undefined> {
+    const [row] = await db.select().from(schema.judicialServiceTypes).where(eq(schema.judicialServiceTypes.id, id));
+    return row;
+  }
+
+  async createJudicialServiceType(input: InsertJudicialServiceType): Promise<JudicialServiceType> {
+    const [row] = await db.insert(schema.judicialServiceTypes).values(input as any).returning();
+    return row;
+  }
+
+  async updateJudicialServiceType(
+    id: string,
+    updates: Partial<InsertJudicialServiceType>,
+  ): Promise<JudicialServiceType | undefined> {
+    const [row] = await db
+      .update(schema.judicialServiceTypes)
+      .set({ ...(updates as any), updatedAt: new Date() })
+      .where(eq(schema.judicialServiceTypes.id, id))
+      .returning();
+    return row;
+  }
+
+  async toggleJudicialServiceType(id: string, isActive: boolean): Promise<JudicialServiceType | undefined> {
+    const [row] = await db
+      .update(schema.judicialServiceTypes)
+      .set({ isActive, updatedAt: new Date() })
+      .where(eq(schema.judicialServiceTypes.id, id))
+      .returning();
+    return row;
+  }
+
+  async deleteJudicialServiceType(id: string): Promise<{ ok: boolean; reason?: "linked" | "not_found" }> {
+    const [existing] = await db.select().from(schema.judicialServiceTypes).where(eq(schema.judicialServiceTypes.id, id));
+    if (!existing) return { ok: false, reason: "not_found" };
+
+    const [usage] = await db
+      .select({ count: sql<number>`count(*)` })
+      .from(schema.judicialServices)
+      .where(eq(schema.judicialServices.serviceTypeId, id));
+
+    const count = Number((usage as any)?.count || 0);
+    if (count > 0) return { ok: false, reason: "linked" };
+
+    const result = await db.delete(schema.judicialServiceTypes).where(eq(schema.judicialServiceTypes.id, id));
+    return { ok: Boolean(result.rowCount && result.rowCount > 0) };
+  }
+
+  // ===== Judicial Services =====
+
+  async getJudicialService(id: string): Promise<JudicialService | undefined> {
+    const [row] = await db.select().from(schema.judicialServices).where(eq(schema.judicialServices.id, id));
+    return row;
+  }
+
+  async getAllJudicialServices(): Promise<JudicialService[]> {
+    return db.select().from(schema.judicialServices).orderBy(desc(schema.judicialServices.createdAt));
+  }
+
+  async getJudicialServicesByBeneficiary(beneficiaryId: string): Promise<JudicialService[]> {
+    return db
+      .select()
+      .from(schema.judicialServices)
+      .where(eq(schema.judicialServices.beneficiaryId, beneficiaryId))
+      .orderBy(desc(schema.judicialServices.createdAt));
+  }
+
+  async getJudicialServicesByLawyer(lawyerId: string): Promise<JudicialService[]> {
+    return db
+      .select()
+      .from(schema.judicialServices)
+      .where(eq(schema.judicialServices.assignedLawyerId, lawyerId))
+      .orderBy(desc(schema.judicialServices.createdAt));
+  }
+
+  async createJudicialService(input: InsertJudicialService): Promise<JudicialService> {
+    const [row] = await db.insert(schema.judicialServices).values(input as any).returning();
+    return row;
+  }
+
+  async updateJudicialService(
+    id: string,
+    updates: Partial<InsertJudicialService>,
+  ): Promise<JudicialService | undefined> {
+    const [row] = await db
+      .update(schema.judicialServices)
+      .set({ ...(updates as any), updatedAt: new Date() })
+      .where(eq(schema.judicialServices.id, id))
+      .returning();
+    return row;
+  }
+
+  async deleteJudicialService(id: string): Promise<boolean> {
+    return db.transaction(async (tx) => {
+      await tx
+        .delete(schema.documents)
+        .where(and(eq(schema.documents.ownerType, "judicial_service" as any), eq(schema.documents.ownerId, id)));
+
+      const result = await tx.delete(schema.judicialServices).where(eq(schema.judicialServices.id, id));
+      return Boolean(result.rowCount && result.rowCount > 0);
+    });
+  }
+
+  async attachDocumentsToJudicialService(input: {
+    uploadedBy: string;
+    beneficiaryId: string;
+    judicialServiceId: string;
+    isPublic: boolean;
+    documents: Array<{
+      storageKey: string;
+      fileUrl: string;
+      fileName: string;
+      mimeType: string;
+      size: number;
+    }>;
+  }): Promise<Document[]> {
+    const rows: InsertDocument[] = input.documents.map((d) => ({
+      title: d.fileName,
+      description: null,
+      fileUrl: d.fileUrl,
+      fileType: d.mimeType,
+      fileSize: d.size,
+      uploadedBy: input.uploadedBy,
+      beneficiaryId: input.beneficiaryId,
+      caseId: null,
+      ownerType: "judicial_service" as any,
+      ownerId: input.judicialServiceId,
+      requestId: null,
+      storageKey: d.storageKey,
+      fileName: d.fileName,
+      mimeType: d.mimeType,
+      size: d.size,
+      isPublic: input.isPublic,
+      category: null,
+      tags: null,
+    } as any));
+
+    if (!rows.length) return [];
+    return db.insert(schema.documents).values(rows).returning();
+  }
+
+  async getDocumentsByJudicialService(judicialServiceId: string): Promise<Document[]> {
+    return db
+      .select()
+      .from(schema.documents)
+      .where(and(eq(schema.documents.ownerType, "judicial_service" as any), eq(schema.documents.ownerId, judicialServiceId)))
+      .orderBy(desc(schema.documents.createdAt));
   }
 }
 

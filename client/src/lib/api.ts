@@ -61,6 +61,11 @@ async function fetchUpload(file: File) {
   return res.json();
 }
 
+// Config API
+export const configAPI = {
+  features: () => fetchAPI("/config/features"),
+};
+
 // Auth API
 export const authAPI = {
   login: (username: string, password: string) =>
@@ -324,6 +329,7 @@ export const auditAPI = {
 // Users API (Staff only)
 export const usersAPI = {
   getAll: () => fetchAPI("/users"),
+  listLawyers: () => fetchAPI("/users/lawyers"),
   create: (data: any) =>
     fetchAPI("/users", {
       method: "POST",
@@ -585,4 +591,65 @@ export const libraryDocsAPI = {
       body: JSON.stringify({ isArchived }),
     }),
   delete: (id: string) => fetchAPI(`/library-docs/${id}`, { method: "DELETE" }),
+};
+
+// Judicial Service Types API (Staff/admin dictionary + active list for authenticated users)
+export const judicialServiceTypesAPI = {
+  listAll: () => fetchAPI("/judicial-service-types"),
+  listActive: () => fetchAPI("/judicial-service-types/active"),
+  create: (data: { nameAr: string; nameEn?: string | null; sortOrder?: number | null }) =>
+    fetchAPI("/judicial-service-types", {
+      method: "POST",
+      body: JSON.stringify(data),
+    }),
+  update: (id: string, data: { nameAr?: string; nameEn?: string | null; sortOrder?: number | null }) =>
+    fetchAPI(`/judicial-service-types/${id}`,
+      {
+        method: "PATCH",
+        body: JSON.stringify(data),
+      }
+    ),
+  toggle: (id: string, isActive: boolean) =>
+    fetchAPI(`/judicial-service-types/${id}/toggle`, {
+      method: "PATCH",
+      body: JSON.stringify({ isActive }),
+    }),
+  delete: (id: string) => fetchAPI(`/judicial-service-types/${id}`, { method: "DELETE" }),
+};
+
+// Judicial Services API (Staff + Beneficiary)
+export const judicialServicesAPI = {
+  list: () => fetchAPI("/judicial-services"),
+  listMy: () => fetchAPI("/judicial-services/my"),
+  getOne: (id: string) => fetchAPI(`/judicial-services/${id}`),
+  create: (data: any) =>
+    fetchAPI("/judicial-services", {
+      method: "POST",
+      body: JSON.stringify(data),
+    }),
+  update: (id: string, data: any) =>
+    fetchAPI(`/judicial-services/${id}`,
+      {
+        method: "PATCH",
+        body: JSON.stringify(data),
+      }
+    ),
+  updateStatus: (id: string, data: { status: string; note?: string | null }) =>
+    fetchAPI(`/judicial-services/${id}/status`, {
+      method: "PATCH",
+      body: JSON.stringify(data),
+    }),
+  assignLawyer: (id: string, lawyerId: string) =>
+    fetchAPI(`/judicial-services/${id}/assign-lawyer`, {
+      method: "PATCH",
+      body: JSON.stringify({ lawyerId }),
+    }),
+  delete: (id: string) => fetchAPI(`/judicial-services/${id}`, { method: "DELETE" }),
+
+  listAttachments: (id: string) => fetchAPI(`/judicial-services/${id}/attachments`),
+  addAttachments: (id: string, data: { isPublic?: boolean; documents: any[] }) =>
+    fetchAPI(`/judicial-services/${id}/attachments`, {
+      method: "POST",
+      body: JSON.stringify(data),
+    }),
 };

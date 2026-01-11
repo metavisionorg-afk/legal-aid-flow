@@ -1,4 +1,4 @@
-import { useMemo } from "react";
+import { useEffect, useMemo, useState } from "react";
 import { useTranslation } from "react-i18next";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { Bell } from "lucide-react";
@@ -40,14 +40,29 @@ export function NotificationsBell() {
   const [, setLocation] = useLocation();
   const queryClient = useQueryClient();
 
-  const enabled = Boolean(user);
+  const [blocked401, setBlocked401] = useState(false);
 
-  const { data: notifications } = useQuery({
+  const enabled = Boolean(user) && !blocked401;
+
+  const notificationsQuery = useQuery({
     queryKey: ["notifications", "my"],
     queryFn: async () => (await notificationsAPI.getMy()) as NotificationRow[],
     enabled,
-    refetchInterval: 30_000,
+    retry: (failureCount, err: any) => {
+      if (err?.response?.status === 401) return false;
+      // Avoid rapid retry loops if the backend is down or overloaded.
+      return failureCount < 1;
+    },
+    refetchInterval: blocked401 ? false : 30_000,
   });
+
+  useEffect(() => {
+    if ((notificationsQuery.error as any)?.response?.status === 401) {
+      setBlocked401(true);
+    }
+  }, [notificationsQuery.error]);
+
+  const notifications = notificationsQuery.data;
 
   const unreadCount = useMemo(() => {
     return (notifications || []).filter((n) => !n.isRead).length;
@@ -59,6 +74,7 @@ export function NotificationsBell() {
       await queryClient.invalidateQueries({ queryKey: ["notifications"] });
     },
     onError: (err) => {
+      if ((err as any)?.response?.status === 401) setBlocked401(true);
       // Keep UX quiet-ish; but still show a readable error.
       console.error(getErrorMessage(err, t));
     },
@@ -70,6 +86,7 @@ export function NotificationsBell() {
       await queryClient.invalidateQueries({ queryKey: ["notifications"] });
     },
     onError: (err) => {
+      if ((err as any)?.response?.status === 401) setBlocked401(true);
       console.error(getErrorMessage(err, t));
     },
   });

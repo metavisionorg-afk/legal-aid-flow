@@ -154,8 +154,22 @@ async function seed() {
 
     console.log("✅ Created beneficiary user accounts");
 
-    // Create intake requests
-    const intake1 = await storage.createIntakeRequest({
+    // Create intake requests (idempotent-ish; no unique key, so we de-dupe by (beneficiaryId, caseType, description))
+    const existingIntakes = await storage.getAllIntakeRequests();
+    const getOrCreateIntake = async (input: any) => {
+      const found = (existingIntakes as any[]).find(
+        (r) =>
+          String((r as any).beneficiaryId) === String(input.beneficiaryId) &&
+          String((r as any).caseType) === String(input.caseType) &&
+          String((r as any).description) === String(input.description),
+      );
+      if (found) return found;
+      const created = await storage.createIntakeRequest(input);
+      (existingIntakes as any[]).push(created);
+      return created;
+    };
+
+    await getOrCreateIntake({
       beneficiaryId: beneficiary1.id,
       caseType: "labor",
       description: "Unpaid wages for 3 months. Employer refuses to pay.",
@@ -165,7 +179,7 @@ async function seed() {
       documents: ["wage_slips.pdf", "employment_contract.pdf"],
     });
 
-    const intake2 = await storage.createIntakeRequest({
+    await getOrCreateIntake({
       beneficiaryId: beneficiary2.id,
       caseType: "asylum",
       description: "Residency permit appeal. Previous application was rejected.",
@@ -173,7 +187,7 @@ async function seed() {
       documents: ["id_copy.pdf", "previous_rejection.pdf"],
     });
 
-    const intake3 = await storage.createIntakeRequest({
+    await getOrCreateIntake({
       beneficiaryId: beneficiary3.id,
       caseType: "family",
       description: "Custody dispute. Need legal representation for upcoming hearing.",
@@ -184,31 +198,42 @@ async function seed() {
 
     console.log("✅ Created intake requests");
 
-    // Create cases
-    const case1 = await storage.createCase({
+    // Create cases (idempotent by caseNumber)
+    const existingCases = await storage.getAllCases();
+    const getOrCreateCase = async (input: any) => {
+      const found = (existingCases as any[]).find((c) => String((c as any).caseNumber) === String(input.caseNumber));
+      if (found) return found;
+      const created = await storage.createCase(input);
+      (existingCases as any[]).push(created);
+      return created;
+    };
+
+    await getOrCreateCase({
       caseNumber: "CASE-2024-001",
       title: "Labor Dispute - Unpaid Wages",
       beneficiaryId: beneficiary1.id,
       caseType: "labor",
-      description: "Client worked for 3 months without receiving payment. Employer claims business financial difficulties but has not provided documentation.",
+      description:
+        "Client worked for 3 months without receiving payment. Employer claims business financial difficulties but has not provided documentation.",
       status: "in_progress",
       priority: "high",
       assignedLawyerId: lawyer.id,
       internalNotes: "Follow up with employer's legal counsel. Prepare for labor court filing.",
     });
 
-    const case2 = await storage.createCase({
+    await getOrCreateCase({
       caseNumber: "CASE-2024-002",
       title: "Residency Permit Appeal",
       beneficiaryId: beneficiary2.id,
       caseType: "asylum",
-      description: "Previous residency application rejected due to incomplete documentation. Gathering additional evidence for appeal.",
+      description:
+        "Previous residency application rejected due to incomplete documentation. Gathering additional evidence for appeal.",
       status: "open",
       priority: "medium",
       internalNotes: "Need to obtain additional documentation from Syrian authorities.",
     });
 
-    const case3 = await storage.createCase({
+    await getOrCreateCase({
       caseNumber: "CASE-2024-003",
       title: "Custody Hearing Preparation",
       beneficiaryId: beneficiary3.id,

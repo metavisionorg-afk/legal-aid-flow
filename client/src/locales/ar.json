@@ -58,7 +58,89 @@
       "powers_of_attorney": "الوكالات"
     },
     "sidebar": {
-      "documentsLibrary": "مكتبة المستندات"
+      "documentsLibrary": "مكتبة المستندات",
+      "judicialServices": "الخدمات القضائية"
+    },
+
+    "judicial_services": {
+      "title": "الخدمات القضائية",
+      "manage_title": "إدارة الخدمة القضائية",
+      "assign_lawyer": "تعيين محامٍ",
+      "select_lawyer": "اختر المحامي",
+      "update_status": "تحديث الحالة",
+      "select_status": "اختر الحالة"
+    },
+    "documents": {
+      "library_title": "مكتبة المستندات",
+      "upload": "رفع",
+      "upload_desc": "ارفع مستندًا إلى المكتبة.",
+      "upload_hint": "الرفع يدعم: PDF، صور، Word (حسب إعدادات السيرفر)",
+      "upload_success": "تم رفع المستند",
+      "upload_failed": "فشل رفع المستند",
+
+      "new_folder": "مجلد جديد",
+      "new_folder_desc": "أنشئ مجلدًا لتنظيم المستندات.",
+      "new_folder_in": "سيتم إنشاء المجلد داخل",
+      "folder_name": "اسم المجلد",
+      "folder": "المجلد",
+      "folders": "المجلدات",
+      "folders_load_failed": "فشل تحميل المجلدات",
+      "folder_created": "تم إنشاء المجلد",
+      "folder_create_failed": "فشل إنشاء المجلد",
+      "folder_deleted": "تم حذف المجلد",
+      "folder_delete_failed": "فشل حذف المجلد",
+      "folder_archived": "تم أرشفة المجلد",
+      "folder_archive_failed": "فشل أرشفة المجلد",
+      "folder_unarchived": "تم إلغاء أرشفة المجلد",
+      "folder_name_required": "اسم المجلد مطلوب",
+
+      "all_documents": "كل المستندات",
+      "docs_count": "عدد المستندات",
+      "docs_load_failed": "فشل تحميل المستندات",
+      "no_documents": "لا توجد مستندات",
+      "search_placeholder": "ابحث عن مستند...",
+
+      "title": "العنوان",
+      "title_required": "العنوان مطلوب",
+      "doc_type": "نوع المستند",
+      "tags": "وسوم",
+      "tags_hint": "مثال: عقد, فاتورة, قضية",
+      "file": "الملف",
+      "file_required": "الملف مطلوب",
+      "download": "تنزيل",
+      "include_archived": "إظهار المؤرشف",
+
+      "visibility": "الظهور",
+      "visibility_all": "الكل",
+
+      "doc_type_policy": "سياسة",
+      "doc_type_template": "نموذج",
+      "doc_type_info": "معلومات",
+
+      "seed_folder_root": "جذر المستندات",
+      "seed_folder_policies": "السياسات",
+      "seed_folder_templates": "القوالب",
+      "seed_folder_orphan": "مجلد بدون أب",
+
+      "seed_doc_title_labor_policy": "سياسة حقوق العمل",
+      "seed_doc_title_contract_template": "نموذج عقد",
+      "seed_doc_title_general_info": "ورقة معلومات عامة",
+
+      "seed_doc_desc_labor_policy": "وثيقة شاملة لسياسة حقوق العمل.",
+      "seed_doc_desc_contract_template": "نموذج عقد قياسي للقضايا المدنية.",
+      "seed_doc_desc_general_info": "معلومات عامة لجميع الموظفين.",
+      "visibility_internal": "داخلي",
+      "visibility_case_team": "فريق القضية",
+      "visibility_beneficiary": "المستفيد",
+
+      "confirm_delete_folder": "هل أنت متأكد من حذف المجلد؟",
+      "confirm_delete_doc": "هل أنت متأكد من حذف المستند؟",
+
+      "doc_deleted": "تم حذف المستند",
+      "doc_delete_failed": "فشل حذف المستند",
+      "doc_archived": "تم أرشفة المستند",
+      "doc_archive_failed": "فشل أرشفة المستند",
+      "doc_unarchived": "تم إلغاء أرشفة المستند"
     },
     "poa": {
       "subtitle": "إدارة الوكالات والمرفقات المرتبطة بها.",
@@ -777,6 +859,12 @@
     "loading": "جاري التحميل...",
     "error": "خطأ",
     "success": "نجح",
+    "refresh": "تحديث",
+    "feature_disabled": "الميزة غير مفعلة",
+    "session_expired": "انتهت الجلسة",
+    "please_login_again": "يرجى تسجيل الدخول مرة أخرى للمتابعة.",
+    "retry": "إعادة المحاولة",
+    "empty": "لا توجد بيانات بعد.",
     "cancel": "إلغاء",
     "confirm": "تأكيد",
     "delete": "حذف",

@@ -17,6 +17,12 @@ app.set("trust proxy", 1);
 
 const isProd = process.env.NODE_ENV === "production";
 const sessionDebug = process.env.SESSION_DEBUG === "1";
+const corsOrigins = (process.env.CORS_ORIGINS || process.env.CORS_ORIGIN || "")
+  .split(",")
+  .map((s) => s.trim())
+  .filter(Boolean);
+
+const isCrossOrigin = corsOrigins.length > 0;
 const sessionSecret =
   process.env.SESSION_SECRET ||
   (isProd ? undefined : "adala-legal-aid-secret-change-in-production");
@@ -47,6 +53,32 @@ app.use(
 );
 
 app.use(express.urlencoded({ extended: false }));
+
+// Optional CORS support (for deployments where the SPA and API are on different origins).
+// When enabled, cookies require SameSite=None + Secure on the session cookie.
+if (corsOrigins.length) {
+  app.use((req, res, next) => {
+    const origin = typeof req.headers.origin === "string" ? req.headers.origin : "";
+    if (origin && corsOrigins.includes(origin)) {
+      res.header("Access-Control-Allow-Origin", origin);
+      res.header("Vary", "Origin");
+      res.header("Access-Control-Allow-Credentials", "true");
+      res.header(
+        "Access-Control-Allow-Headers",
+        req.headers["access-control-request-headers"]?.toString() || "Content-Type, Authorization",
+      );
+      res.header(
+        "Access-Control-Allow-Methods",
+        req.headers["access-control-request-method"]?.toString() || "GET,POST,PATCH,PUT,DELETE,OPTIONS",
+      );
+    }
+
+    if (req.method === "OPTIONS") {
+      return res.sendStatus(204);
+    }
+    next();
+  });
+}
 
 // Serve uploaded files (used by public registration uploads)
 app.use("/uploads", express.static(path.resolve(process.cwd(), "uploads")));
@@ -113,12 +145,15 @@ app.use((req, res, next) => {
       secret: sessionSecret,
       resave: false,
       saveUninitialized: false,
-      proxy: isProd,
+      // Trust upstream TLS termination when behind a reverse proxy.
+      proxy: true,
       name: "connect.sid",
       cookie: {
         httpOnly: true,
-        secure: isProd,
-        sameSite: "lax",
+        // Cross-origin XHR/fetch requires SameSite=None + Secure.
+        sameSite: (isCrossOrigin ? "none" : "lax") as any,
+        secure: Boolean(isProd || isCrossOrigin),
+        path: "/",
         maxAge: 7 * 24 * 60 * 60 * 1000,
       },
     }),
@@ -133,6 +168,11 @@ app.use((req, res, next) => {
         sessionID: (req as any).sessionID ?? null,
         hasCookieHeader: Boolean(req.headers.cookie),
         cookieHeaderSample: req.headers.cookie ? req.headers.cookie.slice(0, 120) : null,
+        protocol: req.protocol,
+        secure: (req as any).secure,
+        xForwardedProto: req.headers["x-forwarded-proto"] ?? null,
+        origin: req.headers.origin ?? null,
+        corsOrigins,
         user,
       });
     });

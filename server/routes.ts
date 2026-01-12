@@ -880,6 +880,137 @@ export async function registerRoutes(
     }
   });
 
+  // ========== SERVICE TYPES SETTINGS ROUTES (STAFF/ADMIN) ==========
+
+  // Admin/staff settings list
+  app.get(
+    "/api/settings/service-types",
+    requireStaff,
+    requireRole(["admin", "super_admin"]),
+    async (_req: AuthRequest, res) => {
+      try {
+        const rows = await storage.getAllServiceTypes();
+        return res.json(rows);
+      } catch (error: any) {
+        return res.status(500).json({ error: getErrorMessage(error) });
+      }
+    },
+  );
+
+  // Active list (safe for any authenticated user; used by dropdowns)
+  app.get("/api/settings/service-types/active", requireAuth, async (_req: AuthRequest, res) => {
+    try {
+      const rows = await storage.getActiveServiceTypes();
+      return res.json(rows);
+    } catch (error: any) {
+      return res.status(500).json({ error: getErrorMessage(error) });
+    }
+  });
+
+  app.post(
+    "/api/settings/service-types",
+    requireStaff,
+    requireRole(["admin", "super_admin"]),
+    async (req: AuthRequest, res) => {
+      try {
+        const parsed = z
+          .object({
+            nameAr: z.string().trim().min(1),
+            nameEn: z.string().trim().optional().nullable(),
+          })
+          .safeParse(req.body);
+
+        if (!parsed.success) {
+          return res.status(400).json({ error: fromZodError(parsed.error).message });
+        }
+
+        const created = await storage.createServiceType({
+          nameAr: parsed.data.nameAr,
+          nameEn: parsed.data.nameEn ?? null,
+          isActive: true,
+        } as any);
+
+        await createAudit(req.session.userId!, "create", "service_type", created.id, `Created service type: ${created.nameAr}`);
+        return res.status(201).json(created);
+      } catch (error: any) {
+        return res.status(500).json({ error: getErrorMessage(error) });
+      }
+    },
+  );
+
+  app.patch(
+    "/api/settings/service-types/:id",
+    requireStaff,
+    requireRole(["admin", "super_admin"]),
+    async (req: AuthRequest, res) => {
+      try {
+        const parsed = z
+          .object({
+            nameAr: z.string().trim().min(1).optional(),
+            nameEn: z.string().trim().optional().nullable(),
+          })
+          .safeParse(req.body);
+
+        if (!parsed.success) {
+          return res.status(400).json({ error: fromZodError(parsed.error).message });
+        }
+
+        const updated = await storage.updateServiceType(req.params.id, {
+          ...(parsed.data.nameAr !== undefined ? { nameAr: parsed.data.nameAr } : {}),
+          ...(parsed.data.nameEn !== undefined ? { nameEn: parsed.data.nameEn } : {}),
+        } as any);
+
+        if (!updated) return res.status(404).json({ error: "Service type not found" });
+
+        await createAudit(req.session.userId!, "update", "service_type", updated.id, `Updated service type: ${updated.nameAr}`);
+        return res.json(updated);
+      } catch (error: any) {
+        return res.status(500).json({ error: getErrorMessage(error) });
+      }
+    },
+  );
+
+  app.patch(
+    "/api/settings/service-types/:id/toggle",
+    requireStaff,
+    requireRole(["admin", "super_admin"]),
+    async (req: AuthRequest, res) => {
+      try {
+        const parsed = z.object({ isActive: z.boolean() }).safeParse(req.body);
+        if (!parsed.success) {
+          return res.status(400).json({ error: fromZodError(parsed.error).message });
+        }
+
+        const updated = await storage.toggleServiceType(req.params.id, parsed.data.isActive);
+        if (!updated) return res.status(404).json({ error: "Service type not found" });
+
+        await createAudit(req.session.userId!, "toggle", "service_type", updated.id, `Toggled service type: ${updated.nameAr}`);
+        return res.json(updated);
+      } catch (error: any) {
+        return res.status(500).json({ error: getErrorMessage(error) });
+      }
+    },
+  );
+
+  app.delete(
+    "/api/settings/service-types/:id",
+    requireStaff,
+    requireRole(["admin", "super_admin"]),
+    async (req: AuthRequest, res) => {
+      try {
+        const result = await storage.deleteServiceType(req.params.id);
+        if (!result.ok && result.reason === "not_found") {
+          return res.status(404).json({ error: "Service type not found" });
+        }
+
+        await createAudit(req.session.userId!, "delete", "service_type", req.params.id, "Deleted service type");
+        return res.json({ success: true });
+      } catch (error: any) {
+        return res.status(500).json({ error: getErrorMessage(error) });
+      }
+    },
+  );
+
   // ========== JUDICIAL SERVICE TYPES ROUTES (STAFF/ADMIN) ==========
 
   app.get(
@@ -1893,6 +2024,95 @@ export async function registerRoutes(
       res.status(500).json({ error: error.message });
     }
   });
+
+  // ========== STAFF BENEFICIARY CREATE (UNIFIED FORM) ==========
+  // Creates BOTH:
+  // - users row (beneficiary account)
+  // - beneficiaries row (beneficiary profile)
+  // - assigns default beneficiary rule
+  // Transactional to avoid orphaned rows.
+  app.post(
+    "/api/staff/beneficiaries",
+    requireStaff,
+    requireRole(["admin", "super_admin"]),
+    async (req: AuthRequest, res) => {
+      try {
+        const parsed = z
+          .object({
+            fullName: z.string().trim().min(1),
+            username: z.string().trim().min(1),
+            email: z.string().trim().email(),
+            password: z.string().min(8),
+            confirmPassword: z.string().min(8),
+            phone: z.string().trim().min(1),
+            gender: z.enum(["male", "female"]).optional(),
+            city: z.string().trim().min(1),
+            preferredLanguage: z.enum(["ar", "en"]),
+          })
+          .superRefine((data, ctx) => {
+            if (data.password !== data.confirmPassword) {
+              ctx.addIssue({
+                code: z.ZodIssueCode.custom,
+                path: ["confirmPassword"],
+                message: "Passwords do not match",
+              });
+            }
+          })
+          .safeParse(req.body);
+
+        if (!parsed.success) {
+          return res.status(400).json({ error: fromZodError(parsed.error).message });
+        }
+
+        const input = parsed.data;
+
+        const existingEmail = await storage.getUserByEmail(input.email);
+        if (existingEmail) {
+          return res.status(409).json({ error: "Email already exists" });
+        }
+
+        const existingUsername = await storage.getUserByUsername(input.username);
+        if (existingUsername) {
+          return res.status(409).json({ error: "Username already exists" });
+        }
+
+        const hashedPassword = await bcrypt.hash(input.password, 10);
+        const rule = await ensureBeneficiaryDefaultRule();
+        const idNumber = `AUTO-${randomUUID()}`;
+
+        const created = await storage.createBeneficiaryWithUserAndRule({
+          user: {
+            username: input.username,
+            email: input.email,
+            password: hashedPassword,
+            fullName: input.fullName,
+            role: "beneficiary",
+            userType: "beneficiary",
+            emailVerified: false,
+            isActive: true,
+          } as any,
+          beneficiary: {
+            fullName: input.fullName,
+            idNumber,
+            phone: input.phone,
+            email: input.email,
+            city: input.city,
+            preferredLanguage: input.preferredLanguage,
+            gender: input.gender,
+            status: "pending",
+          } as any,
+          ruleId: rule.id,
+        });
+
+        await createAudit(req.session.userId!, "create", "beneficiary", created.beneficiary.id, `Created beneficiary (staff): ${created.beneficiary.fullName}`, req.ip);
+
+        const { password: _pw, ...userWithoutPassword } = created.user as any;
+        return res.status(201).json({ user: userWithoutPassword, beneficiary: created.beneficiary });
+      } catch (error: any) {
+        return res.status(500).json({ error: getErrorMessage(error) });
+      }
+    },
+  );
 
   app.post("/api/beneficiaries", requireStaff, async (req, res) => {
     try {

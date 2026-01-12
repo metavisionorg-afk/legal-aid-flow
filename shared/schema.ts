@@ -86,6 +86,21 @@ export const documentOwnerTypeEnum = pgEnum("document_owner_type", [
 ]);
 export const documentVisibilityEnum = pgEnum("document_visibility", ["INTERNAL", "BENEFICIARY"]);
 
+// ===== Service Types (dynamic list managed by staff) =====
+
+export const serviceTypes = pgTable("service_types", {
+  id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
+  nameAr: text("name_ar").notNull(),
+  nameEn: text("name_en"),
+  isActive: boolean("is_active").notNull().default(true),
+});
+
+export const insertServiceTypeSchema = createInsertSchema(serviceTypes).omit({
+  id: true,
+});
+export type InsertServiceType = z.infer<typeof insertServiceTypeSchema>;
+export type ServiceType = typeof serviceTypes.$inferSelect;
+
 // Documents Library (separate from case/task/session documents)
 export const libraryDocumentVisibilityEnum = pgEnum("library_document_visibility", [
   "internal",

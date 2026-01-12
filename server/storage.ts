@@ -52,6 +52,8 @@ import type {
   InsertJudicialServiceType,
   JudicialService,
   InsertJudicialService,
+  ServiceType,
+  InsertServiceType,
 } from "@shared/schema";
 
 export type IntakeRequestWithCaseType = IntakeRequest & {
@@ -104,6 +106,13 @@ export interface IStorage {
   createBeneficiary(beneficiary: InsertBeneficiary): Promise<Beneficiary>;
   updateBeneficiary(id: string, beneficiary: Partial<InsertBeneficiary>): Promise<Beneficiary | undefined>;
   deleteBeneficiary(id: string): Promise<boolean>;
+
+  // Staff beneficiary creation (user + beneficiary + default rule)
+  createBeneficiaryWithUserAndRule(input: {
+    user: InsertUser;
+    beneficiary: InsertBeneficiary;
+    ruleId: string;
+  }): Promise<{ user: User; beneficiary: Beneficiary }>;
 
   // Service Requests (self-service)
   getServiceRequest(id: string): Promise<ServiceRequest | undefined>;
@@ -421,6 +430,15 @@ export interface IStorage {
     }>;
   }): Promise<Document[]>;
   getDocumentsByJudicialService(judicialServiceId: string): Promise<Document[]>;
+
+  // ===== Service Types (dynamic settings) =====
+  getAllServiceTypes(): Promise<ServiceType[]>;
+  getActiveServiceTypes(): Promise<ServiceType[]>;
+  getServiceType(id: string): Promise<ServiceType | undefined>;
+  createServiceType(input: InsertServiceType): Promise<ServiceType>;
+  updateServiceType(id: string, updates: Partial<InsertServiceType>): Promise<ServiceType | undefined>;
+  toggleServiceType(id: string, isActive: boolean): Promise<ServiceType | undefined>;
+  deleteServiceType(id: string): Promise<{ ok: boolean; reason?: "not_found" }>;
 }
 
 export class DatabaseStorage implements IStorage {
@@ -561,6 +579,25 @@ export class DatabaseStorage implements IStorage {
   async deleteBeneficiary(id: string): Promise<boolean> {
     const result = await db.delete(schema.beneficiaries).where(eq(schema.beneficiaries.id, id));
     return result.rowCount ? result.rowCount > 0 : false;
+  }
+
+  async createBeneficiaryWithUserAndRule(input: {
+    user: InsertUser;
+    beneficiary: InsertBeneficiary;
+    ruleId: string;
+  }): Promise<{ user: User; beneficiary: Beneficiary }> {
+    return db.transaction(async (tx) => {
+      const [createdUser] = await tx.insert(schema.users).values(input.user as any).returning();
+      const [createdBeneficiary] = await tx
+        .insert(schema.beneficiaries)
+        .values({ ...(input.beneficiary as any), userId: createdUser.id })
+        .returning();
+
+      // Assign default beneficiary rule inside the same transaction.
+      await tx.insert(schema.userRules).values({ userId: createdUser.id, ruleId: input.ruleId } as any);
+
+      return { user: createdUser as any, beneficiary: createdBeneficiary as any };
+    });
   }
 
   // Service Requests
@@ -2093,6 +2130,56 @@ export class DatabaseStorage implements IStorage {
       .from(schema.documents)
       .where(and(eq(schema.documents.ownerType, "judicial_service" as any), eq(schema.documents.ownerId, judicialServiceId)))
       .orderBy(desc(schema.documents.createdAt));
+  }
+
+  // ===== Service Types (dynamic settings) =====
+
+  async getAllServiceTypes(): Promise<ServiceType[]> {
+    return db.select().from(schema.serviceTypes).orderBy(asc(schema.serviceTypes.nameAr));
+  }
+
+  async getActiveServiceTypes(): Promise<ServiceType[]> {
+    return db
+      .select()
+      .from(schema.serviceTypes)
+      .where(eq(schema.serviceTypes.isActive, true))
+      .orderBy(asc(schema.serviceTypes.nameAr));
+  }
+
+  async getServiceType(id: string): Promise<ServiceType | undefined> {
+    const [row] = await db.select().from(schema.serviceTypes).where(eq(schema.serviceTypes.id, id));
+    return row;
+  }
+
+  async createServiceType(input: InsertServiceType): Promise<ServiceType> {
+    const [row] = await db.insert(schema.serviceTypes).values(input as any).returning();
+    return row;
+  }
+
+  async updateServiceType(id: string, updates: Partial<InsertServiceType>): Promise<ServiceType | undefined> {
+    const [row] = await db
+      .update(schema.serviceTypes)
+      .set({ ...(updates as any) })
+      .where(eq(schema.serviceTypes.id, id))
+      .returning();
+    return row;
+  }
+
+  async toggleServiceType(id: string, isActive: boolean): Promise<ServiceType | undefined> {
+    const [row] = await db
+      .update(schema.serviceTypes)
+      .set({ isActive })
+      .where(eq(schema.serviceTypes.id, id))
+      .returning();
+    return row;
+  }
+
+  async deleteServiceType(id: string): Promise<{ ok: boolean; reason?: "not_found" }> {
+    const [existing] = await db.select().from(schema.serviceTypes).where(eq(schema.serviceTypes.id, id));
+    if (!existing) return { ok: false, reason: "not_found" };
+
+    const result = await db.delete(schema.serviceTypes).where(eq(schema.serviceTypes.id, id));
+    return { ok: Boolean(result.rowCount && result.rowCount > 0) };
   }
 }
 

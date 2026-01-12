@@ -164,6 +164,16 @@ export const serviceRequestsAPI = {
     }),
 };
 
+// Staff Beneficiaries API
+// Staff-only endpoint for creating beneficiary user + beneficiary profile.
+export const staffBeneficiariesAPI = {
+  create: (data: any) =>
+    fetchAPI("/staff/beneficiaries", {
+      method: "POST",
+      body: JSON.stringify(data),
+    }),
+};
+
 // Beneficiaries API (Staff only)
 export const beneficiariesAPI = {
   getAll: () => fetchAPI("/beneficiaries"),

@@ -6,16 +6,20 @@ import { z } from "zod";
 import { zodResolver } from "@hookform/resolvers/zod";
 import { useForm } from "react-hook-form";
 
+import { Layout } from "@/components/layout/Layout";
+
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import { Switch } from "@/components/ui/switch";
+import { Skeleton } from "@/components/ui/skeleton";
 import {
   Dialog,
   DialogContent,
   DialogHeader,
   DialogTitle,
+  DialogTrigger,
 } from "@/components/ui/dialog";
 import {
   Table,
@@ -33,6 +37,16 @@ import {
   FormLabel,
   FormMessage,
 } from "@/components/ui/form";
+
+import {
+  DropdownMenu,
+  DropdownMenuContent,
+  DropdownMenuItem,
+  DropdownMenuLabel,
+  DropdownMenuSeparator,
+  DropdownMenuTrigger,
+} from "@/components/ui/dropdown-menu";
+import { Filter, MoreHorizontal, Plus, Search } from "lucide-react";
 
 import { usersAPI, casesAPI } from "@/lib/api";
 import { getErrorMessage } from "@/lib/errors";
@@ -209,198 +223,235 @@ export default function Lawyers() {
   };
 
   return (
-    <div className="space-y-6">
-      <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
-        <div>
-          <h1 className="text-2xl font-bold">{t("lawyers.title")}</h1>
-          <p className="text-muted-foreground text-sm">{t("lawyers.subtitle")}</p>
+    <Layout>
+      <div className="space-y-6">
+        <div className="flex flex-col sm:flex-row items-start sm:items-center justify-between gap-4">
+          <h1 className="text-3xl font-bold tracking-tight">{t("lawyers.title")}</h1>
+
+          <Dialog open={createOpen} onOpenChange={setCreateOpen}>
+            <DialogTrigger asChild>
+              <Button>
+                <Plus className="mr-2 h-4 w-4 rtl:ml-2 rtl:mr-0" />
+                {t("lawyers.add")}
+              </Button>
+            </DialogTrigger>
+            <DialogContent className="max-w-lg">
+              <DialogHeader>
+                <DialogTitle>{t("lawyers.add")}</DialogTitle>
+              </DialogHeader>
+
+              <Form {...createForm}>
+                <form
+                  onSubmit={createForm.handleSubmit((values) => createMutation.mutate(values))}
+                  className="space-y-4"
+                >
+                  <FormField
+                    control={createForm.control}
+                    name="fullName"
+                    render={({ field }) => (
+                      <FormItem>
+                        <FormLabel>{t("lawyers.full_name")}</FormLabel>
+                        <FormControl>
+                          <Input {...field} />
+                        </FormControl>
+                        <FormMessage />
+                      </FormItem>
+                    )}
+                  />
+
+                  <FormField
+                    control={createForm.control}
+                    name="email"
+                    render={({ field }) => (
+                      <FormItem>
+                        <FormLabel>{t("lawyers.email")}</FormLabel>
+                        <FormControl>
+                          <Input {...field} />
+                        </FormControl>
+                        <FormMessage />
+                      </FormItem>
+                    )}
+                  />
+
+                  <FormField
+                    control={createForm.control}
+                    name="username"
+                    render={({ field }) => (
+                      <FormItem>
+                        <FormLabel>{t("lawyers.username")}</FormLabel>
+                        <FormControl>
+                          <Input {...field} />
+                        </FormControl>
+                        <FormMessage />
+                      </FormItem>
+                    )}
+                  />
+
+                  <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+                    <FormField
+                      control={createForm.control}
+                      name="password"
+                      render={({ field }) => (
+                        <FormItem>
+                          <FormLabel>{t("lawyers.password")}</FormLabel>
+                          <FormControl>
+                            <Input type="password" {...field} />
+                          </FormControl>
+                          <FormMessage />
+                        </FormItem>
+                      )}
+                    />
+
+                    <FormField
+                      control={createForm.control}
+                      name="confirmPassword"
+                      render={({ field }) => (
+                        <FormItem>
+                          <FormLabel>{t("lawyers.confirm_password")}</FormLabel>
+                          <FormControl>
+                            <Input type="password" {...field} />
+                          </FormControl>
+                          <FormMessage />
+                        </FormItem>
+                      )}
+                    />
+                  </div>
+
+                  <FormField
+                    control={createForm.control}
+                    name="isActive"
+                    render={({ field }) => (
+                      <FormItem className="flex items-center justify-between rounded-md border p-3">
+                        <div>
+                          <div className="font-medium">{t("lawyers.status")}</div>
+                          <div className="text-sm text-muted-foreground">{t("lawyers.status_help")}</div>
+                        </div>
+                        <FormControl>
+                          <Switch checked={field.value} onCheckedChange={field.onChange} />
+                        </FormControl>
+                      </FormItem>
+                    )}
+                  />
+
+                  <div className="flex items-center justify-end gap-2">
+                    <Button type="button" variant="outline" onClick={() => setCreateOpen(false)}>
+                      {t("common.cancel")}
+                    </Button>
+                    <Button type="submit" disabled={createMutation.isPending}>
+                      {createMutation.isPending ? t("common.loading") : t("common.save")}
+                    </Button>
+                  </div>
+                </form>
+              </Form>
+            </DialogContent>
+          </Dialog>
         </div>
-        <Button onClick={() => setCreateOpen(true)}>{t("lawyers.add")}</Button>
-      </div>
 
-      <Card>
-        <CardHeader>
-          <CardTitle>{t("lawyers.list")}</CardTitle>
-        </CardHeader>
-        <CardContent className="space-y-4">
-          <Input
-            value={search}
-            onChange={(e) => setSearch(e.target.value)}
-            placeholder={t("lawyers.search_placeholder")}
-          />
+        <div className="flex items-center gap-2">
+          <div className="relative flex-1 max-w-sm">
+            <Search className="absolute left-2.5 top-2.5 h-4 w-4 text-muted-foreground rtl:right-2.5 rtl:left-auto" />
+            <Input
+              value={search}
+              onChange={(e) => setSearch(e.target.value)}
+              placeholder={t("app.search")}
+              className="pl-9 rtl:pr-9 rtl:pl-3"
+              data-testid="input-search"
+            />
+          </div>
+          <Button variant="outline" size="icon" data-testid="button-filter" type="button">
+            <Filter className="h-4 w-4" />
+          </Button>
+        </div>
 
-          {loadingUsers ? (
-            <div className="text-sm text-muted-foreground">{t("common.loading")}</div>
-          ) : !lawyers.length ? (
-            <div className="text-sm text-muted-foreground">{t("lawyers.no_lawyers")}</div>
-          ) : (
-            <Table>
-              <TableHeader>
-                <TableRow>
-                  <TableHead>{t("lawyers.name")}</TableHead>
-                  <TableHead>{t("lawyers.email")}</TableHead>
-                  <TableHead>{t("lawyers.phone")}</TableHead>
-                  <TableHead>{t("lawyers.status")}</TableHead>
-                  <TableHead>{t("lawyers.role")}</TableHead>
-                  <TableHead className="text-right">{t("lawyers.actions")}</TableHead>
-                </TableRow>
-              </TableHeader>
-              <TableBody>
-                {lawyers.map((u: any) => {
+        <div className="rounded-md border bg-card">
+          <Table>
+            <TableHeader>
+              <TableRow>
+                <TableHead>{t("lawyers.name")}</TableHead>
+                <TableHead>{t("lawyers.email")}</TableHead>
+                <TableHead>{t("lawyers.phone")}</TableHead>
+                <TableHead>{t("lawyers.status")}</TableHead>
+                <TableHead>{t("lawyers.role")}</TableHead>
+                <TableHead className="text-right rtl:text-left">{t("app.actions")}</TableHead>
+              </TableRow>
+            </TableHeader>
+            <TableBody>
+              {loadingUsers ? (
+                Array.from({ length: 3 }).map((_, i) => (
+                  <TableRow key={i}>
+                    <TableCell>
+                      <Skeleton className="h-4 w-32" />
+                    </TableCell>
+                    <TableCell>
+                      <Skeleton className="h-4 w-48" />
+                    </TableCell>
+                    <TableCell>
+                      <Skeleton className="h-4 w-28" />
+                    </TableCell>
+                    <TableCell>
+                      <Skeleton className="h-4 w-20" />
+                    </TableCell>
+                    <TableCell>
+                      <Skeleton className="h-4 w-20" />
+                    </TableCell>
+                    <TableCell>
+                      <Skeleton className="h-4 w-10" />
+                    </TableCell>
+                  </TableRow>
+                ))
+              ) : lawyers.length ? (
+                lawyers.map((u: any) => {
                   const active = Boolean(u?.isActive);
                   return (
                     <TableRow key={u.id}>
                       <TableCell>
-                        <button
-                          className="underline"
-                          onClick={() => openReport(u)}
-                          type="button"
-                        >
+                        <button className="underline" onClick={() => openReport(u)} type="button">
                           {u.fullName}
                         </button>
                       </TableCell>
                       <TableCell>{u.email}</TableCell>
-                      <TableCell>{u.phone || "-"}</TableCell>
+                      <TableCell className="text-muted-foreground">{u.phone || "-"}</TableCell>
                       <TableCell>
-                        <div className="flex items-center gap-3">
-                          <Switch
-                            checked={active}
-                            onCheckedChange={(next) =>
-                              updateMutation.mutate({ id: u.id, updates: { isActive: Boolean(next) } })
-                            }
-                          />
-                          <Badge variant={active ? "default" : "secondary"}>
-                            {active ? t("lawyers.active") : t("lawyers.inactive")}
-                          </Badge>
-                        </div>
+                        <Badge variant={active ? "default" : "secondary"}>
+                          {active ? t("lawyers.active") : t("lawyers.inactive")}
+                        </Badge>
                       </TableCell>
                       <TableCell>{u.role}</TableCell>
-                      <TableCell className="text-right">
-                        <Button variant="outline" size="sm" onClick={() => openEdit(u)}>
-                          {t("common.edit")}
-                        </Button>
+                      <TableCell className="text-right rtl:text-left">
+                        <DropdownMenu>
+                          <DropdownMenuTrigger asChild>
+                            <Button variant="ghost" size="icon" data-testid={`button-actions-${u.id}`}>
+                              <MoreHorizontal className="h-4 w-4" />
+                              <span className="sr-only">Actions</span>
+                            </Button>
+                          </DropdownMenuTrigger>
+                          <DropdownMenuContent align="end">
+                            <DropdownMenuLabel>{t("app.actions")}</DropdownMenuLabel>
+                            <DropdownMenuItem onClick={() => openReport(u)}>{t("lawyers.report")}</DropdownMenuItem>
+                            <DropdownMenuItem onClick={() => openEdit(u)}>{t("common.edit")}</DropdownMenuItem>
+                            <DropdownMenuSeparator />
+                            <DropdownMenuItem
+                              onClick={() => updateMutation.mutate({ id: u.id, updates: { isActive: !active } })}
+                              className={active ? "text-destructive" : ""}
+                            >
+                              {active ? t("lawyers.deactivate") : t("lawyers.activate")}
+                            </DropdownMenuItem>
+                          </DropdownMenuContent>
+                        </DropdownMenu>
                       </TableCell>
                     </TableRow>
                   );
-                })}
-              </TableBody>
-            </Table>
-          )}
-        </CardContent>
-      </Card>
-
-      {/* Create Lawyer */}
-      <Dialog open={createOpen} onOpenChange={(v) => setCreateOpen(v)}>
-        <DialogContent className="max-w-lg">
-          <DialogHeader>
-            <DialogTitle>{t("lawyers.add")}</DialogTitle>
-          </DialogHeader>
-
-          <Form {...createForm}>
-            <form
-              onSubmit={createForm.handleSubmit((values) => createMutation.mutate(values))}
-              className="space-y-4"
-            >
-              <FormField
-                control={createForm.control}
-                name="fullName"
-                render={({ field }) => (
-                  <FormItem>
-                    <FormLabel>{t("lawyers.full_name")}</FormLabel>
-                    <FormControl>
-                      <Input {...field} />
-                    </FormControl>
-                    <FormMessage />
-                  </FormItem>
-                )}
-              />
-
-              <FormField
-                control={createForm.control}
-                name="email"
-                render={({ field }) => (
-                  <FormItem>
-                    <FormLabel>{t("lawyers.email")}</FormLabel>
-                    <FormControl>
-                      <Input {...field} />
-                    </FormControl>
-                    <FormMessage />
-                  </FormItem>
-                )}
-              />
-
-              <FormField
-                control={createForm.control}
-                name="username"
-                render={({ field }) => (
-                  <FormItem>
-                    <FormLabel>{t("lawyers.username")}</FormLabel>
-                    <FormControl>
-                      <Input {...field} />
-                    </FormControl>
-                    <FormMessage />
-                  </FormItem>
-                )}
-              />
-
-              <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
-                <FormField
-                  control={createForm.control}
-                  name="password"
-                  render={({ field }) => (
-                    <FormItem>
-                      <FormLabel>{t("lawyers.password")}</FormLabel>
-                      <FormControl>
-                        <Input type="password" {...field} />
-                      </FormControl>
-                      <FormMessage />
-                    </FormItem>
-                  )}
-                />
-
-                <FormField
-                  control={createForm.control}
-                  name="confirmPassword"
-                  render={({ field }) => (
-                    <FormItem>
-                      <FormLabel>{t("lawyers.confirm_password")}</FormLabel>
-                      <FormControl>
-                        <Input type="password" {...field} />
-                      </FormControl>
-                      <FormMessage />
-                    </FormItem>
-                  )}
-                />
-              </div>
-
-              <FormField
-                control={createForm.control}
-                name="isActive"
-                render={({ field }) => (
-                  <FormItem className="flex items-center justify-between rounded-md border p-3">
-                    <div>
-                      <div className="font-medium">{t("lawyers.status")}</div>
-                      <div className="text-sm text-muted-foreground">{t("lawyers.status_help")}</div>
-                    </div>
-                    <FormControl>
-                      <Switch checked={field.value} onCheckedChange={field.onChange} />
-                    </FormControl>
-                  </FormItem>
-                )}
-              />
-
-              <div className="flex items-center justify-end gap-2">
-                <Button type="button" variant="outline" onClick={() => setCreateOpen(false)}>
-                  {t("common.cancel")}
-                </Button>
-                <Button type="submit" disabled={createMutation.isPending}>
-                  {createMutation.isPending ? t("common.loading") : t("common.save")}
-                </Button>
-              </div>
-            </form>
-          </Form>
-        </DialogContent>
-      </Dialog>
+                })
+              ) : (
+                <TableRow>
+                  <TableCell colSpan={6} className="text-center text-muted-foreground py-8">
+                    {t("lawyers.no_lawyers")}
+                  </TableCell>
+                </TableRow>
+              )}
+            </TableBody>
+          </Table>
+        </div>
 
       {/* Edit Lawyer */}
       <Dialog open={editOpen} onOpenChange={(v) => setEditOpen(v)}>
@@ -582,6 +633,8 @@ export default function Lawyers() {
           )}
         </DialogContent>
       </Dialog>
-    </div>
+
+      </div>
+    </Layout>
   );
 }

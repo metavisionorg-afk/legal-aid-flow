@@ -1,5 +1,6 @@
 import { useTranslation } from "react-i18next";
 import { Layout } from "@/components/layout/Layout";
+import { BeneficiaryRegistrationCard } from "@/components/beneficiaries/BeneficiaryRegistrationCard";
 import {
   Table,
   TableBody,
@@ -24,58 +25,19 @@ import { useQuery } from "@tanstack/react-query";
 import { beneficiariesAPI } from "@/lib/api";
 import { Skeleton } from "@/components/ui/skeleton";
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogTrigger } from "@/components/ui/dialog";
-import { Label } from "@/components/ui/label";
-import { useToast } from "@/hooks/use-toast";
-import { useMutation, useQueryClient } from "@tanstack/react-query";
+import { useQueryClient } from "@tanstack/react-query";
 import { useState } from "react";
 
 export default function Beneficiaries() {
   const { t } = useTranslation();
-  const { toast } = useToast();
   const queryClient = useQueryClient();
 
   const [createOpen, setCreateOpen] = useState(false);
-  const [firstName, setFirstName] = useState("");
-  const [lastName, setLastName] = useState("");
-  const [phone, setPhone] = useState("");
-  const [idNumber, setIdNumber] = useState("");
 
   const { data: beneficiaries, isLoading } = useQuery({
     queryKey: ["beneficiaries"],
     queryFn: beneficiariesAPI.getAll,
   });
-
-  const createBeneficiaryMutation = useMutation({
-    mutationFn: beneficiariesAPI.create,
-    onSuccess: async () => {
-      await queryClient.invalidateQueries({ queryKey: ["beneficiaries"] });
-      setFirstName("");
-      setLastName("");
-      setPhone("");
-      setIdNumber("");
-      setCreateOpen(false);
-      toast({ title: t("beneficiaries.created") });
-    },
-    onError: () => {
-      toast({ title: t("beneficiaries.create_failed"), variant: "destructive" });
-    },
-  });
-
-  const handleCreate = () => {
-    const fullName = `${firstName} ${lastName}`.trim();
-    if (!fullName || !phone.trim() || !idNumber.trim()) {
-      toast({ title: t("common.error"), variant: "destructive" });
-      return;
-    }
-
-    createBeneficiaryMutation.mutate({
-      fullName,
-      phone: phone.trim(),
-      idNumber: idNumber.trim(),
-      status: "active",
-      attachments: [],
-    });
-  };
 
   return (
     <Layout>
@@ -93,32 +55,15 @@ export default function Beneficiaries() {
               <DialogTitle>{t("beneficiaries.add_title")}</DialogTitle>
             </DialogHeader>
 
-            <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-              <div className="space-y-2">
-                <Label>{t("beneficiaries.first_name")}</Label>
-                <Input value={firstName} onChange={(e) => setFirstName(e.target.value)} />
-              </div>
-              <div className="space-y-2">
-                <Label>{t("beneficiaries.last_name")}</Label>
-                <Input value={lastName} onChange={(e) => setLastName(e.target.value)} />
-              </div>
-              <div className="space-y-2">
-                <Label>{t("beneficiaries.phone")}</Label>
-                <Input value={phone} onChange={(e) => setPhone(e.target.value)} />
-              </div>
-              <div className="space-y-2">
-                <Label>{t("beneficiaries.national_id")}</Label>
-                <Input value={idNumber} onChange={(e) => setIdNumber(e.target.value)} />
-              </div>
-            </div>
-
-            <div className="flex items-center justify-end gap-2">
-              <Button variant="outline" onClick={() => setCreateOpen(false)}>
-                {t("beneficiaries.cancel")}
-              </Button>
-              <Button onClick={handleCreate} disabled={createBeneficiaryMutation.isPending}>
-                {createBeneficiaryMutation.isPending ? t("common.loading") : t("beneficiaries.create")}
-              </Button>
+            <div className="flex justify-center">
+              <BeneficiaryRegistrationCard
+                mode="staff"
+                onCancel={() => setCreateOpen(false)}
+                onSuccess={async () => {
+                  await queryClient.invalidateQueries({ queryKey: ["beneficiaries"] });
+                  setCreateOpen(false);
+                }}
+              />
             </div>
           </DialogContent>
         </Dialog>

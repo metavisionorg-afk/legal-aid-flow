@@ -13,7 +13,13 @@ export function serveStatic(app: Express) {
   app.use(express.static(distPath));
 
   // fall through to index.html if the file doesn't exist
-  app.use("*", (_req, res) => {
+  app.use("*", (req, res, next) => {
+    // Never serve the SPA shell for API/upload paths.
+    // If an API route is missing, callers should get a 404 (not HTML 200).
+    if (req.path.startsWith("/api") || req.path.startsWith("/uploads")) {
+      return next();
+    }
+
     res.sendFile(path.resolve(distPath, "index.html"));
   });
 }

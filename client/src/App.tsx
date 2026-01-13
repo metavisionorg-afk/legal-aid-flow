@@ -1,7 +1,8 @@
 import React, { useEffect } from "react";
 import { useLocation, Switch, Route } from "wouter";
 import { QueryClientProvider } from "@tanstack/react-query";
-import { Toaster } from "@/components/ui/sonner";
+import { Toaster as SonnerToaster } from "@/components/ui/sonner";
+import { Toaster as ShadcnToaster } from "@/components/ui/toaster";
 import { TooltipProvider } from "@/components/ui/tooltip";
 import { AuthProvider, useAuth } from "@/contexts/AuthContext";
 import { RequireRole } from "@/components/auth/RequireRole";
@@ -28,6 +29,7 @@ import Sessions from "@/pages/Sessions";
 import Settings from "@/pages/Settings";
 import DocumentsLibrary from "@/pages/DocumentsLibrary";
 import JudicialServices from "@/pages/JudicialServices";
+import JudicialServicesSettings from "@/pages/JudicialServicesSettings";
 import RegisterBeneficiary from "@/pages/RegisterBeneficiary";
 import BeneficiaryRegister from "@/pages/BeneficiaryRegister";
 import Login from "@/pages/Login";
@@ -206,6 +208,17 @@ function Router() {
           />
         )}
       </Route>
+      <Route path="/judicial-services/settings">
+        {() => (
+          <StaffRoute
+            component={() => (
+              <RequireRole role={["admin", "super_admin"]}>
+                <JudicialServicesSettings />
+              </RequireRole>
+            )}
+          />
+        )}
+      </Route>
       <Route path="/intake">
         {() => <StaffRoute component={Intake} />}
       </Route>
@@ -330,7 +343,8 @@ function App() {
     <QueryClientProvider client={queryClient}>
       <AuthProvider>
         <TooltipProvider>
-          <Toaster />
+          <SonnerToaster />
+          <ShadcnToaster />
           <Router />
         </TooltipProvider>
       </AuthProvider>

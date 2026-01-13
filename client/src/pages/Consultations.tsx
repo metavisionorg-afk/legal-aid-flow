@@ -28,36 +28,65 @@ import {
 } from "@/components/ui/table";
 import { Skeleton } from "@/components/ui/skeleton";
 
-import { beneficiariesAPI, serviceRequestsAPI } from "@/lib/api";
+import { beneficiariesAPI, serviceRequestsAPI, serviceTypesAPI } from "@/lib/api";
 import { getErrorMessage } from "@/lib/errors";
 import { toast } from "sonner";
 import { useAuth } from "@/contexts/AuthContext";
 import { isAdmin, isBeneficiary, isLawyer } from "@/lib/authz";
 import Forbidden from "@/pages/Forbidden";
 
-const SERVICE_TYPES = [
-  "legal_consultation",
-  "court_representation",
-  "contract_drafting_review",
-  "complaint_drafting",
-  "other",
-] as const;
+type ActiveServiceTypeRow = {
+  key: string;
+  nameAr: string;
+  nameEn: string | null;
+};
 
 const STATUSES = ["new", "in_review", "accepted", "rejected"] as const;
 
 export default function Consultations() {
-  const { t } = useTranslation();
+  const { t, i18n } = useTranslation();
   const queryClient = useQueryClient();
   const { user, loading } = useAuth();
   const [path, setLocation] = useLocation();
 
-  const serviceTypeLabel = (value: string) => t(`service_types.${value}`, value);
+  const displayServiceTypeName = (row: ActiveServiceTypeRow) => {
+    const lang = (i18n.language || "en").toLowerCase();
+    const isArabic = lang.startsWith("ar");
+    if (isArabic) return row.nameAr || row.nameEn || row.key;
+    return row.nameEn || row.nameAr || row.key;
+  };
   const statusLabel = (value: string) => t(`serviceRequests.statuses.${value}`, value);
 
   const isReady = !loading;
   const isAuthed = Boolean(user);
   const allowed = Boolean(user) && (isBeneficiary(user) || isAdmin(user) || isLawyer(user));
   const isBen = Boolean(user) && isBeneficiary(user);
+
+  const { data: activeServiceTypes } = useQuery({
+    queryKey: ["settings", "service-types", "active"],
+    queryFn: async () => (await serviceTypesAPI.listActive()) as any[],
+    enabled: isReady && isAuthed,
+  });
+
+  const serviceTypesByKey = useMemo(() => {
+    const map = new Map<string, ActiveServiceTypeRow>();
+    (activeServiceTypes || []).forEach((st: any) => {
+      const key = String(st?.key || "").trim();
+      if (!key) return;
+      map.set(key, {
+        key,
+        nameAr: String(st?.nameAr || ""),
+        nameEn: st?.nameEn != null ? String(st?.nameEn) : null,
+      });
+    });
+    return map;
+  }, [activeServiceTypes]);
+
+  const serviceTypeLabel = (value: string) => {
+    const st = serviceTypesByKey.get(String(value));
+    if (st) return displayServiceTypeName(st);
+    return t(`service_types.${value}`, value);
+  };
 
   useEffect(() => {
     if (!isReady) return;
@@ -95,11 +124,20 @@ export default function Consultations() {
     return map;
   }, [beneficiaries]);
 
-  const [serviceType, setServiceType] = useState<(typeof SERVICE_TYPES)[number]>("legal_consultation");
+  const [serviceType, setServiceType] = useState<string>("legal_consultation");
   const [serviceTypeOther, setServiceTypeOther] = useState<string>("");
   const [issueSummary, setIssueSummary] = useState<string>("");
   const [issueDetails, setIssueDetails] = useState<string>("");
   const [urgent, setUrgent] = useState<boolean>(false);
+
+  // Prefer the first active service type once loaded.
+  useEffect(() => {
+    if (!isBen) return;
+    if (!Array.isArray(activeServiceTypes) || !activeServiceTypes.length) return;
+    if (serviceTypesByKey.has(serviceType)) return;
+    const firstKey = String((activeServiceTypes[0] as any)?.key || "").trim();
+    if (firstKey) setServiceType(firstKey);
+  }, [activeServiceTypes, isBen, serviceType, serviceTypesByKey]);
 
   const createRequestMutation = useMutation({
     mutationFn: serviceRequestsAPI.create,
@@ -182,11 +220,15 @@ export default function Consultations() {
                   <SelectValue />
                 </SelectTrigger>
                 <SelectContent>
-                  {SERVICE_TYPES.map((s) => (
-                    <SelectItem key={s} value={s}>
-                      {serviceTypeLabel(s)}
-                    </SelectItem>
-                  ))}
+                  {(activeServiceTypes || []).map((st: any) => {
+                    const key = String(st?.key || "").trim();
+                    if (!key) return null;
+                    return (
+                      <SelectItem key={key} value={key}>
+                        {serviceTypeLabel(key)}
+                      </SelectItem>
+                    );
+                  })}
                 </SelectContent>
               </Select>
             </div>

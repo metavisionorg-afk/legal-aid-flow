@@ -38,11 +38,21 @@ export function Sidebar() {
     [location],
   );
 
+  const shouldOpenJudicialServicesGroup = useMemo(
+    () => Boolean(location.startsWith("/judicial-services")),
+    [location],
+  );
+
   const [casesGroupOpen, setCasesGroupOpen] = useState<boolean>(shouldOpenCasesGroup);
+  const [judicialServicesGroupOpen, setJudicialServicesGroupOpen] = useState<boolean>(shouldOpenJudicialServicesGroup);
 
   useEffect(() => {
     if (shouldOpenCasesGroup) setCasesGroupOpen(true);
   }, [shouldOpenCasesGroup]);
+
+  useEffect(() => {
+    if (shouldOpenJudicialServicesGroup) setJudicialServicesGroupOpen(true);
+  }, [shouldOpenJudicialServicesGroup]);
 
   const lawyerNavItems = [
     { icon: LayoutDashboard, label: t("lawyer.dashboard"), href: "/lawyer/dashboard" },
@@ -66,7 +76,10 @@ export function Sidebar() {
   const caseTypesActive = Boolean(location === "/case-types" || location.startsWith("/case-types/"));
   const poaActive = Boolean(location === "/power-of-attorney" || location.startsWith("/power-of-attorney/"));
   const documentsLibraryActive = Boolean(location === "/documents-library" || location.startsWith("/documents-library/"));
-  const judicialServicesActive = Boolean(location === "/judicial-services" || location.startsWith("/judicial-services/"));
+  const judicialServicesListActive = Boolean(location === "/judicial-services" || location === "/judicial-services/");
+  const judicialServicesSettingsActive = Boolean(
+    location === "/judicial-services/settings" || location.startsWith("/judicial-services/settings"),
+  );
 
   return (
     <div className="h-full w-64 border-r bg-sidebar flex flex-col">
@@ -195,19 +208,60 @@ export function Sidebar() {
         ) : null}
 
         {user?.userType === "staff" && isAdmin ? (
-          <Link href="/judicial-services">
-            <div
-              className={cn(
-                "w-full flex items-center gap-3 px-3 py-2 rounded-md text-sm font-medium transition-colors",
-                judicialServicesActive
-                  ? "bg-sidebar-accent text-sidebar-accent-foreground"
-                  : "text-sidebar-foreground/70 hover:bg-sidebar-accent/50 hover:text-sidebar-foreground",
-              )}
-            >
-              <Gavel className="h-4 w-4 rtl:ml-2 rtl:mr-0" />
-              {t("sidebar.judicialServices")}
-            </div>
-          </Link>
+          <Collapsible open={judicialServicesGroupOpen} onOpenChange={setJudicialServicesGroupOpen}>
+            <CollapsibleTrigger asChild>
+              <button
+                type="button"
+                className={cn(
+                  "w-full flex items-center justify-between gap-3 px-3 py-2 rounded-md text-sm font-medium transition-colors",
+                  shouldOpenJudicialServicesGroup
+                    ? "bg-sidebar-accent/50 text-sidebar-foreground"
+                    : "text-sidebar-foreground/70 hover:bg-sidebar-accent/50 hover:text-sidebar-foreground",
+                )}
+              >
+                <span className="flex items-center gap-3">
+                  <Gavel className="h-4 w-4 rtl:ml-2 rtl:mr-0" />
+                  {t("sidebar.judicialServices")}
+                </span>
+                <ChevronDown
+                  className={cn(
+                    "h-4 w-4 transition-transform",
+                    judicialServicesGroupOpen ? "rotate-180" : "rotate-0",
+                  )}
+                />
+              </button>
+            </CollapsibleTrigger>
+
+            <CollapsibleContent>
+              <div className="mt-1 space-y-1 pl-7 rtl:pr-7 rtl:pl-0">
+                <Link href="/judicial-services">
+                  <div
+                    className={cn(
+                      "flex items-center gap-3 px-3 py-2 rounded-md text-sm font-medium transition-colors cursor-pointer",
+                      judicialServicesListActive
+                        ? "bg-sidebar-accent text-sidebar-accent-foreground"
+                        : "text-sidebar-foreground/70 hover:bg-sidebar-accent/50 hover:text-sidebar-foreground",
+                    )}
+                  >
+                    {t("sidebar.judicialServices")}
+                  </div>
+                </Link>
+
+                <Link href="/judicial-services/settings">
+                  <div
+                    className={cn(
+                      "flex items-center gap-3 px-3 py-2 rounded-md text-sm font-medium transition-colors cursor-pointer",
+                      judicialServicesSettingsActive
+                        ? "bg-sidebar-accent text-sidebar-accent-foreground"
+                        : "text-sidebar-foreground/70 hover:bg-sidebar-accent/50 hover:text-sidebar-foreground",
+                    )}
+                  >
+                    {t("sidebar.judicialServicesSettings")}
+                  </div>
+                </Link>
+              </div>
+            </CollapsibleContent>
+          </Collapsible>
         ) : null}
 
         {navItems.map((item) => (

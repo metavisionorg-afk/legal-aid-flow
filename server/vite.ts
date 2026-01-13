@@ -36,6 +36,12 @@ export async function setupVite(server: Server, app: Express) {
   app.use(vite.middlewares);
 
   app.use("*", async (req, res, next) => {
+    // Never serve the SPA shell for API/upload paths.
+    // If an API route is missing, callers should get a 404 (not HTML 200).
+    if (req.path.startsWith("/api") || req.path.startsWith("/uploads")) {
+      return next();
+    }
+
     const url = req.originalUrl;
 
     try {

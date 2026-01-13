@@ -90,14 +90,14 @@ export const documentVisibilityEnum = pgEnum("document_visibility", ["INTERNAL",
 
 export const serviceTypes = pgTable("service_types", {
   id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
+  // Stable key used by client forms (must match allowed service type enum values)
+  key: text("key").notNull(),
   nameAr: text("name_ar").notNull(),
   nameEn: text("name_en"),
   isActive: boolean("is_active").notNull().default(true),
 });
 
-export const insertServiceTypeSchema = createInsertSchema(serviceTypes).omit({
-  id: true,
-});
+export const insertServiceTypeSchema = createInsertSchema(serviceTypes);
 export type InsertServiceType = z.infer<typeof insertServiceTypeSchema>;
 export type ServiceType = typeof serviceTypes.$inferSelect;
 

@@ -17,7 +17,8 @@
           "description": "الوصف",
           "attachments": "المرفقات",
           "attachmentsHint": "يمكنك رفع عدة ملفات وإزالة أي ملف قبل الحفظ.",
-          "notifyBeneficiary": "إرسال إشعار للمستفيد",
+          "judicialServices": "الخدمات القضائية",
+          "judicialServicesSettings": "إعداد الخدمات القضائية",
           "showInPortal": "إظهار في بوابة المستفيد",
           "submit": "حفظ المهمة",
           "uploading": "جاري رفع الملفات...",
@@ -59,7 +60,8 @@
     },
     "sidebar": {
       "documentsLibrary": "مكتبة المستندات",
-      "judicialServices": "الخدمات القضائية"
+      "judicialServices": "الخدمات القضائية",
+      "judicialServicesSettings": "إعداد الخدمات القضائية"
     },
 
     "judicial_services": {
@@ -344,6 +346,50 @@
     "representation": "تمثيل/توكيل",
     "mediation": "صلح/وساطة",
     "other": "أخرى"
+  },
+  "settings_service_types": {
+    "title": "أنواع الخدمات",
+    "subtitle": "إدارة أنواع طلبات الخدمة الظاهرة في النماذج",
+    "table": { "title": "أنواع الخدمات" },
+    "fields": {
+      "key": "المفتاح",
+      "name_ar": "الاسم بالعربية",
+      "name_en": "الاسم بالإنجليزية",
+      "active": "نشط"
+    },
+    "actions": { "add": "إضافة", "edit": "تعديل", "delete": "حذف" },
+    "dialog": { "add_title": "إضافة نوع خدمة", "edit_title": "تعديل نوع خدمة" },
+    "hints": {
+      "key": "يجب أن يطابق مفتاح نوع خدمة مسموح (مثال: legal_consultation)."
+    },
+    "errors": { "name_ar_required": "الاسم بالعربية مطلوب", "key_required": "المفتاح مطلوب" },
+    "toasts": { "created": "تم إنشاء نوع الخدمة", "updated": "تم تحديث نوع الخدمة", "deleted": "تم حذف نوع الخدمة" },
+    "empty": "لا توجد أنواع خدمات"
+  },
+  "settings_judicial_service_types": {
+    "title": "أنواع الخدمات القضائية",
+    "subtitle": "إدارة أنواع الخدمات القضائية في النظام",
+    "table": { "title": "أنواع الخدمات القضائية" },
+    "fields": {
+      "name_ar": "الاسم بالعربية",
+      "name_en": "الاسم بالإنجليزية",
+      "sort_order": "الترتيب",
+      "active": "نشط",
+      "services_count": "عدد الخدمات"
+    },
+    "actions": { "add": "إضافة", "edit": "تعديل", "delete": "حذف" },
+    "dialog": { "add_title": "إضافة نوع خدمة قضائية", "edit_title": "تعديل نوع خدمة قضائية" },
+    "errors": { 
+      "name_ar_required": "الاسم بالعربية مطلوب",
+      "linked": "لا يمكن حذف النوع: يوجد خدمات قضائية مرتبطة به"
+    },
+    "toasts": { 
+      "created": "تم إنشاء نوع الخدمة القضائية", 
+      "updated": "تم تحديث نوع الخدمة القضائية", 
+      "deleted": "تم حذف نوع الخدمة القضائية" 
+    },
+    "empty": "لا توجد أنواع خدمات قضائية",
+    "confirm_delete": "هل أنت متأكد من حذف نوع الخدمة القضائية هذا؟"
   },
   "beneficiary_portal": {
     "title": "بوابة المستفيد",
@@ -806,6 +852,7 @@
     "general": "عام",
     "roles": "الأدوار",
     "audit": "سجل التدقيق",
+    "service_types": "أنواع الخدمات",
     "org_profile": "ملف المنظمة",
     "org_profile_desc": "إدارة تفاصيل المنظمة",
     "logo_url": "رابط الشعار",

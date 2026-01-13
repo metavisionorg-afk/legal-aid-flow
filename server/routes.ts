@@ -915,6 +915,7 @@ export async function registerRoutes(
       try {
         const parsed = z
           .object({
+            key: z.string().trim().min(1).optional(),
             nameAr: z.string().trim().min(1),
             nameEn: z.string().trim().optional().nullable(),
           })
@@ -924,11 +925,49 @@ export async function registerRoutes(
           return res.status(400).json({ error: fromZodError(parsed.error).message });
         }
 
-        const created = await storage.createServiceType({
-          nameAr: parsed.data.nameAr,
-          nameEn: parsed.data.nameEn ?? null,
-          isActive: true,
-        } as any);
+        const makeBaseKey = (nameAr: string) => {
+          const cleaned = nameAr
+            .trim()
+            .toLowerCase()
+            // Keep ASCII letters/numbers/underscore; normalize separators.
+            .replace(/[^a-z0-9]+/g, "_")
+            .replace(/^_+|_+$/g, "")
+            .slice(0, 40);
+
+          return cleaned || `service_${Date.now()}`;
+        };
+
+        // If caller provided a key, trust it (still must be unique in DB).
+        // Otherwise generate one and retry on collision.
+        const requestedKey = parsed.data.key?.trim();
+        const baseKey = requestedKey || makeBaseKey(parsed.data.nameAr);
+
+        let created: any = null;
+        const maxAttempts = 5;
+        for (let attempt = 0; attempt < maxAttempts; attempt++) {
+          const suffix = attempt === 0 ? "" : `_${Math.random().toString(36).slice(2, 7)}`;
+          const key = requestedKey || `${baseKey}${suffix}`;
+          try {
+            created = await storage.createServiceType({
+              key,
+              nameAr: parsed.data.nameAr,
+              nameEn: parsed.data.nameEn ?? null,
+              isActive: true,
+            } as any);
+            break;
+          } catch (e: any) {
+            const msg = getErrorMessage(e);
+            // Unique violation; retry if we generated the key.
+            if (!requestedKey && /duplicate key value|unique constraint/i.test(msg)) {
+              continue;
+            }
+            throw e;
+          }
+        }
+
+        if (!created) {
+          return res.status(409).json({ error: "Could not generate a unique key" });
+        }
 
         await createAudit(req.session.userId!, "create", "service_type", created.id, `Created service type: ${created.nameAr}`);
         return res.status(201).json(created);
@@ -5228,6 +5267,14 @@ export async function registerRoutes(
       }
     },
   );
+
+  // ====== API fallback ======
+  // If an API route is missing/mistyped, return JSON (not the SPA shell).
+  // This prevents clients from trying to JSON-parse HTML.
+  app.use("/api", (req, res) => {
+    if (res.headersSent) return;
+    res.status(404).json({ error: "Not found" });
+  });
 
   return httpServer;
 }

@@ -21,6 +21,8 @@ async function fetchAPI(endpoint: string, options?: RequestInit) {
     credentials: "include",
   });
 
+  const contentType = (res.headers.get("content-type") || "").toLowerCase();
+
   if (!res.ok) {
     const contentType = res.headers.get("content-type") || "";
     const data = contentType.includes("application/json")
@@ -30,6 +32,23 @@ async function fetchAPI(endpoint: string, options?: RequestInit) {
 
     const error: any = new Error(message);
     error.response = { status: res.status, statusText: res.statusText, data };
+    throw error;
+  }
+
+  // Some endpoints may intentionally return no body.
+  if (res.status === 204) return null;
+
+  // Guardrail: if we got HTML (often the SPA index.html), don't try to JSON-parse it.
+  if (!contentType.includes("application/json")) {
+    const text = await res.text().catch(() => "");
+    const sample = text ? text.slice(0, 200) : "";
+    const hint =
+      contentType.includes("text/html") || sample.includes("<!DOCTYPE") || sample.includes("<html")
+        ? "The server returned HTML (likely the SPA shell). Check that the API route exists and that you're running the Express server (not only the Vite client)."
+        : `Unexpected content-type: ${contentType || "(none)"}`;
+
+    const error: any = new Error(hint);
+    error.response = { status: res.status, statusText: res.statusText, data: sample || text };
     throw error;
   }
 
@@ -625,6 +644,30 @@ export const judicialServiceTypesAPI = {
       body: JSON.stringify({ isActive }),
     }),
   delete: (id: string) => fetchAPI(`/judicial-service-types/${id}`, { method: "DELETE" }),
+};
+
+// Service Types Settings API (Staff/admin management + active list for authenticated users)
+export const serviceTypesAPI = {
+  listAll: () => fetchAPI("/settings/service-types"),
+  listActive: () => fetchAPI("/settings/service-types/active"),
+  create: (data: { key?: string; nameAr: string; nameEn?: string | null }) =>
+    fetchAPI("/settings/service-types", {
+      method: "POST",
+      body: JSON.stringify(data),
+    }),
+  update: (id: string, data: { nameAr?: string; nameEn?: string | null }) =>
+    fetchAPI(`/settings/service-types/${id}`,
+      {
+        method: "PATCH",
+        body: JSON.stringify(data),
+      }
+    ),
+  toggle: (id: string, isActive: boolean) =>
+    fetchAPI(`/settings/service-types/${id}/toggle`, {
+      method: "PATCH",
+      body: JSON.stringify({ isActive }),
+    }),
+  delete: (id: string) => fetchAPI(`/settings/service-types/${id}`, { method: "DELETE" }),
 };
 
 // Judicial Services API (Staff + Beneficiary)

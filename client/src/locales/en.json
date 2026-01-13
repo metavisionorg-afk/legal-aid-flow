@@ -17,7 +17,8 @@
           "description": "Description",
           "attachments": "Attachments",
           "attachmentsHint": "You can upload multiple files and remove any before saving.",
-          "notifyBeneficiary": "Notify beneficiary",
+          "judicialServices": "Judicial Services",
+          "judicialServicesSettings": "Judicial Services Settings",
           "showInPortal": "Show in beneficiary portal",
           "submit": "Save task",
           "uploading": "Uploading files...",
@@ -59,7 +60,8 @@
     },
     "sidebar": {
       "documentsLibrary": "Documents Library",
-      "judicialServices": "Judicial Services"
+      "judicialServices": "Judicial Services",
+      "judicialServicesSettings": "Judicial Services Settings"
     },
     "poa": {
       "subtitle": "Manage powers of attorney and their attachments.",
@@ -300,6 +302,50 @@
     "representation": "Representation",
     "mediation": "Mediation",
     "other": "Other"
+  },
+  "settings_service_types": {
+    "title": "Service types",
+    "subtitle": "Manage service request types shown in forms",
+    "table": { "title": "Service types" },
+    "fields": {
+      "key": "Key",
+      "name_ar": "Arabic name",
+      "name_en": "English name",
+      "active": "Active"
+    },
+    "actions": { "add": "Add", "edit": "Edit", "delete": "Delete" },
+    "dialog": { "add_title": "Add service type", "edit_title": "Edit service type" },
+    "hints": {
+      "key": "Must match an allowed service type key (e.g., legal_consultation)."
+    },
+    "errors": { "name_ar_required": "Arabic name is required", "key_required": "Key is required" },
+    "toasts": { "created": "Service type created", "updated": "Service type updated", "deleted": "Service type deleted" },
+    "empty": "No service types found"
+  },
+  "settings_judicial_service_types": {
+    "title": "Judicial Service Types",
+    "subtitle": "Manage judicial service types for the system",
+    "table": { "title": "Judicial Service Types" },
+    "fields": {
+      "name_ar": "Arabic Name",
+      "name_en": "English Name",
+      "sort_order": "Sort Order",
+      "active": "Active",
+      "services_count": "Services Count"
+    },
+    "actions": { "add": "Add", "edit": "Edit", "delete": "Delete" },
+    "dialog": { "add_title": "Add Judicial Service Type", "edit_title": "Edit Judicial Service Type" },
+    "errors": { 
+      "name_ar_required": "Arabic name is required",
+      "linked": "Cannot delete: this service type is linked to existing services"
+    },
+    "toasts": { 
+      "created": "Judicial service type created", 
+      "updated": "Judicial service type updated", 
+      "deleted": "Judicial service type deleted" 
+    },
+    "empty": "No judicial service types found",
+    "confirm_delete": "Are you sure you want to delete this judicial service type?"
   },
   "beneficiary_portal": {
     "title": "Beneficiary Portal",
@@ -723,6 +769,7 @@
   },
   "settings": {
     "general": "General",
+    "service_types": "Service Types",
     "location": "Location",
     "duration_minutes": "Duration (minutes)",
     "validation": {

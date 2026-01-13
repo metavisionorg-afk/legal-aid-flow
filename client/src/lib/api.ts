@@ -61,7 +61,8 @@ async function fetchUpload(file: File) {
     body: file,
     headers: {
       "Content-Type": file.type || "application/octet-stream",
-      "x-file-name": file.name,
+      // Header values must be ASCII-safe in browsers; encode to support Arabic/Unicode names.
+      "x-file-name": encodeURIComponent(file.name),
     },
     credentials: "include",
   });

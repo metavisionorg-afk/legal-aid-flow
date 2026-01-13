@@ -12,12 +12,13 @@ import {
   FilePlus,
   LogOut
 } from "lucide-react";
-import { authAPI } from "@/lib/api";
 import { NotificationsBell } from "@/components/layout/NotificationsBell";
+import { useAuth } from "@/contexts/AuthContext";
 
 export function PortalLayout({ children }: { children: ReactNode }) {
-  const [location] = useLocation();
+  const [location, setLocation] = useLocation();
   const { t } = useTranslation();
+  const { logout } = useAuth();
 
   const navItems = [
     { icon: LayoutDashboard, label: t('app.dashboard'), href: "/portal" },
@@ -62,8 +63,11 @@ export function PortalLayout({ children }: { children: ReactNode }) {
           <div 
             className="flex items-center gap-3 px-3 py-2 rounded-md text-sm font-medium text-sidebar-foreground/70 hover:bg-sidebar-accent/50 hover:text-sidebar-foreground transition-colors cursor-pointer"
             onClick={async () => {
-              await authAPI.logout();
-              window.location.href = "/portal/login";
+              try {
+                await logout();
+              } finally {
+                setLocation("/login", { replace: true });
+              }
             }}
           >
             <LogOut className="h-4 w-4 rtl:ml-2 rtl:mr-0" />

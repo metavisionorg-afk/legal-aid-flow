@@ -14,15 +14,10 @@ export default function Forbidden({ redirectTo = "/portal" }: Props) {
 
   const handleGoToPortal = () => {
     const primary = redirectTo || "/portal";
-    try {
-      if (import.meta.env.DEV) {
-        console.debug("[auth] Forbidden: navigate", { to: primary });
-      }
-      setLocation(primary, { replace: true });
-    } catch {
-      // Fallback to hard navigation (still no /login redirects).
-      window.location.replace(primary);
+    if (import.meta.env.DEV) {
+      console.debug("[auth] Forbidden: navigate", { to: primary });
     }
+    setLocation(primary, { replace: true });
   };
 
   return (

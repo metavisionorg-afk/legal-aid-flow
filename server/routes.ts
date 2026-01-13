@@ -395,8 +395,32 @@ export async function registerRoutes(
       }
 
       const fileNameHeader = req.headers["x-file-name"];
-      const originalFileName = typeof fileNameHeader === "string" && fileNameHeader.trim() ? fileNameHeader.trim() : "upload";
-      const fileName = originalFileName.replace(/[^a-zA-Z0-9._-]/g, "_").slice(0, 120);
+
+      const decodePossiblyEncodedHeader = (value: string): string => {
+        // Client sends encodeURIComponent(file.name) to ensure headers are ASCII-safe.
+        // But older clients/scripts may send a raw name; decode only if safe.
+        const trimmed = value.trim();
+        try {
+          return decodeURIComponent(trimmed);
+        } catch {
+          return trimmed;
+        }
+      };
+
+      const sanitizeFileName = (value: string): string => {
+        // Keep Unicode letters/numbers for display, but strip path separators and control chars.
+        // Storage uses a random UUID key, so this is only metadata.
+        const noPath = value.replace(/[\\/]+/g, "_");
+        const noControls = noPath.replace(/[\u0000-\u001F\u007F]/g, "");
+        const collapsed = noControls.replace(/\s+/g, " ").trim();
+        return (collapsed || "upload").slice(0, 120);
+      };
+
+      const originalFileNameRaw =
+        typeof fileNameHeader === "string" && fileNameHeader.trim()
+          ? decodePossiblyEncodedHeader(fileNameHeader)
+          : "upload";
+      const fileName = sanitizeFileName(originalFileNameRaw);
 
       const ext =
         mimeType === "application/pdf"

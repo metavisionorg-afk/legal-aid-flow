@@ -25,10 +25,10 @@ export default function Login() {
         return;
       }
       if ((user as any)?.userType === "beneficiary") {
-        setLocation("/beneficiary/portal");
+        setLocation("/portal");
         return;
       }
-      setLocation("/");
+      setLocation("/dashboard");
     }
   }, [user, setLocation]);
 
@@ -69,10 +69,8 @@ export default function Login() {
           <div className="w-12 h-12 bg-primary rounded-lg mx-auto mb-4 flex items-center justify-center">
             <span className="text-primary-foreground font-bold text-2xl">A</span>
           </div>
-          <CardTitle className="text-2xl font-bold">{t('app.welcome_back')}</CardTitle>
-          <CardDescription>
-            {t('app.enter_credentials')}
-          </CardDescription>
+          <CardTitle className="text-2xl font-bold">الدخول إلى بوابة عدالة التقنية</CardTitle>
+          <CardDescription>يرجى إدخال بيانات الدخول للمتابعة</CardDescription>
         </CardHeader>
         <form onSubmit={handleLogin}>
           <CardContent className="space-y-4">
@@ -117,7 +115,7 @@ export default function Login() {
                 type="button"
                 variant="secondary"
                 className="w-full"
-                onClick={() => setLocation("/register")}
+                onClick={() => setLocation("/beneficiary/register")}
                 data-testid="button-create-account"
               >
                 {t("portal.create_new_account")}

@@ -54,6 +54,16 @@ function FullPageSpinner() {
   );
 }
 
+function RedirectToLogin() {
+  const [, setLocation] = useLocation();
+
+  useEffect(() => {
+    setLocation("/login", { replace: true });
+  }, [setLocation]);
+
+  return <FullPageSpinner />;
+}
+
 // Landing behavior:
 // - Not logged in => always go to beneficiary portal entry.
 // - Beneficiary => portal.
@@ -67,7 +77,7 @@ function RootRedirect() {
 
     if (!user) {
       if (import.meta.env.DEV) console.debug("[auth] guest -> /portal (root)");
-      setLocation("/portal", { replace: true });
+      setLocation("/login", { replace: true });
       return;
     }
 
@@ -99,7 +109,11 @@ function PortalIndex() {
 
   useEffect(() => {
     if (loading) return;
-    if (!user) return;
+    if (!user) {
+      if (import.meta.env.DEV) console.debug("[auth] guest -> /login (portal index)");
+      setLocation("/login", { replace: true });
+      return;
+    }
     if (user.userType !== "beneficiary") {
       if (import.meta.env.DEV) console.debug("[auth] staff tried /portal -> /dashboard");
       setLocation("/dashboard", { replace: true });
@@ -107,7 +121,7 @@ function PortalIndex() {
   }, [loading, user, setLocation]);
 
   if (loading) return <FullPageSpinner />;
-  if (!user) return <PortalLogin />;
+  if (!user) return null;
   if (user.userType !== "beneficiary") return null;
 
   return (
@@ -126,8 +140,8 @@ function StaffRoute({ component: Component }: any) {
   }
 
   if (!user) {
-    if (import.meta.env.DEV) console.debug("[auth] guest -> /portal (staff route)");
-    setLocation("/portal", { replace: true });
+    if (import.meta.env.DEV) console.debug("[auth] guest -> /login (staff route)");
+    setLocation("/login", { replace: true });
     return null;
   }
 
@@ -154,8 +168,8 @@ function PortalRoute({ component: Component }: any) {
   }
 
   if (!user) {
-    if (import.meta.env.DEV) console.debug("[auth] guest -> /portal (portal route)", { path: location });
-    setLocation("/portal", { replace: true });
+    if (import.meta.env.DEV) console.debug("[auth] guest -> /login (portal route)", { path: location });
+    setLocation("/login", { replace: true });
     return null;
   }
 
@@ -182,6 +196,7 @@ function Router() {
 
       {/* Staff Routes */}
       <Route path="/login" component={Login} />
+      <Route path="/portal/login" component={RedirectToLogin} />
       <Route path="/dashboard">{() => <StaffRoute component={Dashboard} />}</Route>
       <Route path="/">{() => <RootRedirect />}</Route>
       <Route path="/documents-library">
@@ -305,7 +320,6 @@ function Router() {
       </Route>
       
       {/* Portal Routes */}
-      <Route path="/portal/login" component={PortalLogin} />
       <Route path="/portal/register" component={PortalRegister} />
       <Route path="/beneficiary/portal">
         {() => <PortalRoute component={BeneficiaryPortal} />}

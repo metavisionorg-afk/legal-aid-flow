@@ -63,7 +63,7 @@ export default function PortalTasks() {
         <CardHeader className="flex flex-row items-center justify-between">
           <CardTitle>{t("portal.my_tasks")}</CardTitle>
           <Button variant="outline" onClick={() => refetch()}>
-            {t("common.refresh") ?? "Refresh"}
+            {t("common.refresh")}
           </Button>
         </CardHeader>
         <CardContent>
@@ -81,7 +81,7 @@ export default function PortalTasks() {
             <Table>
               <TableHeader>
                 <TableRow>
-                  <TableHead>Title</TableHead>
+                  <TableHead>{t("portal_tasks.table.title")}</TableHead>
                   <TableHead>{t("app.status")}</TableHead>
                   <TableHead>{t("app.priority")}</TableHead>
                   <TableHead>{t("app.date")}</TableHead>
@@ -100,7 +100,7 @@ export default function PortalTasks() {
                         <Badge variant="outline">{String(task.priority || "")}</Badge>
                       </TableCell>
                       <TableCell>
-                        {task.dueDate ? new Date(task.dueDate).toLocaleDateString() : "—"}
+                        {task.dueDate ? new Date(task.dueDate).toLocaleDateString() : t("portal_tasks.placeholder.none")}
                       </TableCell>
                       <TableCell>
                         <Button
@@ -111,7 +111,7 @@ export default function PortalTasks() {
                             setOpen(true);
                           }}
                         >
-                          Attachments
+                          {t("portal_tasks.actions.attachments")}
                         </Button>
                       </TableCell>
                     </TableRow>
@@ -119,7 +119,7 @@ export default function PortalTasks() {
                 ) : (
                   <TableRow>
                     <TableCell colSpan={5} className="text-center text-muted-foreground">
-                      {t("common.empty") ?? "No tasks yet."}
+                      {t("portal_tasks.empty")}
                     </TableCell>
                   </TableRow>
                 )}
@@ -138,7 +138,7 @@ export default function PortalTasks() {
       >
         <DialogContent className="max-w-2xl">
           <DialogHeader>
-            <DialogTitle>Attachments</DialogTitle>
+            <DialogTitle>{t("portal_tasks.attachments.title")}</DialogTitle>
           </DialogHeader>
 
           {loadingAttachments ? (
@@ -153,26 +153,57 @@ export default function PortalTasks() {
           ) : (
             <div className="space-y-2">
               {(attachments || []).length ? (
-                (attachments || []).map((doc: any) => (
-                  <div key={String(doc.id)} className="flex items-center justify-between gap-3 rounded-md border p-3">
-                    <div className="min-w-0">
-                      <div className="font-medium truncate">{String(doc.title || doc.fileName || "Document")}</div>
-                      <div className="text-xs text-muted-foreground truncate">
-                        {String(doc.fileName || "")} {doc.size ? `• ${doc.size} bytes` : ""}
+                (attachments || []).map((doc: any) => {
+                  const fileName = typeof doc?.fileName === "string" ? doc.fileName : "";
+
+                  const sizeValue =
+                    typeof doc?.size === "number"
+                      ? doc.size
+                      : typeof doc?.size === "string"
+                        ? Number(doc.size)
+                        : null;
+
+                  const size =
+                    typeof sizeValue === "number" && Number.isFinite(sizeValue) && sizeValue >= 0
+                      ? sizeValue
+                      : null;
+
+                  const metaText =
+                    fileName && size !== null
+                      ? t("portal_tasks.attachments.meta_with_size", { fileName, size })
+                      : fileName
+                        ? t("portal_tasks.attachments.meta_without_size", { fileName })
+                        : size !== null
+                          ? t("portal_tasks.attachments.meta_size_only", { size })
+                          : null;
+
+                  return (
+                    <div key={String(doc.id)} className="flex items-center justify-between gap-3 rounded-md border p-3">
+                      <div className="min-w-0">
+                        <div className="font-medium truncate">{String(doc.title || doc.fileName || t("documents.document"))}</div>
+                        {metaText ? (
+                          <div className="text-xs text-muted-foreground truncate">{metaText}</div>
+                        ) : null}
                       </div>
+                      {doc.fileUrl ? (
+                        <a
+                          className="shrink-0"
+                          href={String(doc.fileUrl)}
+                          target="_blank"
+                          rel="noreferrer"
+                        >
+                          <Button size="sm">{t("documents.download")}</Button>
+                        </a>
+                      ) : (
+                        <Button size="sm" disabled>
+                          {t("portal_tasks.actions.no_file")}
+                        </Button>
+                      )}
                     </div>
-                    <a
-                      className="shrink-0"
-                      href={String(doc.fileUrl || "#")}
-                      target="_blank"
-                      rel="noreferrer"
-                    >
-                      <Button size="sm">Download</Button>
-                    </a>
-                  </div>
-                ))
+                  );
+                })
               ) : (
-                <div className="text-sm text-muted-foreground">No attachments.</div>
+                <div className="text-sm text-muted-foreground">{t("portal_tasks.attachments.empty")}</div>
               )}
             </div>
           )}

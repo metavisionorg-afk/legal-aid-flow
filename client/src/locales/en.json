@@ -58,6 +58,30 @@
       "case_types": "Case Types",
       "powers_of_attorney": "Powers of Attorney"
     },
+        "documents": {
+          "document": "Document",
+          "download": "Download"
+        },
+        "portal_tasks": {
+          "table": {
+            "title": "Title"
+          },
+          "placeholder": {
+            "none": "—"
+          },
+          "actions": {
+            "attachments": "Attachments",
+            "no_file": "No file"
+          },
+          "empty": "No tasks yet.",
+          "attachments": {
+            "title": "Attachments",
+            "empty": "No attachments yet.",
+            "meta_with_size": "{{fileName}} • {{size}} bytes",
+            "meta_without_size": "{{fileName}}",
+            "meta_size_only": "• {{size}} bytes"
+          }
+        },
     "sidebar": {
       "documentsLibrary": "Documents Library",
       "judicialServices": "Judicial Services",

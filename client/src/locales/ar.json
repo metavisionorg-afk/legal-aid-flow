@@ -58,6 +58,30 @@
       "case_types": "أنواع القضايا",
       "powers_of_attorney": "الوكالات"
     },
+        "documents": {
+          "document": "مستند",
+          "download": "تحميل"
+        },
+        "portal_tasks": {
+          "table": {
+            "title": "العنوان"
+          },
+          "placeholder": {
+            "none": "—"
+          },
+          "actions": {
+            "attachments": "المرفقات",
+            "no_file": "لا يوجد ملف"
+          },
+          "empty": "لا توجد مهام حتى الآن.",
+          "attachments": {
+            "title": "المرفقات",
+            "empty": "لا توجد مرفقات حتى الآن.",
+            "meta_with_size": "{{fileName}} • {{size}} بايت",
+            "meta_without_size": "{{fileName}}",
+            "meta_size_only": "• {{size}} بايت"
+          }
+        },
     "sidebar": {
       "documentsLibrary": "مكتبة المستندات",
       "judicialServices": "الخدمات القضائية",

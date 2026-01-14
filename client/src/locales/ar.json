@@ -90,11 +90,94 @@
 
     "judicial_services": {
       "title": "الخدمات القضائية",
-      "manage_title": "إدارة الخدمة القضائية",
-      "assign_lawyer": "تعيين محامٍ",
-      "select_lawyer": "اختر المحامي",
-      "update_status": "تحديث الحالة",
-      "select_status": "اختر الحالة"
+      "manage_title": "إدارة الخدمة",
+      "empty": "لا توجد خدمات قضائية بعد",
+      "table": {
+        "headers": {
+          "service_number": "رقم الخدمة",
+          "title": "العنوان",
+          "status": "الحالة",
+          "priority": "الأولوية",
+          "lawyer": "المحامي",
+          "date": "التاريخ",
+          "actions": "الإجراءات"
+        }
+      },
+      "actions": {
+        "add": "إضافة خدمة",
+        "manage": "إدارة"
+      },
+      "dialog": {
+        "add_title": "إضافة خدمة قضائية"
+      },
+      "fields": {
+        "service_number": "رقم الخدمة",
+        "beneficiary": "المستفيد",
+        "beneficiary_id_label": "الرقم: {{id}}",
+        "title": "العنوان",
+        "untitled": "(بدون عنوان)",
+        "description": "الوصف",
+        "service_type": "نوع الخدمة",
+        "unnamed_service_type": "(نوع غير معروف)",
+        "priority": "الأولوية",
+        "status": "الحالة",
+        "assign_lawyer": "تعيين محامي",
+        "unknown_lawyer": "(محامي غير معروف)",
+        "unnamed_beneficiary": "(بدون اسم)",
+        "attachments": "المرفقات"
+      },
+      "placeholders": {
+        "select_beneficiary": "اختر مستفيد",
+        "select_service_type": "اختر نوع الخدمة",
+        "select_lawyer": "اختر محامي (اختياري)",
+        "select_priority": "اختر الأولوية",
+        "select_status": "اختر الحالة",
+        "title": "أدخل عنوان الخدمة",
+        "description": "أدخل الوصف (اختياري)"
+      },
+      "status": {
+        "new": "جديد",
+        "in_review": "قيد المراجعة",
+        "accepted": "مقبول",
+        "rejected": "مرفوض",
+        "assigned_legacy": "مُعين",
+        "unknown": "(حالة غير معروفة)"
+      },
+      "priority": {
+        "low": "منخفض",
+        "medium": "متوسط",
+        "high": "عالي",
+        "urgent": "عاجل",
+        "unknown": "(أولوية غير معروفة)"
+      },
+      "validation": {
+        "beneficiary_required": "المستفيد مطلوب",
+        "service_type_required": "نوع الخدمة مطلوب",
+        "title_required": "العنوان مطلوب"
+      },
+      "errors": {
+        "invalid_status": "قيمة الحالة غير صحيحة"
+      },
+      "warnings": {
+        "assign_lawyer_failed": "تعذر تعيين المحامي",
+        "attachments_failed": "تعذر رفع المرفقات"
+      },
+      "toasts": {
+        "created": "تم إنشاء الخدمة بنجاح",
+        "created_with_warnings": "تم إنشاء الخدمة مع تحذيرات: {{warnings}}",
+        "lawyer_assigned": "تم تعيين المحامي بنجاح",
+        "status_updated": "تم تحديث الحالة بنجاح"
+      },
+      "beneficiary_option": {
+        "with_id": "{{fullName}} — {{idNumber}}",
+        "without_id": "{{fullName}}"
+      },
+      "attachments": {
+        "empty": "لا توجد مرفقات",
+        "unnamed_file": "(ملف بدون اسم)",
+        "file_meta_with_size": "{{fileName}} • {{size}}",
+        "file_meta_without_size": "{{fileName}}"
+      }
     },
     "documents": {
       "library_title": "مكتبة المستندات",
@@ -958,6 +1041,20 @@
     "unauthorized_desc": "ليس لديك صلاحية للوصول إلى هذه الصفحة.",
     "forbidden_title": "غير مصرح",
     "forbidden_description": "ليس لديك صلاحية للوصول إلى هذه الصفحة.",
-    "go_to_portal": "الذهاب للبوابة"
+    "go_to_portal": "الذهاب للبوابة",
+    "separators": {
+      "comma_space": "، ",
+      "sentence_space": ". "
+    },
+    "placeholder": {
+      "none": "—"
+    },
+    "document": "مستند",
+    "download": "تنزيل",
+    "create": "إنشاء",
+    "bytes": "{{count}} بايت"
+  },
+  "auth": {
+    "login": "تسجيل الدخول"
   }
 }

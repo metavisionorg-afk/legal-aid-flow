@@ -855,10 +855,93 @@
   "judicial_services": {
     "title": "Judicial Services",
     "manage_title": "Manage service",
-    "assign_lawyer": "Assign lawyer",
-    "select_lawyer": "Select a lawyer",
-    "update_status": "Update status",
-    "select_status": "Select status"
+    "empty": "No judicial services yet",
+    "table": {
+      "headers": {
+        "service_number": "Service #",
+        "title": "Title",
+        "status": "Status",
+        "priority": "Priority",
+        "lawyer": "Lawyer",
+        "date": "Date",
+        "actions": "Actions"
+      }
+    },
+    "actions": {
+      "add": "Add Service",
+      "manage": "Manage"
+    },
+    "dialog": {
+      "add_title": "Add Judicial Service"
+    },
+    "fields": {
+      "service_number": "Service number",
+      "beneficiary": "Beneficiary",
+      "beneficiary_id_label": "ID: {{id}}",
+      "title": "Title",
+      "untitled": "(No title)",
+      "description": "Description",
+      "service_type": "Service type",
+      "unnamed_service_type": "(Unknown type)",
+      "priority": "Priority",
+      "status": "Status",
+      "assign_lawyer": "Assign lawyer",
+      "unknown_lawyer": "(Unknown lawyer)",
+      "unnamed_beneficiary": "(Unnamed)",
+      "attachments": "Attachments"
+    },
+    "placeholders": {
+      "select_beneficiary": "Select beneficiary",
+      "select_service_type": "Select service type",
+      "select_lawyer": "Select lawyer (optional)",
+      "select_priority": "Select priority",
+      "select_status": "Select status",
+      "title": "Enter service title",
+      "description": "Enter description (optional)"
+    },
+    "status": {
+      "new": "New",
+      "in_review": "In review",
+      "accepted": "Accepted",
+      "rejected": "Rejected",
+      "assigned_legacy": "Assigned",
+      "unknown": "(Unknown status)"
+    },
+    "priority": {
+      "low": "Low",
+      "medium": "Medium",
+      "high": "High",
+      "urgent": "Urgent",
+      "unknown": "(Unknown priority)"
+    },
+    "validation": {
+      "beneficiary_required": "Beneficiary is required",
+      "service_type_required": "Service type is required",
+      "title_required": "Title is required"
+    },
+    "errors": {
+      "invalid_status": "Invalid status value"
+    },
+    "warnings": {
+      "assign_lawyer_failed": "Could not assign lawyer",
+      "attachments_failed": "Could not upload attachments"
+    },
+    "toasts": {
+      "created": "Service created successfully",
+      "created_with_warnings": "Service created with warnings: {{warnings}}",
+      "lawyer_assigned": "Lawyer assigned successfully",
+      "status_updated": "Status updated successfully"
+    },
+    "beneficiary_option": {
+      "with_id": "{{fullName}} — {{idNumber}}",
+      "without_id": "{{fullName}}"
+    },
+    "attachments": {
+      "empty": "No attachments",
+      "unnamed_file": "(Unnamed file)",
+      "file_meta_with_size": "{{fileName}} • {{size}}",
+      "file_meta_without_size": "{{fileName}}"
+    }
   },
   "common": {
     "loading": "Loading...",
@@ -892,6 +975,20 @@
     "unauthorized_desc": "You don't have permission to access this page.",
     "forbidden_title": "Forbidden",
     "forbidden_description": "You don't have permission to access this page.",
-    "go_to_portal": "Go to portal"
+    "go_to_portal": "Go to portal",
+    "separators": {
+      "comma_space": ", ",
+      "sentence_space": ". "
+    },
+    "placeholder": {
+      "none": "—"
+    },
+    "document": "Document",
+    "download": "Download",
+    "create": "Create",
+    "bytes": "{{count}} bytes"
+  },
+  "auth": {
+    "login": "Login"
   }
 }

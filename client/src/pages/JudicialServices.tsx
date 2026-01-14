@@ -51,6 +51,7 @@ import {
 import { getErrorMessage } from "@/lib/errors";
 import { useToast } from "@/hooks/use-toast";
 import { useAuth } from "@/contexts/AuthContext";
+import { isAdmin } from "@/lib/authz";
 
 type JudicialServiceRow = any;
 type DocumentRow = any;
@@ -59,29 +60,44 @@ type LawyerUser = { id: string; fullName: string; role?: string; userType?: stri
 type BeneficiaryRow = { id: string; fullName?: string; idNumber?: string };
 type JudicialServiceTypeRow = { id: string; nameAr?: string | null; nameEn?: string | null; isActive?: boolean };
 
-const ADMIN_STATUS_VALUES = [
-  "pending_review",
-  "accepted",
-  "assigned",
-  "in_progress",
-  "awaiting_documents",
-  "completed",
-  "rejected",
-  "cancelled",
-] as const;
+const judicialServiceStatusSchema = z.enum(["new", "in_review", "accepted", "rejected"]);
+type JudicialServiceStatus = z.infer<typeof judicialServiceStatusSchema>;
+
+const ADMIN_STATUS_VALUES: JudicialServiceStatus[] = ["new", "in_review", "accepted", "rejected"];
+
+function getJudicialServiceStatusLabel(t: any, status: unknown): string {
+  const parsed = judicialServiceStatusSchema.safeParse(status);
+  if (parsed.success) {
+    return t(`judicial_services.status.${parsed.data}`);
+  }
+
+  // Legacy display-only statuses (do not write back to DB).
+  if (status === "assigned") {
+    return t("judicial_services.status.assigned_legacy");
+  }
+
+  return t("judicial_services.status.unknown");
+}
+
+const prioritySchema = z.enum(["low", "medium", "high", "urgent"]);
+type Priority = z.infer<typeof prioritySchema>;
+
+function getPriorityLabel(t: any, value: unknown): string {
+  const parsed = prioritySchema.safeParse(value);
+  if (!parsed.success) return t("judicial_services.priority.unknown");
+  return t(`judicial_services.priority.${parsed.data}`);
+}
 
 const CREATE_PRIORITY_VALUES = ["low", "medium", "high", "urgent"] as const;
 
-const createJudicialServiceSchema = z.object({
-  beneficiaryId: z.string().min(1, "Beneficiary is required"),
-  serviceTypeId: z.string().min(1, "Service type is required"),
-  title: z.string().trim().min(1, "Title is required"),
-  description: z.string().trim().optional().nullable(),
-  priority: z.enum(CREATE_PRIORITY_VALUES).default("medium"),
-  lawyerId: z.string().optional().nullable(),
-});
-
-type CreateJudicialServiceValues = z.infer<typeof createJudicialServiceSchema>;
+type CreateJudicialServiceValues = {
+  beneficiaryId: string;
+  serviceTypeId: string;
+  title: string;
+  description?: string | null;
+  priority: (typeof CREATE_PRIORITY_VALUES)[number];
+  lawyerId?: string | null;
+};
 
 export default function JudicialServices() {
   const { t } = useTranslation();
@@ -89,6 +105,23 @@ export default function JudicialServices() {
   const { toast } = useToast();
   const queryClient = useQueryClient();
   const { user, loading: authLoading } = useAuth();
+
+  const canManageStatus = isAdmin(user);
+
+  const createJudicialServiceSchema = useMemo(
+    () =>
+      z
+        .object({
+          beneficiaryId: z.string().min(1, t("judicial_services.validation.beneficiary_required")),
+          serviceTypeId: z.string().min(1, t("judicial_services.validation.service_type_required")),
+          title: z.string().trim().min(1, t("judicial_services.validation.title_required")),
+          description: z.string().trim().optional().nullable(),
+          priority: z.enum(CREATE_PRIORITY_VALUES).default("medium"),
+          lawyerId: z.string().optional().nullable(),
+        })
+        .strict(),
+    [t],
+  );
 
   const [blocked401, setBlocked401] = useState(false);
 
@@ -211,11 +244,14 @@ export default function JudicialServices() {
       judicialServicesAPI.assignLawyer(input.serviceId, input.lawyerId),
     onSuccess: async () => {
       await queryClient.invalidateQueries({ queryKey: ["judicial-services", "staff"] });
-      toast({ title: t("common.success") ?? "Success", description: "Lawyer assigned." });
+      toast({
+        title: t("common.success"),
+        description: t("judicial_services.toasts.lawyer_assigned"),
+      });
     },
     onError: (err) => {
       toast({
-        title: t("common.error") ?? "Error",
+        title: t("common.error"),
         description: getErrorMessage(err, t),
         variant: "destructive" as any,
       });
@@ -227,11 +263,14 @@ export default function JudicialServices() {
       judicialServicesAPI.updateStatus(input.serviceId, { status: input.status }),
     onSuccess: async () => {
       await queryClient.invalidateQueries({ queryKey: ["judicial-services", "staff"] });
-      toast({ title: t("common.success") ?? "Success", description: "Status updated." });
+      toast({
+        title: t("common.success"),
+        description: t("judicial_services.toasts.status_updated"),
+      });
     },
     onError: (err) => {
       toast({
-        title: t("common.error") ?? "Error",
+        title: t("common.error"),
         description: getErrorMessage(err, t),
         variant: "destructive" as any,
       });
@@ -256,7 +295,7 @@ export default function JudicialServices() {
           await judicialServicesAPI.assignLawyer(serviceId, values.lawyerId.trim());
         } catch (err: any) {
           if (err?.response?.status === 401) setBlocked401(true);
-          warnings.push(t("judicial_services.assign_lawyer_failed", { defaultValue: "Failed to assign lawyer" }) as any);
+          warnings.push(t("judicial_services.warnings.assign_lawyer_failed") as any);
         }
       }
 
@@ -269,7 +308,7 @@ export default function JudicialServices() {
           });
         } catch (err: any) {
           if (err?.response?.status === 401) setBlocked401(true);
-          warnings.push(t("judicial_services.attachments_failed", { defaultValue: "Failed to upload/attach files" }) as any);
+          warnings.push(t("judicial_services.warnings.attachments_failed") as any);
         }
       }
 
@@ -280,11 +319,13 @@ export default function JudicialServices() {
 
       const warnings = Array.isArray(result?.warnings) ? (result.warnings as string[]) : [];
       toast({
-        title: t("common.success") ?? "Success",
+        title: t("common.success"),
         description:
           warnings.length > 0
-            ? `${t("judicial_services.created", { defaultValue: "Service created." })} ${warnings.join(". ")}`
-            : (t("judicial_services.created", { defaultValue: "Service created." }) as any),
+            ? t("judicial_services.toasts.created_with_warnings", {
+                warnings: warnings.join(t("common.separators.sentence_space")),
+              })
+            : (t("judicial_services.toasts.created") as any),
       });
 
       setCreateOpen(false);
@@ -294,7 +335,7 @@ export default function JudicialServices() {
     onError: (err: any) => {
       if (err?.response?.status === 401) setBlocked401(true);
       toast({
-        title: t("common.error") ?? "Error",
+        title: t("common.error"),
         description: getErrorMessage(err, t),
         variant: "destructive" as any,
       });
@@ -310,6 +351,12 @@ export default function JudicialServices() {
     });
     return list;
   }, [services]);
+
+  const lawyerNameById = useMemo(() => {
+    const map = new Map<string, string>();
+    (lawyers || []).forEach((l) => map.set(String(l.id), String(l.fullName)));
+    return map;
+  }, [lawyers]);
 
   return (
     <Layout>
@@ -330,25 +377,25 @@ export default function JudicialServices() {
             </CardHeader>
             <CardContent>
               <div className="text-sm text-muted-foreground">
-                {t("common.feature_disabled", { defaultValue: "This feature is currently disabled." })}
+                {t("common.feature_disabled")}
               </div>
             </CardContent>
           </Card>
         ) : blocked401 ? (
           <Card>
             <CardHeader>
-              <CardTitle>{t("common.session_expired", { defaultValue: "Session expired" })}</CardTitle>
+              <CardTitle>{t("common.session_expired")}</CardTitle>
             </CardHeader>
             <CardContent>
               <div className="text-sm text-muted-foreground">
-                {t("common.please_login_again", { defaultValue: "Please log in again to continue." })}
+                {t("common.please_login_again")}
               </div>
               <div className="mt-4 flex gap-2">
-                <Button onClick={() => setLocation("/portal", { replace: true })}>
-                  {t("auth.login", { defaultValue: "Login" })}
+                <Button onClick={() => setLocation("/login", { replace: true })}>
+                  {t("auth.login")}
                 </Button>
                 <Button variant="outline" onClick={() => setBlocked401(false)}>
-                  {t("common.retry", { defaultValue: "Retry" })}
+                  {t("common.retry")}
                 </Button>
               </div>
             </CardContent>
@@ -366,7 +413,7 @@ export default function JudicialServices() {
                   setCreateOpen(true);
                 }}
               >
-                + إضافة خدمة جديدة
+                {t("judicial_services.actions.add")}
               </Button>
               <Button
                 variant="outline"
@@ -376,7 +423,7 @@ export default function JudicialServices() {
                   refetch();
                 }}
               >
-                {t("common.refresh") ?? "Refresh"}
+                {t("common.refresh")}
               </Button>
             </div>
           </CardHeader>
@@ -384,8 +431,8 @@ export default function JudicialServices() {
             {!canQuery ? (
               <div className="text-sm text-muted-foreground">
                 {authLoading
-                  ? (t("common.loading", { defaultValue: "Loading…" }) as any)
-                  : t("common.no_data", { defaultValue: "No data." })}
+                  ? (t("common.loading") as any)
+                  : t("common.no_data")}
               </div>
             ) : isLoading ? (
               <div className="space-y-3">
@@ -399,31 +446,33 @@ export default function JudicialServices() {
               <Table>
                 <TableHeader>
                   <TableRow>
-                    <TableHead>Service #</TableHead>
-                    <TableHead>{t("app.title")}</TableHead>
-                    <TableHead>{t("app.status")}</TableHead>
-                    <TableHead>{t("app.priority")}</TableHead>
-                    <TableHead>Lawyer</TableHead>
-                    <TableHead>{t("app.date")}</TableHead>
-                    <TableHead>{t("app.actions")}</TableHead>
+                    <TableHead>{t("judicial_services.table.headers.service_number")}</TableHead>
+                    <TableHead>{t("judicial_services.table.headers.title")}</TableHead>
+                    <TableHead>{t("judicial_services.table.headers.status")}</TableHead>
+                    <TableHead>{t("judicial_services.table.headers.priority")}</TableHead>
+                    <TableHead>{t("judicial_services.table.headers.lawyer")}</TableHead>
+                    <TableHead>{t("judicial_services.table.headers.date")}</TableHead>
+                    <TableHead>{t("judicial_services.table.headers.actions")}</TableHead>
                   </TableRow>
                 </TableHeader>
                 <TableBody>
                   {sorted.length ? (
                     sorted.map((js) => (
                       <TableRow key={String(js.id)}>
-                        <TableCell className="font-mono text-xs">{String(js.serviceNumber || "—")}</TableCell>
-                        <TableCell className="font-medium">{String(js.title || "")}</TableCell>
+                        <TableCell className="font-mono text-xs">{String(js.serviceNumber || t("common.placeholder.none"))}</TableCell>
+                        <TableCell className="font-medium">{String(js.title || t("judicial_services.fields.untitled"))}</TableCell>
                         <TableCell>
-                          <Badge variant="secondary">{String(js.status || "")}</Badge>
+                          <Badge variant="secondary">{getJudicialServiceStatusLabel(t, (js as any).status)}</Badge>
                         </TableCell>
                         <TableCell>
-                          <Badge variant="outline">{String(js.priority || "")}</Badge>
+                          <Badge variant="outline">{getPriorityLabel(t, (js as any).priority)}</Badge>
                         </TableCell>
                         <TableCell className="text-xs text-muted-foreground">
-                          {js.assignedLawyerId ? String(js.assignedLawyerId) : "—"}
+                          {js.assignedLawyerId
+                            ? (lawyerNameById.get(String(js.assignedLawyerId)) || t("judicial_services.fields.unknown_lawyer"))
+                            : t("common.placeholder.none")}
                         </TableCell>
-                        <TableCell>{js.createdAt ? new Date(js.createdAt).toLocaleDateString() : "—"}</TableCell>
+                        <TableCell>{js.createdAt ? new Date(js.createdAt).toLocaleDateString() : t("common.placeholder.none")}</TableCell>
                         <TableCell>
                           <Button
                             size="sm"
@@ -433,7 +482,7 @@ export default function JudicialServices() {
                               setOpen(true);
                             }}
                           >
-                            Manage
+                            {t("judicial_services.actions.manage")}
                           </Button>
                         </TableCell>
                       </TableRow>
@@ -441,7 +490,7 @@ export default function JudicialServices() {
                   ) : (
                     <TableRow>
                       <TableCell colSpan={7} className="text-center text-muted-foreground">
-                        {t("common.empty") ?? t("common.no_data") ?? "No judicial services."}
+                        {t("judicial_services.empty")}
                       </TableCell>
                     </TableRow>
                   )}
@@ -463,7 +512,7 @@ export default function JudicialServices() {
         >
           <DialogContent className="max-w-2xl">
             <DialogHeader>
-              <DialogTitle>{t("judicial_services.add_new", { defaultValue: "إضافة خدمة جديدة" })}</DialogTitle>
+              <DialogTitle>{t("judicial_services.dialog.add_title")}</DialogTitle>
             </DialogHeader>
 
             <Form {...createForm}>
@@ -477,17 +526,24 @@ export default function JudicialServices() {
                     name="beneficiaryId"
                     render={({ field }) => (
                       <FormItem>
-                        <FormLabel>{t("beneficiaries.title", { defaultValue: "Beneficiary" })}</FormLabel>
+                        <FormLabel>{t("judicial_services.fields.beneficiary")}</FormLabel>
                         <Select value={field.value} onValueChange={field.onChange}>
                           <FormControl>
                             <SelectTrigger>
-                              <SelectValue placeholder={t("judicial_services.select_beneficiary", { defaultValue: "Select beneficiary" })} />
+                              <SelectValue placeholder={t("judicial_services.placeholders.select_beneficiary")} />
                             </SelectTrigger>
                           </FormControl>
                           <SelectContent>
                             {(beneficiaries || []).map((b: any) => (
                               <SelectItem key={String(b.id)} value={String(b.id)}>
-                                {String(b.fullName || "")} {b.idNumber ? `— ${String(b.idNumber)}` : ""}
+                                {b.idNumber
+                                  ? t("judicial_services.beneficiary_option.with_id", {
+                                      fullName: String(b.fullName || t("judicial_services.fields.unnamed_beneficiary")),
+                                      idNumber: String(b.idNumber),
+                                    })
+                                  : t("judicial_services.beneficiary_option.without_id", {
+                                      fullName: String(b.fullName || t("judicial_services.fields.unnamed_beneficiary")),
+                                    })}
                               </SelectItem>
                             ))}
                           </SelectContent>
@@ -502,17 +558,17 @@ export default function JudicialServices() {
                     name="serviceTypeId"
                     render={({ field }) => (
                       <FormItem>
-                        <FormLabel>{t("judicial_services.service_type", { defaultValue: "Service type" })}</FormLabel>
+                        <FormLabel>{t("judicial_services.fields.service_type")}</FormLabel>
                         <Select value={field.value} onValueChange={field.onChange}>
                           <FormControl>
                             <SelectTrigger>
-                              <SelectValue placeholder={t("judicial_services.select_service_type", { defaultValue: "Select type" })} />
+                              <SelectValue placeholder={t("judicial_services.placeholders.select_service_type")} />
                             </SelectTrigger>
                           </FormControl>
                           <SelectContent>
                             {(serviceTypes || []).map((st: any) => (
                               <SelectItem key={String(st.id)} value={String(st.id)}>
-                                {String(st.nameAr || st.nameEn || st.id)}
+                                {String(st.nameAr || st.nameEn || t("judicial_services.fields.unnamed_service_type"))}
                               </SelectItem>
                             ))}
                           </SelectContent>
@@ -528,9 +584,9 @@ export default function JudicialServices() {
                   name="title"
                   render={({ field }) => (
                     <FormItem>
-                      <FormLabel>{t("app.title", { defaultValue: "Title" })}</FormLabel>
+                        <FormLabel>{t("judicial_services.fields.title")}</FormLabel>
                       <FormControl>
-                        <Input placeholder={t("judicial_services.title_placeholder", { defaultValue: "Enter title" })} {...field} />
+                          <Input placeholder={t("judicial_services.placeholders.title")} {...field} />
                       </FormControl>
                       <FormMessage />
                     </FormItem>
@@ -542,10 +598,10 @@ export default function JudicialServices() {
                   name="description"
                   render={({ field }) => (
                     <FormItem>
-                      <FormLabel>{t("app.description", { defaultValue: "Description" })}</FormLabel>
+                        <FormLabel>{t("judicial_services.fields.description")}</FormLabel>
                       <FormControl>
                         <Textarea
-                          placeholder={t("judicial_services.description_placeholder", { defaultValue: "Optional" })}
+                            placeholder={t("judicial_services.placeholders.description")}
                           value={field.value ?? ""}
                           onChange={field.onChange}
                         />
@@ -561,17 +617,17 @@ export default function JudicialServices() {
                     name="priority"
                     render={({ field }) => (
                       <FormItem>
-                        <FormLabel>{t("app.priority", { defaultValue: "Priority" })}</FormLabel>
+                          <FormLabel>{t("judicial_services.fields.priority")}</FormLabel>
                         <Select value={String(field.value)} onValueChange={field.onChange as any}>
                           <FormControl>
                             <SelectTrigger>
-                              <SelectValue placeholder={t("judicial_services.select_priority", { defaultValue: "Select priority" })} />
+                              <SelectValue placeholder={t("judicial_services.placeholders.select_priority")} />
                             </SelectTrigger>
                           </FormControl>
                           <SelectContent>
                             {CREATE_PRIORITY_VALUES.map((p) => (
                               <SelectItem key={p} value={p}>
-                                {p}
+                                {getPriorityLabel(t, p)}
                               </SelectItem>
                             ))}
                           </SelectContent>
@@ -586,14 +642,14 @@ export default function JudicialServices() {
                     name="lawyerId"
                     render={({ field }) => (
                       <FormItem>
-                        <FormLabel>{t("judicial_services.assign_lawyer", { defaultValue: "Assign lawyer (optional)" })}</FormLabel>
+                            <FormLabel>{t("judicial_services.fields.assign_lawyer")}</FormLabel>
                         <Select
                           value={field.value ? String(field.value) : ""}
                           onValueChange={(v) => field.onChange(v)}
                         >
                           <FormControl>
                             <SelectTrigger>
-                              <SelectValue placeholder={t("judicial_services.select_lawyer", { defaultValue: "Select lawyer" })} />
+                              <SelectValue placeholder={t("judicial_services.placeholders.select_lawyer")} />
                             </SelectTrigger>
                           </FormControl>
                           <SelectContent>
@@ -611,7 +667,7 @@ export default function JudicialServices() {
                 </div>
 
                 <div className="space-y-2">
-                  <Label>{t("documents.attachments", { defaultValue: "Attachments" })}</Label>
+                  <Label>{t("judicial_services.fields.attachments")}</Label>
                   <Input
                     type="file"
                     multiple
@@ -622,7 +678,7 @@ export default function JudicialServices() {
                   />
                   {createFiles.length ? (
                     <div className="text-xs text-muted-foreground">
-                      {createFiles.map((f) => f.name).join(", ")}
+                      {createFiles.map((f) => f.name).join(t("common.separators.comma_space"))}
                     </div>
                   ) : null}
                 </div>
@@ -634,12 +690,12 @@ export default function JudicialServices() {
                     onClick={() => setCreateOpen(false)}
                     disabled={createServiceMutation.isPending}
                   >
-                    {t("common.cancel", { defaultValue: "Cancel" })}
+                    {t("common.cancel")}
                   </Button>
                   <Button type="submit" disabled={createServiceMutation.isPending || !canQuery}>
                     {createServiceMutation.isPending
-                      ? (t("common.loading", { defaultValue: "Loading…" }) as any)
-                      : t("common.create", { defaultValue: "Create" })}
+                      ? (t("common.loading") as any)
+                      : t("common.create")}
                   </Button>
                 </DialogFooter>
               </form>
@@ -663,22 +719,22 @@ export default function JudicialServices() {
               <div className="space-y-5">
                 <div className="grid grid-cols-1 gap-4 md:grid-cols-2">
                   <div>
-                    <div className="text-xs text-muted-foreground">Service #</div>
-                    <div className="font-mono text-sm">{String(active.serviceNumber || "—")}</div>
+                    <div className="text-xs text-muted-foreground">{t("judicial_services.fields.service_number")}</div>
+                    <div className="font-mono text-sm">{String(active.serviceNumber || t("common.placeholder.none"))}</div>
                   </div>
                   <div>
-                    <div className="text-xs text-muted-foreground">Beneficiary</div>
-                    <div className="text-sm">{String(active.beneficiaryId || "—")}</div>
+                    <div className="text-xs text-muted-foreground">{t("judicial_services.fields.beneficiary")}</div>
+                    <div className="text-sm">{t("judicial_services.fields.beneficiary_id_label", { id: String((active as any).beneficiaryId || t("common.placeholder.none")) })}</div>
                   </div>
                   <div className="md:col-span-2">
-                    <div className="text-xs text-muted-foreground">Title</div>
-                    <div className="text-sm font-medium">{String(active.title || "")}</div>
+                    <div className="text-xs text-muted-foreground">{t("judicial_services.fields.title")}</div>
+                    <div className="text-sm font-medium">{String(active.title || t("judicial_services.fields.untitled"))}</div>
                   </div>
                 </div>
 
                 <div className="grid grid-cols-1 gap-4 md:grid-cols-2">
                   <div className="space-y-2">
-                    <Label>{t("judicial_services.assign_lawyer")}</Label>
+                    <Label>{t("judicial_services.fields.assign_lawyer")}</Label>
                     <Select
                       value={active.assignedLawyerId ? String(active.assignedLawyerId) : ""}
                       onValueChange={(lawyerId) => {
@@ -688,7 +744,7 @@ export default function JudicialServices() {
                       }}
                     >
                       <SelectTrigger>
-                        <SelectValue placeholder={t("judicial_services.select_lawyer")} />
+                        <SelectValue placeholder={t("judicial_services.placeholders.select_lawyer")} />
                       </SelectTrigger>
                       <SelectContent>
                         {(lawyers || []).map((l) => (
@@ -701,32 +757,48 @@ export default function JudicialServices() {
                   </div>
 
                   <div className="space-y-2">
-                    <Label>{t("judicial_services.update_status")}</Label>
-                    <Select
-                      value={String(active.status || "")}
-                      onValueChange={(status) => {
-                        if (!active?.id) return;
-                        updateStatusMutation.mutate({ serviceId: String(active.id), status });
-                        setActive({ ...active, status });
-                      }}
-                    >
-                      <SelectTrigger>
-                        <SelectValue placeholder={t("judicial_services.select_status")} />
-                      </SelectTrigger>
-                      <SelectContent>
-                        {ADMIN_STATUS_VALUES.map((s) => (
-                          <SelectItem key={s} value={s}>
-                            {s}
-                          </SelectItem>
-                        ))}
-                      </SelectContent>
-                    </Select>
+                    <Label>{t("judicial_services.fields.status")}</Label>
+                    {canManageStatus ? (
+                      <Select
+                        value={String(active.status || "")}
+                        onValueChange={(nextRaw) => {
+                          if (!active?.id) return;
+                          const parsed = judicialServiceStatusSchema.safeParse(nextRaw);
+                          if (!parsed.success) {
+                            toast({
+                              title: t("common.error"),
+                              description: t("judicial_services.errors.invalid_status"),
+                              variant: "destructive" as any,
+                            });
+                            return;
+                          }
+                          const status = parsed.data;
+                          updateStatusMutation.mutate({ serviceId: String(active.id), status });
+                          setActive({ ...active, status });
+                        }}
+                      >
+                        <SelectTrigger>
+                          <SelectValue placeholder={t("judicial_services.placeholders.select_status")} />
+                        </SelectTrigger>
+                        <SelectContent>
+                          {ADMIN_STATUS_VALUES.map((s) => (
+                            <SelectItem key={s} value={s}>
+                              {getJudicialServiceStatusLabel(t, s)}
+                            </SelectItem>
+                          ))}
+                        </SelectContent>
+                      </Select>
+                    ) : (
+                      <div className="text-sm text-muted-foreground">
+                        {getJudicialServiceStatusLabel(t, (active as any).status)}
+                      </div>
+                    )}
                   </div>
                 </div>
 
                 <div className="space-y-2">
                   <div className="flex items-center justify-between">
-                    <div className="font-medium">Attachments</div>
+                    <div className="font-medium">{t("judicial_services.fields.attachments")}</div>
                   </div>
 
                   {loadingAttachments ? (
@@ -746,19 +818,30 @@ export default function JudicialServices() {
                           >
                             <div className="min-w-0">
                               <div className="font-medium truncate">
-                                {String(doc.title || doc.fileName || "Document")}
+                                {String(doc.title || doc.fileName || t("common.document"))}
                               </div>
                               <div className="text-xs text-muted-foreground truncate">
-                                {String(doc.fileName || "")} {doc.size ? `• ${doc.size} bytes` : ""}
+                                {doc.size
+                                  ? t("judicial_services.attachments.file_meta_with_size", {
+                                      fileName: String(doc.fileName || t("judicial_services.attachments.unnamed_file")),
+                                      size: t("common.bytes", { count: Number(doc.size) }),
+                                    })
+                                  : t("judicial_services.attachments.file_meta_without_size", {
+                                      fileName: String(doc.fileName || t("judicial_services.attachments.unnamed_file")),
+                                    })}
                               </div>
                             </div>
-                            <a className="shrink-0" href={String(doc.fileUrl || "#")} target="_blank" rel="noreferrer">
-                              <Button size="sm">Download</Button>
-                            </a>
+                            {doc.fileUrl ? (
+                              <a className="shrink-0" href={String(doc.fileUrl)} target="_blank" rel="noreferrer">
+                                <Button size="sm">{t("common.download")}</Button>
+                              </a>
+                            ) : (
+                              <Button size="sm" disabled>{t("common.download")}</Button>
+                            )}
                           </div>
                         ))
                       ) : (
-                        <div className="text-sm text-muted-foreground">No attachments.</div>
+                        <div className="text-sm text-muted-foreground">{t("judicial_services.attachments.empty")}</div>
                       )}
                     </div>
                   )}

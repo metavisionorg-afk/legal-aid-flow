@@ -281,17 +281,17 @@ export async function registerRoutes(
       const { username, password } = req.body;
 
       if (!username || !password) {
-        return res.status(400).json({ error: "Username and password required" });
+        return res.status(400).json({ error: "MISSING_CREDENTIALS", message: "Username and password required" });
       }
 
       const user = await storage.getUserByUsername(username);
       if (!user) {
-        return res.status(401).json({ error: "Invalid credentials" });
+        return res.status(401).json({ error: "USER_NOT_FOUND", message: "Invalid credentials" });
       }
 
       const validPassword = await bcrypt.compare(password, user.password);
       if (!validPassword) {
-        return res.status(401).json({ error: "Invalid credentials" });
+        return res.status(401).json({ error: "WRONG_PASSWORD", message: "Invalid credentials" });
       }
 
       req.session.userId = user.id;
@@ -1206,18 +1206,7 @@ export async function registerRoutes(
 
   // ========== JUDICIAL SERVICES ROUTES (STAGE 5) ==========
 
-  const judicialServiceStatusSchema = z.enum([
-    "pending_review",
-    "accepted",
-    "assigned",
-    "in_progress",
-    "awaiting_documents",
-    "completed",
-    "rejected",
-    "cancelled",
-  ]);
-
-  const judicialServiceOperatingStatusSchema = z.enum(["in_progress", "awaiting_documents", "completed"]);
+  const judicialServiceStatusSchema = z.enum(["new", "in_review", "accepted", "rejected"]);
 
   function canStaffAccessJudicialService(user: User, js: any): boolean {
     if (user.role === "admin" || user.role === "super_admin") return true;
@@ -1349,7 +1338,7 @@ export async function registerRoutes(
           serviceTypeId: snapshot?.serviceTypeId ?? null,
           serviceTypeNameAr: snapshot?.serviceTypeNameAr ?? null,
           serviceTypeNameEn: snapshot?.serviceTypeNameEn ?? null,
-          status: "pending_review" as any,
+          status: "new" as any,
           priority: (parsed.data.priority as any) ?? "medium",
           assignedLawyerId: null,
           createdByUserId: user.id,
@@ -1511,9 +1500,6 @@ export async function registerRoutes(
       const existing = await storage.getJudicialService(req.params.id);
       if (!existing) return res.status(404).json({ error: "Judicial service not found" });
 
-      const isAdmin = user.role === "admin" || user.role === "super_admin";
-      const isAssignedLawyer = Boolean((existing as any).assignedLawyerId && String((existing as any).assignedLawyerId) === String(user.id));
-
       const parsed = z
         .object({
           status: z.string().min(1),
@@ -1525,22 +1511,15 @@ export async function registerRoutes(
       }
 
       const nextStatus = parsed.data.status;
-      if (isAdmin) {
-        const ok = judicialServiceStatusSchema.safeParse(nextStatus);
-        if (!ok.success) return res.status(400).json({ error: "Invalid status" });
-        if (nextStatus === "assigned" && !(existing as any).assignedLawyerId) {
-          return res.status(400).json({ error: "Cannot set assigned without lawyer" });
-        }
-      } else {
-        if (user.role !== "lawyer" || !isAssignedLawyer) {
-          return res.status(403).json({ error: "Only assigned lawyer can update status" });
-        }
-        const ok = judicialServiceOperatingStatusSchema.safeParse(nextStatus);
-        if (!ok.success) return res.status(400).json({ error: "Invalid status" });
-      }
+
+      // Simplified 4-state workflow: only admins can change status.
+      const isAdmin = user.role === "admin" || user.role === "super_admin";
+      if (!isAdmin) return res.status(403).json({ error: "Forbidden" });
+
+      const ok = judicialServiceStatusSchema.safeParse(nextStatus);
+      if (!ok.success) return res.status(400).json({ error: "Invalid status" });
 
       const updates: any = { status: nextStatus as any };
-      if (nextStatus === "completed") updates.completedAt = new Date();
       if (nextStatus === "accepted") {
         updates.acceptedAt = new Date();
         updates.acceptedByUserId = user.id;

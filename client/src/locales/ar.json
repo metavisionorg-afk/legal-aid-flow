@@ -53,10 +53,34 @@
         }
       },
     "nav": {
+      "dashboard_section": "لوحة التحكم",
+      "dashboard": "لوحة التحكم",
+      "cases_section": "القضايا",
       "cases": "القضايا",
       "cases_list": "القضايا",
       "case_types": "أنواع القضايا",
-      "powers_of_attorney": "الوكالات"
+      "parties_section": "الأطراف",
+      "beneficiaries": "المستفيدون",
+      "lawyers": "المحامون",
+      "powers_of_attorney": "الوكالات",
+      "sessions_section": "الجلسات والمتابعة",
+      "sessions": "الجلسات",
+      "consultations": "الاستشارات",
+      "judicial_services_section": "الخدمات القضائية",
+      "judicial_services": "الخدمات القضائية",
+      "judicial_services_list": "الخدمات القضائية",
+      "judicial_services_settings": "إعدادات الخدمات القضائية",
+      "documents_section": "المستندات",
+      "documents_library": "مكتبة المستندات",
+      "organization_section": "التنظيم والإدارة",
+      "tasks": "المهام",
+      "calendar": "التقويم",
+      "reports_section": "التقارير",
+      "reports": "التقارير",
+      "settings_section": "الإعدادات",
+      "settings": "الإعدادات",
+      "settings_main": "الإعدادات",
+      "rules": "القواعد"
     },
         "documents": {
           "document": "مستند",
@@ -1055,6 +1079,15 @@
     "bytes": "{{count}} بايت"
   },
   "auth": {
-    "login": "تسجيل الدخول"
+    "login": "تسجيل الدخول",
+    "login_success": "نجح",
+    "logged_in_successfully": "تم تسجيل الدخول بنجاح",
+    "login_failed": "فشل تسجيل الدخول",
+    "errors": {
+      "invalid_credentials": "اسم المستخدم أو كلمة المرور غير صحيحة. يرجى المحاولة مرة أخرى.",
+      "user_not_found": "المستخدم غير موجود. يرجى التحقق من اسم المستخدم.",
+      "wrong_password": "كلمة المرور غير صحيحة. يرجى المحاولة مرة أخرى.",
+      "missing_credentials": "يرجى إدخال اسم المستخدم وكلمة المرور."
+    }
   }
 }

@@ -26,6 +26,15 @@ export function getErrorMessage(error: unknown, t?: TFn): string {
       : undefined) || msg;
 
   if (t) {
+    // Auth errors (status 401 or specific error codes)
+    if (status === 401 || data?.error === "USER_NOT_FOUND" || data?.error === "WRONG_PASSWORD" || data?.error === "INVALID_CREDENTIALS") {
+      if (data?.error === "USER_NOT_FOUND") return t("auth.errors.user_not_found");
+      if (data?.error === "WRONG_PASSWORD") return t("auth.errors.wrong_password");
+      // Default to generic message for security
+      return t("auth.errors.invalid_credentials");
+    }
+    if (data?.error === "MISSING_CREDENTIALS") return t("auth.errors.missing_credentials");
+
     if (status === 403 || serverMsg === "Forbidden") return t("errors.forbidden");
     if (status === 429 || /too many requests/i.test(serverMsg || "")) return t("errors.rate_limited");
     if (status === 409 && /email already exists/i.test(serverMsg || "")) return t("errors.email_exists");

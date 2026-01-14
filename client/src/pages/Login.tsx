@@ -9,6 +9,7 @@ import { useState, useEffect } from "react";
 import { useAuth } from "@/contexts/AuthContext";
 import { useToast } from "@/hooks/use-toast";
 import { getRole } from "@/lib/authz";
+import { getErrorMessage } from "@/lib/errors";
 
 export default function Login() {
   const { t } = useTranslation();
@@ -43,14 +44,15 @@ export default function Login() {
     try {
       await login(username, password);
       toast({
-        title: "Success",
-        description: "Logged in successfully",
+        title: t("auth.login_success"),
+        description: t("auth.logged_in_successfully"),
       });
       // Redirect is handled by the effect once `user` is set.
     } catch (error: any) {
+      const errorMessage = getErrorMessage(error, t);
       toast({
-        title: "Error",
-        description: error.message || "Invalid credentials",
+        title: t("auth.login_failed"),
+        description: errorMessage,
         variant: "destructive",
       });
     } finally {

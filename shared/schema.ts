@@ -784,14 +784,10 @@ export type InsertJudicialServiceType = z.infer<typeof insertJudicialServiceType
 export type JudicialServiceType = typeof judicialServiceTypes.$inferSelect;
 
 export const judicialServiceStatusEnum = pgEnum("judicial_service_status", [
-  "pending_review",
+  "new",
+  "in_review",
   "accepted",
-  "assigned",
-  "in_progress",
-  "awaiting_documents",
-  "completed",
   "rejected",
-  "cancelled",
 ]);
 
 export const judicialServices = pgTable(
@@ -807,7 +803,7 @@ export const judicialServices = pgTable(
     serviceTypeNameAr: text("service_type_name_ar"),
     serviceTypeNameEn: text("service_type_name_en"),
 
-    status: judicialServiceStatusEnum("status").notNull().default("pending_review"),
+    status: judicialServiceStatusEnum("status").notNull().default("new"),
     priority: priorityEnum("priority").notNull().default("medium"),
 
     assignedLawyerId: varchar("assigned_lawyer_id").references(() => users.id),

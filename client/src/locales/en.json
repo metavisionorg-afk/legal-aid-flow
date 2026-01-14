@@ -53,10 +53,34 @@
         }
       },
     "nav": {
+      "dashboard_section": "Dashboard",
+      "dashboard": "Dashboard",
+      "cases_section": "Cases",
       "cases": "Cases",
       "cases_list": "Cases",
       "case_types": "Case Types",
-      "powers_of_attorney": "Powers of Attorney"
+      "parties_section": "Parties",
+      "beneficiaries": "Beneficiaries",
+      "lawyers": "Lawyers",
+      "powers_of_attorney": "Powers of Attorney",
+      "sessions_section": "Sessions & Follow-up",
+      "sessions": "Sessions",
+      "consultations": "Consultations",
+      "judicial_services_section": "Judicial Services",
+      "judicial_services": "Judicial Services",
+      "judicial_services_list": "Judicial Services",
+      "judicial_services_settings": "Judicial Services Settings",
+      "documents_section": "Documents",
+      "documents_library": "Documents Library",
+      "organization_section": "Organization & Management",
+      "tasks": "Tasks",
+      "calendar": "Calendar",
+      "reports_section": "Reports",
+      "reports": "Reports",
+      "settings_section": "Settings",
+      "settings": "Settings",
+      "settings_main": "Settings",
+      "rules": "Rules"
     },
         "documents": {
           "document": "Document",
@@ -989,6 +1013,15 @@
     "bytes": "{{count}} bytes"
   },
   "auth": {
-    "login": "Login"
+    "login": "Login",
+    "login_success": "Success",
+    "logged_in_successfully": "Logged in successfully",
+    "login_failed": "Login Failed",
+    "errors": {
+      "invalid_credentials": "Invalid username or password. Please try again.",
+      "user_not_found": "User not found. Please check your username.",
+      "wrong_password": "Incorrect password. Please try again.",
+      "missing_credentials": "Please enter both username and password."
+    }
   }
 }

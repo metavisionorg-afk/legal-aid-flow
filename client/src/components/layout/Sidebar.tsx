@@ -10,7 +10,6 @@ import {
   Users,
   Briefcase,
   Scale,
-  MessageSquare,
   Calendar,
   Gavel,
   ClipboardList,
@@ -46,7 +45,7 @@ export function Sidebar() {
   );
 
   const shouldOpenSessionsGroup = useMemo(
-    () => Boolean(location.startsWith("/sessions") || location.startsWith("/consultations")),
+    () => Boolean(location.startsWith("/sessions")),
     [location],
   );
 
@@ -115,7 +114,6 @@ export function Sidebar() {
   const lawyersActive = Boolean(location === "/lawyers" || location.startsWith("/lawyers/"));
   const poaActive = Boolean(location === "/power-of-attorney" || location.startsWith("/power-of-attorney/"));
   const sessionsActive = Boolean(location === "/sessions" || location.startsWith("/sessions/"));
-  const consultationsActive = Boolean(location === "/consultations" || location.startsWith("/consultations/"));
   const judicialServicesListActive = Boolean(location === "/judicial-services" && !location.includes("/settings"));
   const judicialServicesSettingsActive = Boolean(location === "/judicial-services/settings" || location.startsWith("/judicial-services/settings"));
   const documentsLibraryActive = Boolean(location === "/documents-library" || location.startsWith("/documents-library/"));
@@ -313,19 +311,6 @@ export function Sidebar() {
               >
                 <Gavel className="h-4 w-4 rtl:ml-2 rtl:mr-0" />
                 {t("nav.sessions")}
-              </div>
-            </Link>
-            <Link href="/consultations">
-              <div
-                className={cn(
-                  "flex items-center gap-3 px-3 py-2 rounded-md text-sm font-medium transition-colors cursor-pointer",
-                  consultationsActive
-                    ? "bg-sidebar-accent text-sidebar-accent-foreground"
-                    : "text-sidebar-foreground/70 hover:bg-sidebar-accent/50 hover:text-sidebar-foreground",
-                )}
-              >
-                <MessageSquare className="h-4 w-4 rtl:ml-2 rtl:mr-0" />
-                {t("nav.consultations")}
               </div>
             </Link>
           </div>

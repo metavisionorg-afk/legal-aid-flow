@@ -6,6 +6,7 @@ import { Toaster as ShadcnToaster } from "@/components/ui/toaster";
 import { TooltipProvider } from "@/components/ui/tooltip";
 import { AuthProvider, useAuth } from "@/contexts/AuthContext";
 import { RequireRole } from "@/components/auth/RequireRole";
+import { RequireBeneficiary } from "@/components/auth/RequireBeneficiary";
 import { PortalLayout } from "@/components/layout/PortalLayout";
 import { LawyerPortalLayout } from "@/components/layout/LawyerPortalLayout";
 import LawyerDashboard from "@/pages/lawyer/LawyerDashboard";
@@ -159,29 +160,17 @@ function StaffRoute({ component: Component }: any) {
   return <Component />;
 }
 
+/**
+ * PortalRoute - Wrapper for beneficiary portal routes
+ * Uses RequireBeneficiary for authentication and authorization
+ */
 function PortalRoute({ component: Component }: any) {
-  const { user, loading } = useAuth();
-  const [location, setLocation] = useLocation();
-
-  if (loading) {
-    return <FullPageSpinner />;
-  }
-
-  if (!user) {
-    if (import.meta.env.DEV) console.debug("[auth] guest -> /login (portal route)", { path: location });
-    setLocation("/login", { replace: true });
-    return null;
-  }
-
-  if (user.userType !== "beneficiary") {
-    if (import.meta.env.DEV) console.debug("[auth] forbidden: staff tried portal route", { path: location });
-    return <Forbidden redirectTo="/" />;
-  }
-
   return (
-    <PortalLayout>
-      <Component />
-    </PortalLayout>
+    <RequireBeneficiary>
+      <PortalLayout>
+        <Component />
+      </PortalLayout>
+    </RequireBeneficiary>
   );
 }
 
@@ -318,6 +307,9 @@ function Router() {
       <Route path="/settings">
         {() => <StaffRoute component={Settings} />}
       </Route>
+      
+      {/* Forbidden Route */}
+      <Route path="/forbidden">{() => <Forbidden />}</Route>
       
       {/* Portal Routes */}
       <Route path="/portal/register" component={PortalRegister} />

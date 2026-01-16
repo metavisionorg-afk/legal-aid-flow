@@ -263,6 +263,383 @@
     "phone": "Phone Number",
     "create_account": "Create Account"
   },
+  "portal_dashboard": {
+    "welcome": "Welcome to Your Portal",
+    "subtitle": "Manage your legal cases and services",
+    "stats": {
+      "total_cases": "Total Cases",
+      "active_cases": "Active Cases",
+      "pending_intake": "Pending Requests",
+      "closed_cases": "Closed Cases"
+    },
+    "next_session": {
+      "title": "Next Session",
+      "no_sessions": "No upcoming sessions scheduled"
+    },
+    "last_document": {
+      "title": "Last Document",
+      "uploaded": "Uploaded",
+      "no_documents": "No documents uploaded yet"
+    },
+    "notifications": {
+      "title": "Recent Notifications",
+      "no_notifications": "No new notifications",
+      "badge_new": "New"
+    }
+  },
+  "portal_cases": {
+    "title": "My Cases",
+    "subtitle": "View and track your legal cases",
+    "my_cases_list": "Your Cases",
+    "case_number": "Case Number",
+    "case_type": "Type",
+    "status": {
+      "pending_review": "Pending Review",
+      "pending_assignment": "Pending Assignment",
+      "assigned": "Assigned",
+      "in_progress": "In Progress",
+      "awaiting_documents": "Awaiting Documents",
+      "awaiting_hearing": "Awaiting Hearing",
+      "awaiting_judgment": "Awaiting Judgment",
+      "completed": "Completed",
+      "rejected": "Rejected",
+      "closed": "Closed"
+    },
+    "priority": {
+      "low": "Low",
+      "medium": "Medium",
+      "high": "High",
+      "urgent": "Urgent"
+    },
+    "assigned_lawyer": "Assigned Lawyer",
+    "last_update": "Last Updated",
+    "view_details": "View Details",
+    "no_cases": "No cases found",
+    "no_cases_description": "You don't have any cases yet. Submit a new case request to get started.",
+    "not_assigned": "Not Assigned",
+    "case_not_found": "Case not found",
+    "back_to_cases": "Back to Cases",
+    "details": {
+      "title": "Case Details",
+      "description": "Description",
+      "opponent_name": "Opponent Name",
+      "opponent_lawyer": "Opponent Lawyer"
+    },
+    "documents": {
+      "title": "Documents",
+      "no_documents": "No documents available for this case"
+    },
+    "info": {
+      "title": "Case Information",
+      "case_type": "Case Type",
+      "assigned_lawyer": "Assigned Lawyer",
+      "created_at": "Created",
+      "last_updated": "Last Updated"
+    },
+    "help": {
+      "title": "Need Help?",
+      "description": "If you have questions about your case, contact your assigned lawyer.",
+      "contact_lawyer": "Your Lawyer"
+    }
+  },
+  "portal_sessions": {
+    "title": "My Sessions",
+    "subtitle": "View your upcoming and past court sessions",
+    "tabs": {
+      "upcoming": "Upcoming",
+      "past": "Past Sessions"
+    },
+    "status": {
+      "upcoming": "Upcoming",
+      "postponed": "Postponed",
+      "completed": "Completed",
+      "cancelled": "Cancelled"
+    },
+    "case": "Case",
+    "hijri": "Hijri",
+    "circuit": "Circuit",
+    "join_meeting": "Join Online Meeting",
+    "requirements": "Requirements",
+    "no_upcoming": "No upcoming sessions",
+    "no_upcoming_description": "You don't have any scheduled sessions at the moment.",
+    "no_past": "No past sessions",
+    "no_past_description": "No session history available yet.",
+    "no_cases": "No cases found",
+    "no_cases_description": "You need to have active cases to view sessions."
+  },
+  "portal_documents": {
+    "title": "My Documents",
+    "subtitle": "Upload and manage your legal documents",
+    "upload_title": "Upload Documents",
+    "upload_description": "Upload any required documents or supporting materials for your cases",
+    "select_files": "Select Files",
+    "uploading": "Uploading...",
+    "uploading_files": "Uploading {{count}} file(s)...",
+    "upload_note": "Supported formats: PDF, JPG, PNG, DOC, DOCX (Max 10MB per file)",
+    "upload_success_title": "Documents Uploaded",
+    "upload_success_description": "Your documents have been uploaded successfully",
+    "upload_error": "Upload Failed",
+    "documents_title": "Your Documents",
+    "no_documents": "No documents yet",
+    "no_documents_description": "Upload documents to get started",
+    "official": "Official",
+    "download": "Download",
+    "delete_disabled": "Official documents cannot be deleted"
+  },
+  "portal_requests": {
+    "title": "My Requests",
+    "subtitle": "Create and track your service requests",
+    "create_request": "New Request",
+    "create_dialog_title": "Create Service Request",
+    "create_dialog_description": "Submit a new service request and attach supporting documents",
+    "form": {
+      "title": "Request Title",
+      "title_placeholder": "Brief description of your request",
+      "service_type": "Service Type",
+      "select_service_type": "Select service type",
+      "priority": "Priority",
+      "description": "Description",
+      "description_placeholder": "Provide detailed information about your request",
+      "attachments": "Attachments",
+      "cancel": "Cancel",
+      "submit": "Submit Request"
+    },
+    "status": {
+      "new": "New",
+      "in_review": "In Review",
+      "accepted": "Accepted",
+      "rejected": "Rejected"
+    },
+    "priority": {
+      "low": "Low",
+      "medium": "Medium",
+      "high": "High",
+      "urgent": "Urgent"
+    },
+    "tabs": {
+      "active": "Active",
+      "completed": "Completed"
+    },
+    "request_number": "Request #",
+    "locked": "Locked",
+    "locked_message": "This request is under review and cannot be edited",
+    "attach_files": "Attach Files",
+    "uploading_files": "Uploading...",
+    "upload_success": "Files Uploaded",
+    "files_uploaded": "{{count}} file(s) uploaded successfully",
+    "upload_error": "Upload Failed",
+    "create_success_title": "Request Submitted",
+    "create_success_description": "Your request has been submitted successfully",
+    "create_error": "Submission Failed",
+    "validation_error": "Validation Error",
+    "title_required": "Request title is required",
+    "submitting": "Submitting...",
+    "no_active": "No active requests",
+    "no_active_description": "You don't have any active requests at the moment",
+    "no_completed": "No completed requests",
+    "no_completed_description": "No completed requests yet"
+  },
+  "portal_notifications": {
+    "title": "Notifications",
+    "subtitle": "Stay updated on your cases and requests",
+    "mark_all_read": "Mark All as Read",
+    "mark_read_success": "Notification marked as read",
+    "mark_read_error": "Failed to mark notification as read",
+    "mark_all_read_success": "All notifications marked as read",
+    "mark_all_read_error": "Failed to mark all notifications as read",
+    "tabs": {
+      "unread": "Unread",
+      "all": "All"
+    },
+    "badge": {
+      "new": "New"
+    },
+    "time": {
+      "just_now": "Just now",
+      "minutes_ago": "{{count}} minutes ago",
+      "minutes_ago_plural": "{{count}} minutes ago",
+      "hours_ago": "{{count}} hours ago",
+      "hours_ago_plural": "{{count}} hours ago",
+      "days_ago": "{{count}} days ago",
+      "days_ago_plural": "{{count}} days ago"
+    },
+    "empty": {
+      "unread_title": "All caught up!",
+      "unread_message": "You have no unread notifications at the moment",
+      "all_title": "No notifications yet",
+      "all_message": "You'll receive notifications about your cases, sessions, and documents here"
+    },
+    "info": {
+      "title": "About Notifications",
+      "message": "Click on any notification to view details and mark it as read. You'll receive notifications about case updates, session reminders, document requests, and replies from your lawyer."
+    },
+    "types": {
+      "CASE_CREATED": "Case Created",
+      "CASE_STATUS_CHANGED": "Case Status",
+      "CASE_ASSIGNED": "Case Assigned",
+      "CASE_UPDATE": "Case Update",
+      "SESSION_REMINDER": "Session Reminder",
+      "SESSION_SCHEDULED": "Session Scheduled",
+      "SESSION_UPDATED": "Session Updated",
+      "DOCUMENT_REQUEST": "Document Request",
+      "DOCUMENT_UPLOADED": "Document Uploaded",
+      "TASK_ASSIGNED": "Task Assigned",
+      "TASK_STATUS_CHANGED": "Task Update",
+      "MESSAGE_RECEIVED": "New Message",
+      "REPLY_RECEIVED": "Reply Received",
+      "JUDICIAL_SERVICE_CREATED": "Service Created",
+      "JUDICIAL_SERVICE_STATUS_CHANGED": "Service Status",
+      "JUDICIAL_SERVICE_ASSIGNED": "Service Assigned",
+      "APPOINTMENT_CONFIRMED": "Appointment Confirmed",
+      "APPOINTMENT_CANCELLED": "Appointment Cancelled"
+    }
+  },
+  "portal_calendar": {
+    "title": "Calendar",
+    "subtitle": "View all your sessions, tasks, and milestones",
+    "today": "Today",
+    "select_date": "Select a Date",
+    "no_date_selected": "Select a date to view events",
+    "no_events": "No events on this date",
+    "no_events_description": "There are no scheduled sessions, tasks, or milestones on this date",
+    "events_count": "{{count}} event",
+    "events_count_plural": "{{count}} events",
+    "task_due": "Task due date",
+    "milestone_accepted": "Service accepted",
+    "milestone_rejected": "Service status updated",
+    "stats": {
+      "sessions": "Sessions",
+      "tasks": "Tasks",
+      "milestones": "Milestones",
+      "total": "Total scheduled",
+      "with_due_dates": "With due dates",
+      "updates": "Recent updates"
+    },
+    "type": {
+      "session": "Session",
+      "task": "Task",
+      "milestone": "Milestone"
+    },
+    "status": {
+      "pending": "Pending",
+      "in_progress": "In Progress",
+      "completed": "Completed",
+      "cancelled": "Cancelled",
+      "upcoming": "Upcoming",
+      "accepted": "Accepted",
+      "rejected": "Rejected",
+      "new": "New",
+      "in_review": "In Review"
+    },
+    "priority": {
+      "low": "Low",
+      "medium": "Medium",
+      "high": "High",
+      "urgent": "Urgent"
+    },
+    "info": {
+      "title": "About Calendar",
+      "message": "This calendar aggregates all your scheduled sessions, task due dates, and important milestones. Click on any date to view details. This is a read-only view - to make changes, please visit the specific section (Sessions, Tasks, or Requests)."
+    }
+  },
+  "portal_profile": {
+    "title": "My Profile",
+    "subtitle": "Manage your account information and settings",
+    "error_loading": "Error loading profile",
+    "edit": "Edit",
+    "save_changes": "Save Changes",
+    "cancel": "Cancel",
+    "saving": "Saving...",
+    "changing": "Changing...",
+    "not_provided": "Not provided",
+    "legal_identity": "Legal Identity",
+    "legal_identity_description": "These fields cannot be changed. Contact support if corrections are needed.",
+    "legal_identity_notice": "Your legal name and ID number cannot be changed for security reasons. If you need to update these details, please contact our support team.",
+    "full_name": "Full Name",
+    "id_number": "ID Number",
+    "national_id": "National ID",
+    "contact_info": "Contact Information",
+    "contact_info_description": "You can update your contact details below",
+    "phone": "Phone",
+    "phone_placeholder": "Enter phone number",
+    "email": "Email",
+    "email_placeholder": "Enter email address",
+    "city": "City",
+    "city_placeholder": "Enter city",
+    "address": "Address",
+    "address_placeholder": "Enter address",
+    "preferred_language": "Preferred Language",
+    "select_language": "Select language",
+    "arabic": "Arabic",
+    "english": "English",
+    "change_password": "Change Password",
+    "change_password_description": "Update your account password for security",
+    "current_password": "Current Password",
+    "current_password_placeholder": "Enter current password",
+    "new_password": "New Password",
+    "new_password_placeholder": "Enter new password",
+    "confirm_password": "Confirm New Password",
+    "confirm_password_placeholder": "Confirm new password",
+    "password_requirements": "Password must be at least 8 characters long",
+    "update_success": "Profile Updated",
+    "update_success_message": "Your profile has been updated successfully",
+    "update_error": "Update Failed",
+    "password_success": "Password Changed",
+    "password_success_message": "Your password has been changed successfully",
+    "password_error": "Password Change Failed",
+    "password_mismatch": "Passwords do not match",
+    "password_too_short": "Password must be at least 8 characters long"
+  },
+  "portal_support": {
+    "title": "Support & Help",
+    "subtitle": "Get help with your case or ask questions about our services",
+    "form_title": "Submit a Support Request",
+    "form_description": "Fill out the form below and our team will respond as soon as possible",
+    "success_message": "Your support request has been submitted successfully. Our team will review it and respond within 1-2 business days.",
+    "what_next": "What happens next?",
+    "next_step_1": "Your request has been sent to our support team",
+    "next_step_2": "We'll review your message and respond within 1-2 business days",
+    "next_step_3": "You'll receive a notification when we respond",
+    "submit_another": "Submit Another Request",
+    "category_label": "Category",
+    "category_placeholder": "Select a category",
+    "category": {
+      "general": "General Inquiry",
+      "case_inquiry": "Case Inquiry",
+      "document_request": "Document Request",
+      "technical": "Technical Issue",
+      "complaint": "Complaint",
+      "other": "Other"
+    },
+    "subject_label": "Subject",
+    "subject_placeholder": "Brief description of your inquiry",
+    "message_label": "Message",
+    "message_placeholder": "Please provide details about your inquiry or issue...",
+    "characters": "characters",
+    "privacy_notice": "Your information will be handled confidentially and only used to respond to your inquiry.",
+    "submit_button": "Submit Request",
+    "submitting": "Submitting...",
+    "validation_error": "Validation Error",
+    "validation_error_message": "Please fill in all required fields",
+    "submit_success": "Request Submitted",
+    "submit_success_message": "Your support request has been submitted successfully",
+    "submit_error": "Submission Failed",
+    "contact_info": "Contact Information",
+    "contact_info_description": "You can also reach us through these channels",
+    "email": "Email",
+    "phone": "Phone",
+    "hours": "Business Hours",
+    "hours_detail": "Sunday - Thursday: 9:00 AM - 5:00 PM",
+    "address": "Address",
+    "address_detail": "Riyadh, Saudi Arabia",
+    "faq_title": "Frequently Asked Questions",
+    "faq_1_q": "How long does it take to get a response?",
+    "faq_1_a": "We typically respond within 1-2 business days",
+    "faq_2_q": "Can I track my support request?",
+    "faq_2_a": "You'll receive notifications when we respond to your request",
+    "faq_3_q": "What if I have an urgent issue?",
+    "faq_3_a": "For urgent matters, please call us directly during business hours"
+  },
   "errors": {
     "email_exists": "This email is already registered",
     "username_exists": "This username is already taken",
@@ -1023,5 +1400,19 @@
       "wrong_password": "Incorrect password. Please try again.",
       "missing_credentials": "Please enter both username and password."
     }
+  },
+  "case_types": {
+    "civil": "Civil",
+    "criminal": "Criminal",
+    "family": "Family",
+    "labor": "Labor",
+    "asylum": "Asylum",
+    "other": "Other"
+  },
+  "priorities": {
+    "low": "Low",
+    "medium": "Medium",
+    "high": "High",
+    "urgent": "Urgent"
   }
 }

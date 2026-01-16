@@ -533,11 +533,11 @@ export default function Cases() {
                       <TableCell className="font-medium">
                         <div>{c.caseNumber}</div>
                       </TableCell>
-                      <TableCell>{c.caseType}</TableCell>
+                      <TableCell>{c.caseType ? t(`case_types.${c.caseType}`, { defaultValue: t("common.unknown") }) : t("common.unknown")}</TableCell>
                       <TableCell className="max-w-[200px] truncate">{c.title}</TableCell>
                       <TableCell>
                         <Badge variant={c.priority === "urgent" ? "destructive" : c.priority === "high" ? "default" : "secondary"}>
-                          {c.priority}
+                          {c.priority ? t(`priorities.${c.priority}`, { defaultValue: t("common.unknown") }) : t("common.unknown")}
                         </Badge>
                       </TableCell>
                       <TableCell>

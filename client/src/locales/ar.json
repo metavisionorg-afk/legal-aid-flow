@@ -427,6 +427,383 @@
     "phone": "رقم الهاتف",
     "create_account": "إنشاء حساب"
   },
+  "portal_dashboard": {
+    "welcome": "مرحباً بك في بوابتك",
+    "subtitle": "إدارة قضاياك وخدماتك القانونية",
+    "stats": {
+      "total_cases": "إجمالي القضايا",
+      "active_cases": "القضايا النشطة",
+      "pending_intake": "الطلبات المعلقة",
+      "closed_cases": "القضايا المغلقة"
+    },
+    "next_session": {
+      "title": "الجلسة القادمة",
+      "no_sessions": "لا توجد جلسات قادمة"
+    },
+    "last_document": {
+      "title": "آخر مستند",
+      "uploaded": "تم الرفع",
+      "no_documents": "لم يتم رفع أي مستندات بعد"
+    },
+    "notifications": {
+      "title": "الإشعارات الأخيرة",
+      "no_notifications": "لا توجد إشعارات جديدة",
+      "badge_new": "جديد"
+    }
+  },
+  "portal_cases": {
+    "title": "قضاياي",
+    "subtitle": "عرض وتتبع قضاياك القانونية",
+    "my_cases_list": "قضاياك",
+    "case_number": "رقم القضية",
+    "case_type": "النوع",
+    "status": {
+      "pending_review": "قيد المراجعة",
+      "pending_assignment": "في انتظار التعيين",
+      "assigned": "تم التعيين",
+      "in_progress": "قيد التنفيذ",
+      "awaiting_documents": "في انتظار المستندات",
+      "awaiting_hearing": "في انتظار الجلسة",
+      "awaiting_judgment": "في انتظار الحكم",
+      "completed": "مكتملة",
+      "rejected": "مرفوضة",
+      "closed": "مغلقة"
+    },
+    "priority": {
+      "low": "منخفضة",
+      "medium": "متوسطة",
+      "high": "عالية",
+      "urgent": "عاجلة"
+    },
+    "assigned_lawyer": "المحامي المعين",
+    "last_update": "آخر تحديث",
+    "view_details": "عرض التفاصيل",
+    "no_cases": "لا توجد قضايا",
+    "no_cases_description": "ليس لديك أي قضايا حتى الآن. قدم طلب قضية جديدة للبدء.",
+    "not_assigned": "غير معين",
+    "case_not_found": "القضية غير موجودة",
+    "back_to_cases": "العودة إلى القضايا",
+    "details": {
+      "title": "تفاصيل القضية",
+      "description": "الوصف",
+      "opponent_name": "اسم الخصم",
+      "opponent_lawyer": "محامي الخصم"
+    },
+    "documents": {
+      "title": "المستندات",
+      "no_documents": "لا توجد مستندات لهذه القضية"
+    },
+    "info": {
+      "title": "معلومات القضية",
+      "case_type": "نوع القضية",
+      "assigned_lawyer": "المحامي المعين",
+      "created_at": "تاريخ الإنشاء",
+      "last_updated": "آخر تحديث"
+    },
+    "help": {
+      "title": "بحاجة إلى مساعدة؟",
+      "description": "إذا كان لديك أسئلة حول قضيتك، اتصل بالمحامي المعين.",
+      "contact_lawyer": "محاميك"
+    }
+  },
+  "portal_sessions": {
+    "title": "جلساتي",
+    "subtitle": "عرض جلسات المحكمة القادمة والسابقة",
+    "tabs": {
+      "upcoming": "القادمة",
+      "past": "الجلسات السابقة"
+    },
+    "status": {
+      "upcoming": "قادمة",
+      "postponed": "مؤجلة",
+      "completed": "مكتملة",
+      "cancelled": "ملغاة"
+    },
+    "case": "القضية",
+    "hijri": "هجري",
+    "circuit": "الدائرة",
+    "join_meeting": "انضم للاجتماع الإلكتروني",
+    "requirements": "المتطلبات",
+    "no_upcoming": "لا توجد جلسات قادمة",
+    "no_upcoming_description": "ليس لديك أي جلسات مجدولة في الوقت الحالي.",
+    "no_past": "لا توجد جلسات سابقة",
+    "no_past_description": "لا يوجد سجل جلسات متاح بعد.",
+    "no_cases": "لا توجد قضايا",
+    "no_cases_description": "تحتاج إلى قضايا نشطة لعرض الجلسات."
+  },
+  "portal_documents": {
+    "title": "مستنداتي",
+    "subtitle": "رفع وإدارة المستندات القانونية الخاصة بك",
+    "upload_title": "رفع المستندات",
+    "upload_description": "ارفع أي مستندات مطلوبة أو مواد داعمة لقضاياك",
+    "select_files": "اختر الملفات",
+    "uploading": "جاري الرفع...",
+    "uploading_files": "جاري رفع {{count}} ملف...",
+    "upload_note": "التنسيقات المدعومة: PDF, JPG, PNG, DOC, DOCX (حد أقصى 10 ميجابايت لكل ملف)",
+    "upload_success_title": "تم رفع المستندات",
+    "upload_success_description": "تم رفع مستنداتك بنجاح",
+    "upload_error": "فشل الرفع",
+    "documents_title": "مستنداتك",
+    "no_documents": "لا توجد مستندات بعد",
+    "no_documents_description": "ارفع المستندات للبدء",
+    "official": "رسمي",
+    "download": "تحميل",
+    "delete_disabled": "لا يمكن حذف المستندات الرسمية"
+  },
+  "portal_requests": {
+    "title": "طلباتي",
+    "subtitle": "إنشاء وتتبع طلبات الخدمة",
+    "create_request": "طلب جديد",
+    "create_dialog_title": "إنشاء طلب خدمة",
+    "create_dialog_description": "قدم طلب خدمة جديد وأرفق المستندات الداعمة",
+    "form": {
+      "title": "عنوان الطلب",
+      "title_placeholder": "وصف مختصر لطلبك",
+      "service_type": "نوع الخدمة",
+      "select_service_type": "اختر نوع الخدمة",
+      "priority": "الأولوية",
+      "description": "الوصف",
+      "description_placeholder": "قدم معلومات تفصيلية عن طلبك",
+      "attachments": "المرفقات",
+      "cancel": "إلغاء",
+      "submit": "إرسال الطلب"
+    },
+    "status": {
+      "new": "جديد",
+      "in_review": "قيد المراجعة",
+      "accepted": "مقبول",
+      "rejected": "مرفوض"
+    },
+    "priority": {
+      "low": "منخفضة",
+      "medium": "متوسطة",
+      "high": "عالية",
+      "urgent": "عاجلة"
+    },
+    "tabs": {
+      "active": "نشطة",
+      "completed": "مكتملة"
+    },
+    "request_number": "طلب رقم",
+    "locked": "مقفل",
+    "locked_message": "هذا الطلب قيد المراجعة ولا يمكن تعديله",
+    "attach_files": "إرفاق ملفات",
+    "uploading_files": "جاري الرفع...",
+    "upload_success": "تم رفع الملفات",
+    "files_uploaded": "تم رفع {{count}} ملف بنجاح",
+    "upload_error": "فشل الرفع",
+    "create_success_title": "تم إرسال الطلب",
+    "create_success_description": "تم إرسال طلبك بنجاح",
+    "create_error": "فشل الإرسال",
+    "validation_error": "خطأ في التحقق",
+    "title_required": "عنوان الطلب مطلوب",
+    "submitting": "جاري الإرسال...",
+    "no_active": "لا توجد طلبات نشطة",
+    "no_active_description": "ليس لديك أي طلبات نشطة في الوقت الحالي",
+    "no_completed": "لا توجد طلبات مكتملة",
+    "no_completed_description": "لا توجد طلبات مكتملة بعد"
+  },
+  "portal_notifications": {
+    "title": "الإشعارات",
+    "subtitle": "ابق على اطلاع بقضاياك وطلباتك",
+    "mark_all_read": "تعليم الكل كمقروء",
+    "mark_read_success": "تم تعليم الإشعار كمقروء",
+    "mark_read_error": "فشل تعليم الإشعار كمقروء",
+    "mark_all_read_success": "تم تعليم جميع الإشعارات كمقروءة",
+    "mark_all_read_error": "فشل تعليم جميع الإشعارات كمقروءة",
+    "tabs": {
+      "unread": "غير مقروءة",
+      "all": "الكل"
+    },
+    "badge": {
+      "new": "جديد"
+    },
+    "time": {
+      "just_now": "الآن",
+      "minutes_ago": "منذ {{count}} دقيقة",
+      "minutes_ago_plural": "منذ {{count}} دقيقة",
+      "hours_ago": "منذ {{count}} ساعة",
+      "hours_ago_plural": "منذ {{count}} ساعة",
+      "days_ago": "منذ {{count}} يوم",
+      "days_ago_plural": "منذ {{count}} يوم"
+    },
+    "empty": {
+      "unread_title": "لا توجد إشعارات جديدة!",
+      "unread_message": "ليس لديك إشعارات غير مقروءة في الوقت الحالي",
+      "all_title": "لا توجد إشعارات بعد",
+      "all_message": "ستتلقى إشعارات حول قضاياك وجلساتك ومستنداتك هنا"
+    },
+    "info": {
+      "title": "حول الإشعارات",
+      "message": "انقر على أي إشعار لعرض التفاصيل وتعليمه كمقروء. ستتلقى إشعارات حول تحديثات القضية، تذكيرات الجلسات، طلبات المستندات، والردود من محاميك."
+    },
+    "types": {
+      "CASE_CREATED": "إنشاء قضية",
+      "CASE_STATUS_CHANGED": "حالة القضية",
+      "CASE_ASSIGNED": "تعيين قضية",
+      "CASE_UPDATE": "تحديث قضية",
+      "SESSION_REMINDER": "تذكير بالجلسة",
+      "SESSION_SCHEDULED": "جدولة جلسة",
+      "SESSION_UPDATED": "تحديث جلسة",
+      "DOCUMENT_REQUEST": "طلب مستند",
+      "DOCUMENT_UPLOADED": "تم رفع مستند",
+      "TASK_ASSIGNED": "تعيين مهمة",
+      "TASK_STATUS_CHANGED": "تحديث مهمة",
+      "MESSAGE_RECEIVED": "رسالة جديدة",
+      "REPLY_RECEIVED": "رد جديد",
+      "JUDICIAL_SERVICE_CREATED": "إنشاء خدمة",
+      "JUDICIAL_SERVICE_STATUS_CHANGED": "حالة الخدمة",
+      "JUDICIAL_SERVICE_ASSIGNED": "تعيين خدمة",
+      "APPOINTMENT_CONFIRMED": "تأكيد الموعد",
+      "APPOINTMENT_CANCELLED": "إلغاء الموعد"
+    }
+  },
+  "portal_calendar": {
+    "title": "التقويم",
+    "subtitle": "عرض جميع جلساتك ومهامك ومعالمك",
+    "today": "اليوم",
+    "select_date": "اختر تاريخاً",
+    "no_date_selected": "اختر تاريخاً لعرض الأحداث",
+    "no_events": "لا توجد أحداث في هذا التاريخ",
+    "no_events_description": "لا توجد جلسات أو مهام أو معالم مجدولة في هذا التاريخ",
+    "events_count": "حدث {{count}}",
+    "events_count_plural": "{{count}} حدث",
+    "task_due": "موعد استحقاق المهمة",
+    "milestone_accepted": "تم قبول الخدمة",
+    "milestone_rejected": "تم تحديث حالة الخدمة",
+    "stats": {
+      "sessions": "الجلسات",
+      "tasks": "المهام",
+      "milestones": "المعالم",
+      "total": "المجموع المجدول",
+      "with_due_dates": "بمواعيد استحقاق",
+      "updates": "التحديثات الأخيرة"
+    },
+    "type": {
+      "session": "جلسة",
+      "task": "مهمة",
+      "milestone": "معلم"
+    },
+    "status": {
+      "pending": "قيد الانتظار",
+      "in_progress": "قيد التنفيذ",
+      "completed": "مكتمل",
+      "cancelled": "ملغي",
+      "upcoming": "قادم",
+      "accepted": "مقبول",
+      "rejected": "مرفوض",
+      "new": "جديد",
+      "in_review": "قيد المراجعة"
+    },
+    "priority": {
+      "low": "منخفض",
+      "medium": "متوسط",
+      "high": "عالي",
+      "urgent": "عاجل"
+    },
+    "info": {
+      "title": "حول التقويم",
+      "message": "يجمع هذا التقويم جميع جلساتك المجدولة ومواعيد استحقاق المهام والمعالم المهمة. انقر على أي تاريخ لعرض التفاصيل. هذا عرض للقراءة فقط - لإجراء تغييرات، يرجى زيارة القسم المحدد (الجلسات أو المهام أو الطلبات)."
+    }
+  },
+  "portal_profile": {
+    "title": "ملفي الشخصي",
+    "subtitle": "إدارة معلومات حسابك والإعدادات",
+    "error_loading": "خطأ في تحميل الملف الشخصي",
+    "edit": "تعديل",
+    "save_changes": "حفظ التغييرات",
+    "cancel": "إلغاء",
+    "saving": "جاري الحفظ...",
+    "changing": "جاري التغيير...",
+    "not_provided": "غير محدد",
+    "legal_identity": "الهوية القانونية",
+    "legal_identity_description": "لا يمكن تغيير هذه الحقول. اتصل بالدعم إذا كنت بحاجة إلى تصحيحات.",
+    "legal_identity_notice": "لا يمكن تغيير اسمك القانوني ورقم الهوية لأسباب أمنية. إذا كنت بحاجة إلى تحديث هذه التفاصيل، يرجى الاتصال بفريق الدعم لدينا.",
+    "full_name": "الاسم الكامل",
+    "id_number": "رقم الهوية",
+    "national_id": "رقم الهوية الوطنية",
+    "contact_info": "معلومات الاتصال",
+    "contact_info_description": "يمكنك تحديث بيانات الاتصال الخاصة بك أدناه",
+    "phone": "الهاتف",
+    "phone_placeholder": "أدخل رقم الهاتف",
+    "email": "البريد الإلكتروني",
+    "email_placeholder": "أدخل عنوان البريد الإلكتروني",
+    "city": "المدينة",
+    "city_placeholder": "أدخل المدينة",
+    "address": "العنوان",
+    "address_placeholder": "أدخل العنوان",
+    "preferred_language": "اللغة المفضلة",
+    "select_language": "اختر اللغة",
+    "arabic": "العربية",
+    "english": "الإنجليزية",
+    "change_password": "تغيير كلمة المرور",
+    "change_password_description": "تحديث كلمة مرور حسابك للأمان",
+    "current_password": "كلمة المرور الحالية",
+    "current_password_placeholder": "أدخل كلمة المرور الحالية",
+    "new_password": "كلمة المرور الجديدة",
+    "new_password_placeholder": "أدخل كلمة المرور الجديدة",
+    "confirm_password": "تأكيد كلمة المرور الجديدة",
+    "confirm_password_placeholder": "أكد كلمة المرور الجديدة",
+    "password_requirements": "يجب أن تكون كلمة المرور 8 أحرف على الأقل",
+    "update_success": "تم تحديث الملف الشخصي",
+    "update_success_message": "تم تحديث ملفك الشخصي بنجاح",
+    "update_error": "فشل التحديث",
+    "password_success": "تم تغيير كلمة المرور",
+    "password_success_message": "تم تغيير كلمة المرور بنجاح",
+    "password_error": "فشل تغيير كلمة المرور",
+    "password_mismatch": "كلمات المرور غير متطابقة",
+    "password_too_short": "يجب أن تكون كلمة المرور 8 أحرف على الأقل"
+  },
+  "portal_support": {
+    "title": "الدعم والمساعدة",
+    "subtitle": "احصل على مساعدة بشأن قضيتك أو اطرح أسئلة حول خدماتنا",
+    "form_title": "إرسال طلب دعم",
+    "form_description": "املأ النموذج أدناه وسيرد فريقنا في أقرب وقت ممكن",
+    "success_message": "تم إرسال طلب الدعم بنجاح. سيقوم فريقنا بمراجعته والرد خلال 1-2 يوم عمل.",
+    "what_next": "ماذا يحدث الآن؟",
+    "next_step_1": "تم إرسال طلبك إلى فريق الدعم",
+    "next_step_2": "سنراجع رسالتك ونرد خلال 1-2 يوم عمل",
+    "next_step_3": "ستتلقى إشعارًا عندما نرد",
+    "submit_another": "إرسال طلب آخر",
+    "category_label": "الفئة",
+    "category_placeholder": "اختر فئة",
+    "category": {
+      "general": "استفسار عام",
+      "case_inquiry": "استفسار عن قضية",
+      "document_request": "طلب وثيقة",
+      "technical": "مشكلة تقنية",
+      "complaint": "شكوى",
+      "other": "أخرى"
+    },
+    "subject_label": "الموضوع",
+    "subject_placeholder": "وصف موجز لاستفسارك",
+    "message_label": "الرسالة",
+    "message_placeholder": "يرجى تقديم تفاصيل حول استفسارك أو مشكلتك...",
+    "characters": "حرف",
+    "privacy_notice": "سيتم التعامل مع معلوماتك بسرية ولن تستخدم إلا للرد على استفسارك.",
+    "submit_button": "إرسال الطلب",
+    "submitting": "جاري الإرسال...",
+    "validation_error": "خطأ في التحقق",
+    "validation_error_message": "يرجى ملء جميع الحقول المطلوبة",
+    "submit_success": "تم إرسال الطلب",
+    "submit_success_message": "تم إرسال طلب الدعم بنجاح",
+    "submit_error": "فشل الإرسال",
+    "contact_info": "معلومات الاتصال",
+    "contact_info_description": "يمكنك أيضًا التواصل معنا من خلال هذه القنوات",
+    "email": "البريد الإلكتروني",
+    "phone": "الهاتف",
+    "hours": "ساعات العمل",
+    "hours_detail": "الأحد - الخميس: 9:00 ص - 5:00 م",
+    "address": "العنوان",
+    "address_detail": "الرياض، المملكة العربية السعودية",
+    "faq_title": "الأسئلة الشائعة",
+    "faq_1_q": "كم من الوقت يستغرق الحصول على رد؟",
+    "faq_1_a": "نرد عادة خلال 1-2 يوم عمل",
+    "faq_2_q": "هل يمكنني تتبع طلب الدعم؟",
+    "faq_2_a": "ستتلقى إشعارات عندما نرد على طلبك",
+    "faq_3_q": "ماذا لو كانت لدي مشكلة عاجلة؟",
+    "faq_3_a": "للمسائل العاجلة، يرجى الاتصال بنا مباشرة خلال ساعات العمل"
+  },
   "beneficiary_register": {
     "title": "إنشاء حساب مستفيد",
     "subtitle": "الوصول إلى خدمات المساعدة القانونية",
@@ -1089,5 +1466,19 @@
       "wrong_password": "كلمة المرور غير صحيحة. يرجى المحاولة مرة أخرى.",
       "missing_credentials": "يرجى إدخال اسم المستخدم وكلمة المرور."
     }
+  },
+  "case_types": {
+    "civil": "مدني",
+    "criminal": "جنائي",
+    "family": "أسري",
+    "labor": "عمالي",
+    "asylum": "لجوء",
+    "other": "أخرى"
+  },
+  "priorities": {
+    "low": "منخفضة",
+    "medium": "متوسطة",
+    "high": "عالية",
+    "urgent": "عاجلة"
   }
 }

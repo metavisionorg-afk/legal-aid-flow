@@ -61,6 +61,22 @@ export async function registerRoutes(
     return "Request failed";
   }
 
+  // Safe error message for beneficiaries (never expose internal details)
+  function getSafeErrorMessage(err: unknown, userType?: "beneficiary" | "staff"): string {
+    if (userType === "beneficiary") {
+      // For beneficiaries, only return generic safe messages
+      if (err instanceof Error) {
+        const msg = err.message.toLowerCase();
+        if (msg.includes("not found")) return "Resource not found";
+        if (msg.includes("unauthorized") || msg.includes("forbidden")) return "Access denied";
+        if (msg.includes("validation") || msg.includes("invalid")) return "Invalid request";
+      }
+      return "An error occurred. Please try again or contact support if the problem persists.";
+    }
+    // For staff, return detailed error messages
+    return getErrorMessage(err);
+  }
+
   function createInMemoryRateLimiter(options: { windowMs: number; max: number }) {
     const hits = new Map<string, { count: number; resetAt: number }>();
 
@@ -707,9 +723,10 @@ export async function registerRoutes(
   // Beneficiary creates a new service request (beneficiary only)
   app.post("/api/service-requests", requireBeneficiary, async (req: AuthRequest, res) => {
     try {
+      const user = req.user!;
       const beneficiary = req.beneficiary!;
 
-      // beneficiaryId/status are enforced server-side
+      // Security: beneficiaryId and status are enforced server-side
       const parsed = insertServiceRequestSchema
         .omit({ beneficiaryId: true, status: true, urgentDate: true })
         .extend({
@@ -718,7 +735,7 @@ export async function registerRoutes(
         .safeParse(req.body);
 
       if (!parsed.success) {
-        return res.status(400).json({ error: fromZodError(parsed.error).message });
+        return res.status(400).json({ error: "Invalid request" });
       }
 
       const input = parsed.data;
@@ -734,9 +751,11 @@ export async function registerRoutes(
         status: "new",
       } as any);
 
+      // Audit log for service request creation
+      await createAudit(user.id, "create", "service_request", created.id, `Created service request: ${input.serviceType}`, req.ip);
       return res.status(201).json(created);
     } catch (error: any) {
-      return res.status(500).json({ error: getErrorMessage(error) });
+      return res.status(500).json({ error: getSafeErrorMessage(error, "beneficiary") });
     }
   });
 
@@ -747,7 +766,7 @@ export async function registerRoutes(
       const requests = await storage.getServiceRequestsByBeneficiary(beneficiary.id);
       return res.json(requests);
     } catch (error: any) {
-      return res.status(500).json({ error: getErrorMessage(error) });
+      return res.status(500).json({ error: getSafeErrorMessage(error, "beneficiary") });
     }
   });
 
@@ -2203,7 +2222,7 @@ export async function registerRoutes(
     try {
       res.json(req.beneficiary);
     } catch (error: any) {
-      res.status(500).json({ error: error.message });
+      res.status(500).json({ error: getSafeErrorMessage(error, "beneficiary") });
     }
   });
 
@@ -2229,7 +2248,7 @@ export async function registerRoutes(
       const beneficiary = await storage.updateBeneficiary(req.beneficiary!.id, updates);
       res.json(beneficiary);
     } catch (error: any) {
-      res.status(500).json({ error: error.message });
+      res.status(500).json({ error: getSafeErrorMessage(error, "beneficiary") });
     }
   });
 
@@ -2240,7 +2259,7 @@ export async function registerRoutes(
       const publicCases = cases.map(({ internalNotes, ...caseData }) => caseData);
       res.json(publicCases);
     } catch (error: any) {
-      res.status(500).json({ error: error.message });
+      res.status(500).json({ error: getSafeErrorMessage(error, "beneficiary") });
     }
   });
 
@@ -2250,33 +2269,49 @@ export async function registerRoutes(
     try {
       res.json(req.beneficiary);
     } catch (error: any) {
-      res.status(500).json({ error: error.message });
+      res.status(500).json({ error: getSafeErrorMessage(error, "beneficiary") });
     }
   });
 
   app.patch("/api/beneficiary/me", requireBeneficiary, async (req: AuthRequest, res) => {
     try {
+      const user = req.user!;
+      const beneficiary = req.beneficiary!;
       const body = (req.body || {}) as any;
       const updates: any = {};
+      
+      // Security: Enforce allowlist - Only non-legal identity fields
+      // BLOCKED: fullName, nationalId, idNumber (legal identity)
       const allowed = [
-        "fullName",
         "phone",
+        "email",
         "city",
         "address",
         "preferredLanguage",
-        "nationalId",
         "nationality",
         "gender",
         "birthDate",
       ];
+      
+      // Check for attempted blocked field updates
+      const blocked = ["fullName", "nationalId", "idNumber"];
+      const attemptedBlocked = blocked.filter(key => key in body);
+      if (attemptedBlocked.length > 0) {
+        await createAudit(user.id, "security_violation", "beneficiary", beneficiary.id, `Attempted to update blocked fields: ${attemptedBlocked.join(", ")}`, req.ip);
+        return res.status(403).json({ error: "Cannot update legal identity fields" });
+      }
+      
       for (const key of allowed) {
         if (key in body) updates[key] = body[key];
       }
 
-      const updated = await storage.updateBeneficiary(req.beneficiary!.id, updates);
+      const updated = await storage.updateBeneficiary(beneficiary.id, updates);
+      
+      // Audit log for profile update
+      await createAudit(user.id, "update", "beneficiary_profile", beneficiary.id, `Updated fields: ${Object.keys(updates).join(", ")}`, req.ip);
       res.json(updated);
     } catch (error: any) {
-      res.status(500).json({ error: error.message });
+      res.status(500).json({ error: getSafeErrorMessage(error, "beneficiary") });
     }
   });
 
@@ -2286,25 +2321,45 @@ export async function registerRoutes(
       const publicCases = cases.map(({ internalNotes, ...caseData }) => caseData);
       res.json(publicCases);
     } catch (error: any) {
-      res.status(500).json({ error: error.message });
+      res.status(500).json({ error: getSafeErrorMessage(error, "beneficiary") });
+    }
+  });
+
+  // Beneficiary: Get sessions for my cases
+  app.get("/api/portal/my-sessions", requireBeneficiary, async (req: AuthRequest, res) => {
+    try {
+      const beneficiary = req.beneficiary!;
+      const cases = await storage.getCasesByBeneficiary(beneficiary.id);
+      
+      // Get sessions for all beneficiary's cases
+      const sessionsPromises = cases.map((c) => storage.getSessionsByCase(c.id));
+      const sessionsArrays = await Promise.all(sessionsPromises);
+      const allSessions = sessionsArrays.flat();
+      
+      return res.json(allSessions);
+    } catch (error: any) {
+      return res.status(500).json({ error: getSafeErrorMessage(error, "beneficiary") });
     }
   });
 
   app.get("/api/cases/my/:caseId/documents", requireBeneficiary, async (req: AuthRequest, res) => {
     try {
+      const user = req.user!;
       const beneficiary = req.beneficiary!;
       const caseData = await storage.getCase(req.params.caseId);
       if (!caseData) {
-        return res.status(404).json({ error: "Case not found" });
+        return res.status(404).json({ error: "Resource not found" });
       }
+      // Security: Data ownership validation
       if (caseData.beneficiaryId !== beneficiary.id) {
-        return res.status(403).json({ error: "Forbidden" });
+        await createAudit(user.id, "unauthorized_access_attempt", "case", req.params.caseId, "Attempted to access documents for unauthorized case", req.ip);
+        return res.status(403).json({ error: "Access denied" });
       }
 
       const docs = await storage.getDocumentsByCaseForBeneficiary(beneficiary.id, caseData.id);
       res.json(docs);
     } catch (error: any) {
-      res.status(500).json({ error: error.message });
+      res.status(500).json({ error: getSafeErrorMessage(error, "beneficiary") });
     }
   });
 
@@ -2317,7 +2372,7 @@ export async function registerRoutes(
 
       const parsed = bodySchema.safeParse(req.body);
       if (!parsed.success) {
-        return res.status(400).json({ error: fromZodError(parsed.error).message });
+        return res.status(400).json({ error: "Invalid request" });
       }
 
       const user = req.user!;
@@ -2327,10 +2382,12 @@ export async function registerRoutes(
       if (requestId) {
         const sr = await storage.getServiceRequest(requestId);
         if (!sr) {
-          return res.status(404).json({ error: "Service request not found" });
+          return res.status(404).json({ error: "Resource not found" });
         }
+        // Data ownership validation
         if (sr.beneficiaryId !== beneficiary.id) {
-          return res.status(403).json({ error: "Forbidden" });
+          await createAudit(user.id, "unauthorized_access_attempt", "service_request", requestId, "Attempted to upload documents to unauthorized request", req.ip);
+          return res.status(403).json({ error: "Access denied" });
         }
 
         const docs = await storage.attachDocumentsToServiceRequest({
@@ -2339,6 +2396,9 @@ export async function registerRoutes(
           requestId,
           documents: parsed.data.documents,
         });
+        
+        // Audit log for document upload
+        await createAudit(user.id, "upload", "document", requestId, `Uploaded ${docs.length} document(s) to service request`, req.ip);
         return res.status(201).json({ success: true, documents: docs });
       }
 
@@ -2347,9 +2407,12 @@ export async function registerRoutes(
         beneficiaryId: beneficiary.id,
         documents: parsed.data.documents,
       });
+      
+      // Audit log for document upload
+      await createAudit(user.id, "upload", "document", beneficiary.id, `Uploaded ${docs.length} document(s)`, req.ip);
       return res.status(201).json({ success: true, documents: docs });
     } catch (error: any) {
-      res.status(500).json({ error: error.message });
+      res.status(500).json({ error: getSafeErrorMessage(error, "beneficiary") });
     }
   });
 
@@ -2359,7 +2422,7 @@ export async function registerRoutes(
       const docs = await storage.getDocumentsVisibleToBeneficiary(beneficiary.id);
       res.json(docs);
     } catch (error: any) {
-      res.status(500).json({ error: error.message });
+      res.status(500).json({ error: getSafeErrorMessage(error, "beneficiary") });
     }
   });
 
@@ -2370,13 +2433,14 @@ export async function registerRoutes(
       const publicRequests = requests.map(({ reviewNotes, ...request }) => request);
       res.json(publicRequests);
     } catch (error: any) {
-      res.status(500).json({ error: error.message });
+      res.status(500).json({ error: getSafeErrorMessage(error, "beneficiary") });
     }
   });
 
   app.post("/api/portal/intake-requests", requireBeneficiary, async (req: AuthRequest, res) => {
     try {
       const user = req.user!;
+      const beneficiary = req.beneficiary!;
 
       const parsed = z
         .object({
@@ -2395,7 +2459,7 @@ export async function registerRoutes(
         .safeParse(req.body);
 
       if (!parsed.success) {
-        return res.status(400).json({ error: fromZodError(parsed.error).message });
+        return res.status(400).json({ error: "Invalid request" });
       }
 
       const input = parsed.data;
@@ -2414,13 +2478,16 @@ export async function registerRoutes(
       const legacy = input.caseTypeLegacy ?? (input.caseTypeId ? "other" : null);
 
       const request = await storage.createIntakeRequest({
-        beneficiaryId: req.beneficiary!.id,
+        beneficiaryId: beneficiary.id,
         caseType: legacy as any,
         caseTypeId: input.caseTypeId ?? null,
         description: input.description,
         documents: input.documents || [],
         status: "pending",
       } as any);
+
+      // Audit log for intake request creation
+      await createAudit(user.id, "create", "intake_request", request.id, `Created intake request`, req.ip);
 
       // Create notification for staff
       await storage.createNotification({
@@ -2433,7 +2500,7 @@ export async function registerRoutes(
 
       res.json(request);
     } catch (error: any) {
-      res.status(500).json({ error: error.message });
+      res.status(500).json({ error: getSafeErrorMessage(error, "beneficiary") });
     }
   });
 
@@ -2442,7 +2509,7 @@ export async function registerRoutes(
       const stats = await storage.getBeneficiaryDashboardStats(req.beneficiary!.id);
       res.json(stats);
     } catch (error: any) {
-      res.status(500).json({ error: error.message });
+      res.status(500).json({ error: getSafeErrorMessage(error, "beneficiary") });
     }
   });
 
@@ -4227,7 +4294,7 @@ export async function registerRoutes(
       const tasks = await storage.listTasksForBeneficiary(beneficiary.id, user.id);
       return res.json(tasks);
     } catch (error: any) {
-      return res.status(500).json({ error: getErrorMessage(error) });
+      return res.status(500).json({ error: getSafeErrorMessage(error, "beneficiary") });
     }
   });
 
@@ -5270,6 +5337,70 @@ export async function registerRoutes(
       }
     },
   );
+
+  // ========== SUPPORT TICKETS ROUTES (BENEFICIARY) ==========
+
+  // Create support ticket (beneficiary portal)
+  app.post("/api/support/tickets", requireBeneficiary, async (req: AuthRequest, res) => {
+    try {
+      const user = req.user!;
+      const beneficiary = req.beneficiary!;
+
+      const parsed = z
+        .object({
+          category: z.enum(["general", "case_inquiry", "document_request", "technical", "complaint", "other"]),
+          subject: z.string().trim().min(1).max(200),
+          message: z.string().trim().min(1).max(2000),
+        })
+        .safeParse(req.body);
+
+      if (!parsed.success) {
+        return res.status(400).json({ error: fromZodError(parsed.error).message });
+      }
+
+      // Create notification for admins about support request
+      const admins = await storage.getAllUsers();
+      const adminIds = admins
+        .filter((u) => u.userType === "staff" && (u.role === "admin" || u.role === "super_admin"))
+        .map((u) => u.id);
+
+      const ticketId = `TICKET-${Date.now()}`;
+      const notificationTitle = `Support Request: ${parsed.data.subject}`;
+      const notificationMessage = `Category: ${parsed.data.category}\nFrom: ${beneficiary.fullName} (${beneficiary.email || beneficiary.phone})\n\n${parsed.data.message}`;
+
+      // Create notifications for all admins
+      await Promise.all(
+        adminIds.map((adminId) =>
+          storage.createNotification({
+            userId: adminId,
+            type: "support_request",
+            title: notificationTitle,
+            message: notificationMessage,
+            url: "/support",
+            relatedEntityId: ticketId,
+          } as any),
+        ),
+      );
+
+      // Create audit log
+      await createAudit(
+        user.id,
+        "create",
+        "support_ticket",
+        ticketId,
+        `Support ticket: ${parsed.data.category} - ${parsed.data.subject}`,
+        req.ip,
+      );
+
+      return res.status(201).json({
+        success: true,
+        ticketId,
+        message: "Support request submitted successfully",
+      });
+    } catch (error: any) {
+      return res.status(500).json({ error: getErrorMessage(error) });
+    }
+  });
 
   // ====== API fallback ======
   // If an API route is missing/mistyped, return JSON (not the SPA shell).

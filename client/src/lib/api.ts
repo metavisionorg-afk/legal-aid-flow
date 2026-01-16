@@ -111,6 +111,12 @@ export const authAPI = {
       method: "POST",
       body: JSON.stringify(data),
     }),
+
+  changePassword: (data: { currentPassword: string; newPassword: string }) =>
+    fetchAPI("/auth/change-password", {
+      method: "POST",
+      body: JSON.stringify(data),
+    }),
 };
 
 // Portal API (Beneficiary)
@@ -415,8 +421,7 @@ export const tasksAPI = {
   getAll: () => fetchAPI("/tasks"),
   // Beneficiary portal
   getMy: () => fetchAPI("/tasks/my"),
-  getOne: (id: string) => fetchAPI(`/tasks/${id}`),
-  getByUser: (userId: string) => fetchAPI(`/users/${userId}/tasks`),
+  getOne: (id: string) => fetchAPI(`/tasks/${id}`),  getMySessions: () => fetchAPI("/portal/my-sessions"),  getByUser: (userId: string) => fetchAPI(`/users/${userId}/tasks`),
   getByCase: (caseId: string) => fetchAPI(`/cases/${caseId}/tasks`),
   listAttachments: (taskId: string) => fetchAPI(`/tasks/${taskId}/attachments`),
   addAttachments: (taskId: string, data: { isPublic?: boolean; documents: any[] }) =>
@@ -703,6 +708,15 @@ export const judicialServicesAPI = {
   listAttachments: (id: string) => fetchAPI(`/judicial-services/${id}/attachments`),
   addAttachments: (id: string, data: { isPublic?: boolean; documents: any[] }) =>
     fetchAPI(`/judicial-services/${id}/attachments`, {
+      method: "POST",
+      body: JSON.stringify(data),
+    }),
+};
+
+// Support API
+export const supportAPI = {
+  createTicket: (data: { category: string; subject: string; message: string }) =>
+    fetchAPI("/support/tickets", {
       method: "POST",
       body: JSON.stringify(data),
     }),

@@ -41,6 +41,14 @@ import PortalBookAppointment from "@/pages/portal/PortalBookAppointment";
 import PortalMyCases from "@/pages/portal/PortalMyCases";
 import PortalMyRequests from "@/pages/portal/PortalMyRequests";
 import PortalTasks from "@/pages/portal/PortalTasks";
+import PortalCaseDetail from "@/pages/portal/PortalCaseDetail";
+import PortalSessions from "@/pages/portal/PortalSessions";
+import PortalDocuments from "@/pages/portal/PortalDocuments";
+import PortalRequests from "@/pages/portal/PortalRequests";
+import PortalNotifications from "@/pages/portal/PortalNotifications";
+import PortalCalendar from "@/pages/portal/PortalCalendar";
+import PortalProfile from "@/pages/portal/PortalProfile";
+import PortalSupport from "@/pages/portal/PortalSupport";
 import BeneficiaryPortal from "@/pages/BeneficiaryPortal";
 import { queryClient } from "@/lib/queryClient";
 
@@ -326,11 +334,35 @@ function Router() {
       <Route path="/portal/my-cases">
         {() => <PortalRoute component={PortalMyCases} />}
       </Route>
+      <Route path="/portal/cases/:id">
+        {() => <PortalRoute component={PortalCaseDetail} />}
+      </Route>
       <Route path="/portal/tasks">
         {() => <PortalRoute component={PortalTasks} />}
       </Route>
+      <Route path="/portal/sessions">
+        {() => <PortalRoute component={PortalSessions} />}
+      </Route>
+      <Route path="/portal/documents">
+        {() => <PortalRoute component={PortalDocuments} />}
+      </Route>
+      <Route path="/portal/requests">
+        {() => <PortalRoute component={PortalRequests} />}
+      </Route>
       <Route path="/portal/my-requests">
-        {() => <PortalRoute component={PortalMyRequests} />}
+        {() => <PortalRoute component={PortalRequests} />}
+      </Route>
+      <Route path="/portal/notifications">
+        {() => <PortalRoute component={PortalNotifications} />}
+      </Route>
+      <Route path="/portal/calendar">
+        {() => <PortalRoute component={PortalCalendar} />}
+      </Route>
+      <Route path="/portal/profile">
+        {() => <PortalRoute component={PortalProfile} />}
+      </Route>
+      <Route path="/portal/support">
+        {() => <PortalRoute component={PortalSupport} />}
       </Route>
       <Route path="/portal/my-appointments">
         {() => <PortalRoute component={PortalDashboard} />}

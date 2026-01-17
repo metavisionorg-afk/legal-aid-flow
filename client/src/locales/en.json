@@ -656,6 +656,14 @@
     "unknown": "Unknown error"
   },
   "case": {
+    "case_type": "Type",
+    "priority_label": "Priority",
+    "priority": {
+      "low": "Low",
+      "medium": "Medium",
+      "high": "High",
+      "urgent": "Urgent"
+    },
     "status": {
       "open": "Open",
       "in_progress": "In progress",
@@ -894,6 +902,7 @@
     "issue_summary_required": "Issue summary is required"
   },
   "beneficiaries": {
+    "name": "Beneficiary",
     "add_title": "Add beneficiary",
     "first_name": "First name",
     "last_name": "Last name",

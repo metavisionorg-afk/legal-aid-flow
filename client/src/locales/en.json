@@ -1038,6 +1038,9 @@
     "under_review": "Your request is being reviewed"
   },
   "cases": {
+    "title": "Title",
+    "status": "Status",
+    "updated_at": "Updated",
     "filters": {
       "all": "All Cases",
       "active": "Active",

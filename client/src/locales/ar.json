@@ -1194,6 +1194,9 @@
     "under_review": "طلبك قيد المراجعة"
   },
   "cases": {
+    "title": "العنوان",
+    "status": "الحالة",
+    "updated_at": "آخر تحديث",
     "filters": {
       "all": "كل القضايا",
       "active": "النشطة",

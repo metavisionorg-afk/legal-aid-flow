@@ -2,8 +2,9 @@ import { useMemo } from "react";
 import { useTranslation } from "react-i18next";
 import { useQuery } from "@tanstack/react-query";
 import { Link } from "wouter";
+import { Calendar, Bell, FileText, AlertCircle } from "lucide-react";
 
-import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
+import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import {
   Table,
   TableBody,
@@ -14,7 +15,9 @@ import {
 } from "@/components/ui/table";
 import { Button } from "@/components/ui/button";
 import { Skeleton } from "@/components/ui/skeleton";
-import { lawyerAPI } from "@/lib/api";
+import { Badge } from "@/components/ui/badge";
+import { Alert, AlertDescription } from "@/components/ui/alert";
+import { lawyerAPI, sessionsAPI, notificationsAPI } from "@/lib/api";
 
 function formatDate(value: any): string {
   if (!value) return "-";
@@ -36,6 +39,16 @@ export default function LawyerDashboard() {
     queryFn: () => lawyerAPI.listCases(),
   });
 
+  const { data: allSessions, isLoading: loadingSessions } = useQuery({
+    queryKey: ["sessions", "all"],
+    queryFn: sessionsAPI.getAll,
+  });
+
+  const { data: notifications, isLoading: loadingNotifications } = useQuery({
+    queryKey: ["notifications", "my"],
+    queryFn: notificationsAPI.getMy,
+  });
+
   const latestCases = useMemo(() => {
     const list = Array.isArray(cases) ? cases : [];
     return [...list]
@@ -46,6 +59,30 @@ export default function LawyerDashboard() {
       })
       .slice(0, 5);
   }, [cases]);
+
+  const upcomingSessions = useMemo(() => {
+    const allSessionsList = Array.isArray(allSessions) ? allSessions : [];
+    const caseIds = new Set(Array.isArray(cases) ? cases.map((c: any) => String(c.id)) : []);
+    const now = new Date();
+    
+    return allSessionsList
+      .filter((s: any) => {
+        if (!s.caseId || !caseIds.has(String(s.caseId))) return false;
+        const sessionDate = s.gregorianDate ? new Date(s.gregorianDate) : null;
+        return sessionDate && sessionDate >= now;
+      })
+      .sort((a: any, b: any) => {
+        const ad = a.gregorianDate ? new Date(a.gregorianDate).getTime() : 0;
+        const bd = b.gregorianDate ? new Date(b.gregorianDate).getTime() : 0;
+        return ad - bd;
+      })
+      .slice(0, 5);
+  }, [allSessions, cases]);
+
+  const unreadNotifications = useMemo(() => {
+    const list = Array.isArray(notifications) ? notifications : [];
+    return list.filter((n: any) => !n.isRead).slice(0, 3);
+  }, [notifications]);
 
   const byStatus = (dashboard as any)?.counts?.byStatus || {};
   const kpi = {
@@ -134,6 +171,94 @@ export default function LawyerDashboard() {
           </Card>
         </div>
 
+        {/* Upcoming Sessions */}
+        <Card>
+          <CardHeader>
+            <div className="flex items-center justify-between">
+              <div>
+                <CardTitle>{t("lawyer.dashboard_page.upcoming_sessions")}</CardTitle>
+                <CardDescription>{t("lawyer.dashboard_page.upcoming_sessions_description")}</CardDescription>
+              </div>
+              <Calendar className="h-5 w-5 text-muted-foreground" />
+            </div>
+          </CardHeader>
+          <CardContent>
+            {loadingSessions ? (
+              <div className="space-y-3">
+                <Skeleton className="h-16 w-full" />
+                <Skeleton className="h-16 w-full" />
+                <Skeleton className="h-16 w-full" />
+              </div>
+            ) : upcomingSessions.length === 0 ? (
+              <div className="text-center py-8 text-muted-foreground">
+                <Calendar className="h-12 w-12 mx-auto mb-3 opacity-20" />
+                <p>{t("lawyer.dashboard_page.no_upcoming_sessions")}</p>
+              </div>
+            ) : (
+              <div className="space-y-3">
+                {upcomingSessions.map((session: any) => (
+                  <div key={session.id} className="flex items-start gap-4 p-3 border rounded-lg hover:bg-accent/50 transition-colors">
+                    <div className="bg-primary/10 p-2 rounded-lg">
+                      <Calendar className="h-5 w-5 text-primary" />
+                    </div>
+                    <div className="flex-1 min-w-0">
+                      <h4 className="font-medium truncate">{session.title || t("common.untitled")}</h4>
+                      <div className="flex items-center gap-2 mt-1 text-sm text-muted-foreground">
+                        <span>{formatDate(session.gregorianDate)}</span>
+                        {session.time && <span>• {session.time}</span>}
+                        {session.courtName && <span>• {session.courtName}</span>}
+                      </div>
+                    </div>
+                    {session.status && (
+                      <Badge variant={session.status === "upcoming" ? "default" : "secondary"}>
+                        {t(`sessions.status.${session.status}`, { defaultValue: session.status })}
+                      </Badge>
+                    )}
+                  </div>
+                ))}
+              </div>
+            )}
+          </CardContent>
+        </Card>
+
+        {/* Notifications */}
+        {!loadingNotifications && unreadNotifications.length > 0 && (
+          <Card>
+            <CardHeader>
+              <div className="flex items-center justify-between">
+                <div>
+                  <CardTitle>{t("lawyer.dashboard_page.notifications")}</CardTitle>
+                  <CardDescription>{t("lawyer.dashboard_page.unread_notifications")}</CardDescription>
+                </div>
+                <Bell className="h-5 w-5 text-muted-foreground" />
+              </div>
+            </CardHeader>
+            <CardContent>
+              <div className="space-y-2">
+                {unreadNotifications.map((notif: any) => (
+                  <Alert key={notif.id}>
+                    <AlertCircle className="h-4 w-4" />
+                    <AlertDescription>
+                      <div className="flex items-start justify-between gap-2">
+                        <div className="flex-1">
+                          <p className="font-medium text-sm">{notif.title}</p>
+                          <p className="text-xs text-muted-foreground mt-1">{notif.message}</p>
+                        </div>
+                        {notif.createdAt && (
+                          <span className="text-xs text-muted-foreground whitespace-nowrap">
+                            {formatDate(notif.createdAt)}
+                          </span>
+                        )}
+                      </div>
+                    </AlertDescription>
+                  </Alert>
+                ))}
+              </div>
+            </CardContent>
+          </Card>
+        )}
+
+        {/* Latest Cases */}
         <Card>
           <CardHeader>
             <CardTitle>{t("lawyer.latest_cases")}</CardTitle>

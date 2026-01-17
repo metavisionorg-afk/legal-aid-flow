@@ -1,4 +1,4 @@
-{
+ {
       "tasks": {
         "add": {
           "title": "إضافة مهمة",
@@ -1389,9 +1389,51 @@
     "portal_title": "بوابة المحامي",
     "dashboard": "لوحة التحكم",
     "my_cases": "قضاياي",
+    "sessions": "الجلسات",
+    "documents": "المستندات",
     "dashboard_title": "لوحة التحكم",
     "my_cases_title": "قضاياي",
     "latest_cases": "أحدث القضايا",
+    "dashboard_page": {
+      "upcoming_sessions": "الجلسات القادمة",
+      "upcoming_sessions_description": "أقرب 5 جلسات محكمة لقضاياك",
+      "no_upcoming_sessions": "لا توجد جلسات قادمة مجدولة",
+      "notifications": "الإشعارات",
+      "unread_notifications": "إشعارات غير مقروءة"
+    },
+    "sessions": {
+      "title": "جلساتي",
+      "description": "جلسات المحكمة لقضاياك",
+      "total": "إجمالي الجلسات",
+      "upcoming": "القادمة",
+      "upcoming_description": "الجلسات المجدولة في المستقبل",
+      "past": "السابقة",
+      "past_description": "الجلسات التي تم عقدها",
+      "no_upcoming": "لا توجد جلسات قادمة",
+      "no_past": "لا توجد جلسات سابقة"
+    },
+    "documents": {
+      "title": "المستندات",
+      "description": "عرض وتنزيل مستندات القضايا",
+      "total": "إجمالي المستندات",
+      "cases_with_docs": "القضايا التي تحتوي على مستندات",
+      "recent": "الحديثة (7 أيام)",
+      "list": "مكتبة المستندات",
+      "list_description": "جميع المستندات من قضاياك المعينة",
+      "search_placeholder": "بحث عن مستندات...",
+      "filter_by_case": "تصفية حسب القضية",
+      "no_documents": "لم يتم العثور على مستندات",
+      "try_different_filters": "جرب فلاتر مختلفة",
+      "no_documents_yet": "لم يتم رفع أي مستندات بعد"
+    },
+    "filters": {
+      "title": "الفلاتر",
+      "search_placeholder": "ابحث في القضايا...",
+      "date_from": "من تاريخ",
+      "date_to": "إلى تاريخ",
+      "clear": "مسح الفلاتر",
+      "status": "الحالة"
+    },
     "kpis": {
       "total_cases": "إجمالي القضايا",
       "in_progress": "قيد التنفيذ",
@@ -1408,6 +1450,41 @@
       "awaiting_documents": "بانتظار المستندات",
       "awaiting_hearing": "بانتظار الجلسة",
       "completed": "مكتملة"
+    },
+    "notes": {
+      "title": "ملاحظاتي",
+      "description": "ملاحظات خاصة لهذه القضية",
+      "add": "إضافة ملاحظة",
+      "edit": "تعديل ملاحظة",
+      "delete": "حذف ملاحظة",
+      "pin": "تثبيت",
+      "unpin": "إلغاء التثبيت",
+      "pinned": "مثبتة",
+      "note_text": "الملاحظة",
+      "note_text_placeholder": "اكتب ملاحظتك الخاصة هنا...",
+      "note_text_required": "نص الملاحظة مطلوب",
+      "no_notes": "لا توجد ملاحظات بعد",
+      "no_notes_description": "أضف ملاحظات خاصة لتتبع أفكارك وتقدمك في هذه القضية",
+      "created": "تم إنشاء الملاحظة",
+      "updated": "تم تحديث الملاحظة",
+      "deleted": "تم حذف الملاحظة",
+      "create_failed": "فشل إنشاء الملاحظة",
+      "update_failed": "فشل تحديث الملاحظة",
+      "delete_failed": "فشل حذف الملاحظة",
+      "confirm_delete": "هل أنت متأكد من حذف هذه الملاحظة؟"
+    },
+    "reminders": {
+      "title": "تذكيرات الجلسات",
+      "description": "تعيين تذكيرات للجلسات القادمة",
+      "add": "إضافة تذكير",
+      "delete": "حذف تذكير",
+      "reminder_time": "وقت التذكير",
+      "note": "ملاحظة (اختياري)",
+      "no_reminders": "لا توجد تذكيرات",
+      "created": "تم إنشاء التذكير",
+      "deleted": "تم حذف التذكير",
+      "create_failed": "فشل إنشاء التذكير",
+      "delete_failed": "فشل حذف التذكير"
     }
   },
   "common": {
@@ -1420,6 +1497,8 @@
     "please_login_again": "يرجى تسجيل الدخول مرة أخرى للمتابعة.",
     "retry": "إعادة المحاولة",
     "empty": "لا توجد بيانات بعد.",
+    "no_data": "لا توجد بيانات",
+    "untitled": "بدون عنوان",
     "cancel": "إلغاء",
     "confirm": "تأكيد",
     "delete": "حذف",
@@ -1438,6 +1517,7 @@
     "open": "فتح",
     "all": "الكل",
     "no_data": "لا توجد بيانات",
+    "untitled": "بدون عنوان",
     "unauthorized_title": "غير مصرح",
     "unauthorized_desc": "ليس لديك صلاحية للوصول إلى هذه الصفحة.",
     "forbidden_title": "غير مصرح",

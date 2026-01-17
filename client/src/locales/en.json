@@ -911,6 +911,8 @@
     "select_case": "Select case",
     "case_required": "Case is required",
     "title": "Title",
+    "court": "Court",
+    "date": "Date",
     "title_placeholder": "Session title",
     "title_required": "Title is required",
     "session_number": "Session number",
@@ -927,6 +929,12 @@
     "next_session_date": "Next session date",
     "status": "Status",
     "select_status": "Select status",
+    "status": {
+      "upcoming": "Upcoming",
+      "postponed": "Postponed",
+      "completed": "Completed",
+      "cancelled": "Cancelled"
+    },
     "status_upcoming": "Upcoming",
     "status_postponed": "Postponed",
     "status_completed": "Completed",
@@ -1232,9 +1240,51 @@
     "portal_title": "Lawyer Portal",
     "dashboard": "Dashboard",
     "my_cases": "My Cases",
+    "sessions": "Sessions",
+    "documents": "Documents",
     "dashboard_title": "Dashboard",
     "my_cases_title": "My cases",
     "latest_cases": "Latest cases",
+    "dashboard_page": {
+      "upcoming_sessions": "Upcoming Sessions",
+      "upcoming_sessions_description": "Next 5 court sessions for your cases",
+      "no_upcoming_sessions": "No upcoming sessions scheduled",
+      "notifications": "Notifications",
+      "unread_notifications": "Unread notifications"
+    },
+    "sessions": {
+      "title": "My Sessions",
+      "description": "Court sessions for your cases",
+      "total": "Total Sessions",
+      "upcoming": "Upcoming",
+      "upcoming_description": "Sessions scheduled in the future",
+      "past": "Past",
+      "past_description": "Sessions that have already occurred",
+      "no_upcoming": "No upcoming sessions",
+      "no_past": "No past sessions"
+    },
+    "documents": {
+      "title": "Documents",
+      "description": "View and download case documents",
+      "total": "Total Documents",
+      "cases_with_docs": "Cases with Documents",
+      "recent": "Recent (7 days)",
+      "list": "Documents Library",
+      "list_description": "All documents from your assigned cases",
+      "search_placeholder": "Search documents...",
+      "filter_by_case": "Filter by case",
+      "no_documents": "No documents found",
+      "try_different_filters": "Try different filters",
+      "no_documents_yet": "No documents have been uploaded yet"
+    },
+    "filters": {
+      "title": "Filters",
+      "search_placeholder": "Search cases...",
+      "date_from": "From Date",
+      "date_to": "To Date",
+      "clear": "Clear Filters",
+      "status": "Status"
+    },
     "kpis": {
       "total_cases": "Total cases",
       "in_progress": "In progress",
@@ -1242,15 +1292,46 @@
       "awaiting_hearing": "Awaiting hearing",
       "completed": "Completed"
     },
-    "filters": {
-      "search_placeholder": "Search cases...",
-      "status": "Status"
-    },
     "status": {
       "in_progress": "In progress",
       "awaiting_documents": "Awaiting documents",
       "awaiting_hearing": "Awaiting hearing",
       "completed": "Completed"
+    },
+    "notes": {
+      "title": "My Notes",
+      "description": "Private notes for this case",
+      "add": "Add Note",
+      "edit": "Edit Note",
+      "delete": "Delete Note",
+      "pin": "Pin",
+      "unpin": "Unpin",
+      "pinned": "Pinned",
+      "note_text": "Note",
+      "note_text_placeholder": "Write your private note here...",
+      "note_text_required": "Note text is required",
+      "no_notes": "No notes yet",
+      "no_notes_description": "Add private notes to track your thoughts and progress on this case",
+      "created": "Note created",
+      "updated": "Note updated",
+      "deleted": "Note deleted",
+      "create_failed": "Failed to create note",
+      "update_failed": "Failed to update note",
+      "delete_failed": "Failed to delete note",
+      "confirm_delete": "Are you sure you want to delete this note?"
+    },
+    "reminders": {
+      "title": "Session Reminders",
+      "description": "Set reminders for upcoming sessions",
+      "add": "Add Reminder",
+      "delete": "Delete Reminder",
+      "reminder_time": "Reminder Time",
+      "note": "Note (optional)",
+      "no_reminders": "No reminders set",
+      "created": "Reminder created",
+      "deleted": "Reminder deleted",
+      "create_failed": "Failed to create reminder",
+      "delete_failed": "Failed to delete reminder"
     }
   },
   "judicial_services": {
@@ -1369,6 +1450,7 @@
     "retry": "Retry",
     "empty": "Empty",
     "no_data": "No data",
+    "untitled": "Untitled",
     "feature_disabled": "This feature is currently disabled.",
     "session_expired": "Session expired",
     "please_login_again": "Please log in again to continue.",

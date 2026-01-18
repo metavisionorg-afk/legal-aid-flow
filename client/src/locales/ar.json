@@ -1575,5 +1575,30 @@
     "medium": "متوسطة",
     "high": "عالية",
     "urgent": "عاجلة"
+  },
+  "integrations": {
+    "zoom": {
+      "title": "تكامل Zoom",
+      "enabled": "مفعّل",
+      "account_id": "معرّف الحساب",
+      "client_id": "معرّف العميل",
+      "client_secret": "المفتاح السري",
+      "save": "حفظ الإعدادات",
+      "saved": "تم حفظ الإعدادات بنجاح",
+      "test": "اختبار الاتصال",
+      "test_ok": "نجح الاتصال",
+      "test_fail": "فشل الاتصال"
+    }
+  },
+  "sessions": {
+    "join_meeting": "الانضمام للاجتماع",
+    "generate_zoom_link": "إنشاء رابط Zoom",
+    "meeting_created": "تم إنشاء اجتماع Zoom بنجاح",
+    "meeting_provider_zoom": "Zoom"
+  },
+  "errors": {
+    "zoom_not_configured": "لم يتم تكوين تكامل Zoom",
+    "zoom_disabled": "تكامل Zoom معطل",
+    "zoom_auth_failed": "فشلت المصادقة مع Zoom"
   }
 }

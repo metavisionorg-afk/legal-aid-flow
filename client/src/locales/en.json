@@ -1511,5 +1511,30 @@
     "medium": "Medium",
     "high": "High",
     "urgent": "Urgent"
+  },
+  "integrations": {
+    "zoom": {
+      "title": "Zoom Integration",
+      "enabled": "Enabled",
+      "account_id": "Account ID",
+      "client_id": "Client ID",
+      "client_secret": "Client Secret",
+      "save": "Save Settings",
+      "saved": "Settings saved successfully",
+      "test": "Test Connection",
+      "test_ok": "Connection successful",
+      "test_fail": "Connection failed"
+    }
+  },
+  "sessions": {
+    "join_meeting": "Join Meeting",
+    "generate_zoom_link": "Generate Zoom Link",
+    "meeting_created": "Zoom meeting created successfully",
+    "meeting_provider_zoom": "Zoom"
+  },
+  "errors": {
+    "zoom_not_configured": "Zoom integration is not configured",
+    "zoom_disabled": "Zoom integration is disabled",
+    "zoom_auth_failed": "Failed to authenticate with Zoom"
   }
 }

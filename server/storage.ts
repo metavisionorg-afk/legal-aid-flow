@@ -455,6 +455,10 @@ export interface IStorage {
   getZoomMeetingBySession(sessionId: string): Promise<schema.IntegrationsZoomMeeting | undefined>;
   createZoomMeeting(input: schema.InsertIntegrationsZoomMeeting): Promise<schema.IntegrationsZoomMeeting>;
   deleteZoomMeeting(sessionId: string): Promise<boolean>;
+
+  // ===== Zoom Config (Admin Settings) =====
+  getZoomConfig(): Promise<schema.IntegrationsZoomConfig | undefined>;
+  upsertZoomConfig(input: Omit<schema.InsertIntegrationsZoomConfig, 'id'> & { id?: string }): Promise<schema.IntegrationsZoomConfig>;
 }
 
 export class DatabaseStorage implements IStorage {
@@ -2275,6 +2279,29 @@ export class DatabaseStorage implements IStorage {
       .delete(schema.integrationsZoomMeetings)
       .where(eq(schema.integrationsZoomMeetings.sessionId, sessionId));
     return Boolean(result.rowCount && result.rowCount > 0);
+  }
+
+  // ===== Zoom Config (Admin Settings) =====
+
+  async getZoomConfig(): Promise<schema.IntegrationsZoomConfig | undefined> {
+    const [row] = await db.select().from(schema.integrationsZoomConfig).limit(1);
+    return row;
+  }
+
+  async upsertZoomConfig(input: Omit<schema.InsertIntegrationsZoomConfig, 'id'> & { id?: string }): Promise<schema.IntegrationsZoomConfig> {
+    const existing = await this.getZoomConfig();
+    
+    if (existing) {
+      const [updated] = await db
+        .update(schema.integrationsZoomConfig)
+        .set({ ...input, updatedAt: new Date() } as any)
+        .where(eq(schema.integrationsZoomConfig.id, existing.id))
+        .returning();
+      return updated;
+    }
+    
+    const [created] = await db.insert(schema.integrationsZoomConfig).values(input as any).returning();
+    return created;
   }
 }
 

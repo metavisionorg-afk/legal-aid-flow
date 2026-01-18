@@ -23,7 +23,9 @@
     "smoke:stage2": "tsx scripts/smoke-stage2-docs.ts",
     "smoke:stage3": "tsx scripts/smoke-stage3-service-requests.ts",
     "smoke:stage4": "tsx scripts/smoke-stage4-tasks.ts",
-    "smoke:sessions": "tsx scripts/smoke-stage-sessions.ts"
+    "smoke:sessions": "tsx scripts/smoke-stage-sessions.ts",
+    "zoom:env": "node scripts/check-zoom-env.mjs",
+    "i18n:json": "node -e \"try { require('./client/src/locales/en.json'); require('./client/src/locales/ar.json'); console.log('✓ i18n JSON files valid'); process.exit(0); } catch(e) { console.error('✗ i18n JSON error:', e.message); process.exit(1); }\""
   },
   "dependencies": {
     "@hookform/resolvers": "^3.10.0",

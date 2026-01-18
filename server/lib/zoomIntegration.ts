@@ -16,17 +16,23 @@ interface CreateZoomMeetingParams {
   timezone?: string;
 }
 
+interface ZoomConfig {
+  accountId: string;
+  clientId: string;
+  clientSecret: string;
+}
+
 /**
  * Get Zoom access token using Server-to-Server OAuth
- * Requires: ZOOM_ACCOUNT_ID, ZOOM_CLIENT_ID, ZOOM_CLIENT_SECRET
+ * Can accept explicit config or fall back to environment variables
  */
-async function getZoomAccessToken(): Promise<string> {
-  const accountId = process.env.ZOOM_ACCOUNT_ID;
-  const clientId = process.env.ZOOM_CLIENT_ID;
-  const clientSecret = process.env.ZOOM_CLIENT_SECRET;
+export async function getAccessToken(config?: ZoomConfig): Promise<string> {
+  const accountId = config?.accountId || process.env.ZOOM_ACCOUNT_ID;
+  const clientId = config?.clientId || process.env.ZOOM_CLIENT_ID;
+  const clientSecret = config?.clientSecret || process.env.ZOOM_CLIENT_SECRET;
 
   if (!accountId || !clientId || !clientSecret) {
-    throw new Error("Zoom credentials not configured (ZOOM_ACCOUNT_ID, ZOOM_CLIENT_ID, ZOOM_CLIENT_SECRET required)");
+    throw new Error("Zoom credentials not configured");
   }
 
   const authString = Buffer.from(`${clientId}:${clientSecret}`).toString("base64");
@@ -47,6 +53,13 @@ async function getZoomAccessToken(): Promise<string> {
 
   const data = await response.json();
   return data.access_token;
+}
+
+/**
+ * Get Zoom access token using environment variables (legacy)
+ */
+async function getZoomAccessToken(): Promise<string> {
+  return getAccessToken();
 }
 
 /**

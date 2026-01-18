@@ -1060,3 +1060,20 @@ export const integrationsZoomMeetings = pgTable("integrations_zoom_meetings", {
 export const insertIntegrationsZoomMeetingSchema = createInsertSchema(integrationsZoomMeetings).omit({ id: true, createdAt: true });
 export type InsertIntegrationsZoomMeeting = z.infer<typeof insertIntegrationsZoomMeetingSchema>;
 export type IntegrationsZoomMeeting = typeof integrationsZoomMeetings.$inferSelect;
+
+// ===== Zoom Config (Admin Settings) =====
+
+export const integrationsZoomConfig = pgTable("integrations_zoom_config", {
+  id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
+  accountId: varchar("account_id").notNull(),
+  clientId: varchar("client_id").notNull(),
+  clientSecretEnc: text("client_secret_enc").notNull(),
+  enabled: boolean("enabled").notNull().default(true),
+  createdAt: timestamp("created_at").notNull().defaultNow(),
+  updatedAt: timestamp("updated_at").notNull().defaultNow(),
+  updatedByUserId: varchar("updated_by_user_id").references(() => users.id),
+});
+
+export const insertIntegrationsZoomConfigSchema = createInsertSchema(integrationsZoomConfig).omit({ id: true, createdAt: true, updatedAt: true });
+export type InsertIntegrationsZoomConfig = z.infer<typeof insertIntegrationsZoomConfigSchema>;
+export type IntegrationsZoomConfig = typeof integrationsZoomConfig.$inferSelect;

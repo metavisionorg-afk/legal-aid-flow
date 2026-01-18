@@ -4969,6 +4969,106 @@ export async function registerRoutes(
     }
   });
 
+  // Generate Zoom link for session (admin/staff only)
+  app.post("/api/sessions/:id/zoom/create", requireStaff, async (req: AuthRequest, res) => {
+    try {
+      const user = req.user as User;
+      const session = await storage.getSession(req.params.id);
+      if (!session) {
+        return res.status(404).json({ error: "Session not found" });
+      }
+
+      const caseData = await storage.getCase(String(session.caseId));
+      if (!caseData) {
+        return res.status(404).json({ error: "Case not found" });
+      }
+
+      // Load Zoom config from DB
+      const zoomConfig = await storage.getZoomConfig();
+      if (!zoomConfig || !zoomConfig.enabled) {
+        return res.status(400).json({ error: "ZOOM_NOT_CONFIGURED" });
+      }
+
+      // Decrypt secret
+      const { decrypt } = await import("./lib/crypto");
+      const clientSecret = decrypt(zoomConfig.clientSecretEnc);
+
+      // Create Zoom meeting
+      const { createZoomMeeting, getAccessToken } = await import("./lib/zoomIntegration");
+      
+      // Verify credentials first
+      try {
+        await getAccessToken({
+          accountId: zoomConfig.accountId,
+          clientId: zoomConfig.clientId,
+          clientSecret,
+        });
+      } catch (error: any) {
+        return res.status(400).json({ error: "ZOOM_AUTH_FAILED" });
+      }
+
+      const zoomMeeting = await createZoomMeeting({
+        topic: session.title,
+        start_time: new Date(session.gregorianDate).toISOString(),
+        duration: 60,
+        timezone: "Asia/Riyadh",
+      });
+
+      // Upsert Zoom meeting record
+      const existing = await storage.getZoomMeetingBySession(session.id);
+      if (existing) {
+        await storage.deleteZoomMeeting(session.id);
+      }
+
+      await storage.createZoomMeeting({
+        sessionId: session.id,
+        meetingId: String(zoomMeeting.id),
+        joinUrl: zoomMeeting.join_url,
+        provider: "zoom",
+      } as any);
+
+      // Update session meetingUrl (existing field)
+      await storage.updateSession(session.id, {
+        meetingUrl: zoomMeeting.join_url,
+      } as any);
+
+      // Notify lawyer
+      if (caseData.assignedLawyerId) {
+        await storage.createNotification({
+          userId: caseData.assignedLawyerId,
+          type: "ZOOM_MEETING_CREATED",
+          title: "Zoom meeting created",
+          message: `Zoom meeting created for session: ${session.title}`,
+          url: "/lawyer/sessions",
+          relatedEntityId: session.id,
+        } as any);
+      }
+
+      // Notify beneficiary
+      const beneficiary = await storage.getBeneficiary(caseData.beneficiaryId);
+      if ((beneficiary as any)?.userId) {
+        await storage.createNotification({
+          userId: String((beneficiary as any).userId),
+          type: "ZOOM_MEETING_CREATED",
+          title: "Zoom meeting created",
+          message: `Zoom meeting created for your session: ${session.title}`,
+          url: "/portal/sessions",
+          relatedEntityId: session.id,
+        } as any);
+      }
+
+      await createAudit(user.id, "create", "zoom_meeting", session.id, `Generated Zoom link for session: ${session.title}`, req.ip);
+
+      return res.json({
+        success: true,
+        joinUrl: zoomMeeting.join_url,
+        meetingId: String(zoomMeeting.id),
+      });
+    } catch (error: any) {
+      return res.status(500).json({ error: getErrorMessage(error) });
+    }
+  });
+
   // ========== CONSULTATIONS ROUTES ==========
 
   app.get("/api/consultations", requireStaff, async (req, res) => {
@@ -5547,6 +5647,123 @@ export async function registerRoutes(
       return res.status(500).json({ error: getErrorMessage(error) });
     }
   });
+
+  // ========== ADMIN ZOOM CONFIGURATION ROUTES ==========
+
+  // Get Zoom config (admin only, never returns decrypted secret)
+  app.get(
+    "/api/admin/integrations/zoom",
+    requireStaff,
+    requireRole(["admin", "super_admin"]),
+    async (req: AuthRequest, res) => {
+      try {
+        const config = await storage.getZoomConfig();
+        if (!config) {
+          return res.json({ enabled: false, accountId: null, clientId: null });
+        }
+
+        // Never return encrypted secret
+        return res.json({
+          enabled: config.enabled,
+          accountId: config.accountId,
+          clientId: config.clientId,
+        });
+      } catch (error: any) {
+        return res.status(500).json({ error: getErrorMessage(error) });
+      }
+    },
+  );
+
+  // Upsert Zoom config (admin only)
+  app.post(
+    "/api/admin/integrations/zoom",
+    requireStaff,
+    requireRole(["admin", "super_admin"]),
+    async (req: AuthRequest, res) => {
+      try {
+        const user = req.user!;
+
+        const parsed = z
+          .object({
+            accountId: z.string().trim().min(1),
+            clientId: z.string().trim().min(1),
+            clientSecret: z.string().trim().min(1),
+            enabled: z.boolean().optional().default(true),
+          })
+          .safeParse(req.body);
+
+        if (!parsed.success) {
+          return res.status(400).json({ error: fromZodError(parsed.error).message });
+        }
+
+        const { accountId, clientId, clientSecret, enabled } = parsed.data;
+
+        // Encrypt secret
+        const { encrypt, isEncryptionAvailable } = await import("./lib/crypto");
+        if (!isEncryptionAvailable()) {
+          return res.status(500).json({
+            error: "INTEGRATIONS_ENC_KEY not configured. Cannot store secrets securely.",
+          });
+        }
+
+        const clientSecretEnc = encrypt(clientSecret);
+
+        const updated = await storage.upsertZoomConfig({
+          accountId,
+          clientId,
+          clientSecretEnc,
+          enabled,
+          updatedByUserId: user.id,
+        } as any);
+
+        await createAudit(user.id, "upsert", "zoom_config", updated.id, "Updated Zoom integration config", req.ip);
+
+        return res.json({
+          success: true,
+          enabled: updated.enabled,
+          accountId: updated.accountId,
+          clientId: updated.clientId,
+        });
+      } catch (error: any) {
+        return res.status(500).json({ error: getErrorMessage(error) });
+      }
+    },
+  );
+
+  // Test Zoom config (admin only)
+  app.post(
+    "/api/admin/integrations/zoom/test",
+    requireStaff,
+    requireRole(["admin", "super_admin"]),
+    async (req: AuthRequest, res) => {
+      try {
+        const config = await storage.getZoomConfig();
+        if (!config || !config.enabled) {
+          return res.status(400).json({ error: "ZOOM_NOT_CONFIGURED" });
+        }
+
+        // Decrypt secret
+        const { decrypt } = await import("./lib/crypto");
+        const clientSecret = decrypt(config.clientSecretEnc);
+
+        // Test token fetch
+        const { getAccessToken } = await import("./lib/zoomIntegration");
+        const token = await getAccessToken({
+          accountId: config.accountId,
+          clientId: config.clientId,
+          clientSecret,
+        });
+
+        if (!token) {
+          return res.status(400).json({ error: "ZOOM_AUTH_FAILED" });
+        }
+
+        return res.json({ success: true, message: "Zoom credentials validated successfully" });
+      } catch (error: any) {
+        return res.status(500).json({ error: getErrorMessage(error) });
+      }
+    },
+  );
 
   // ========== SUPPORT TICKETS ROUTES (BENEFICIARY) ==========
 

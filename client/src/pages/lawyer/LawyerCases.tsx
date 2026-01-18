@@ -22,12 +22,15 @@ import {
   TableRow,
 } from "@/components/ui/table";
 import { Skeleton } from "@/components/ui/skeleton";
+import { Badge } from "@/components/ui/badge";
 
 import { lawyerAPI } from "@/lib/api";
 
 const STATUS_OPTIONS = ["in_progress", "awaiting_documents", "awaiting_hearing", "completed"] as const;
+const PRIORITY_OPTIONS = ["low", "medium", "high", "urgent"] as const;
 
 type StatusOption = (typeof STATUS_OPTIONS)[number];
+type PriorityOption = (typeof PRIORITY_OPTIONS)[number];
 
 function formatDate(value: any): string {
   if (!value) return "-";
@@ -41,6 +44,7 @@ export default function LawyerCases() {
 
   const [q, setQ] = useState<string>("");
   const [status, setStatus] = useState<StatusOption | "all">("all");
+  const [priority, setPriority] = useState<PriorityOption | "all">("all");
 
   const { data: beneficiaries } = useQuery({
     queryKey: ["lawyer", "beneficiaries"],
@@ -65,12 +69,36 @@ export default function LawyerCases() {
       }),
   });
 
-  const rows = Array.isArray(cases) ? cases : [];
+  const rows = useMemo(() => {
+    const list = Array.isArray(cases) ? cases : [];
+    if (priority === "all") return list;
+    return list.filter((c: any) => String(c.priority || "") === priority);
+  }, [cases, priority]);
 
   const statusLabel = (s: any) =>
     t(`lawyer.status.${String(s)}`, {
       defaultValue: t(`case.status.${String(s)}`, { defaultValue: String(s || "-") }),
     });
+
+  const priorityLabel = (p: any) =>
+    t(`case.priority.${String(p)}`, { defaultValue: String(p || "-") });
+
+  const caseTypeLabel = (c: any) => {
+    if (c.caseTypeNameEn || c.caseTypeNameAr) {
+      return c.caseTypeNameEn || c.caseTypeNameAr || "-";
+    }
+    return t(`case_types.${String(c.caseType)}`, { defaultValue: String(c.caseType || "-") });
+  };
+
+  const priorityColor = (p: string) => {
+    switch (p) {
+      case "urgent": return "destructive";
+      case "high": return "default";
+      case "medium": return "secondary";
+      case "low": return "outline";
+      default: return "secondary";
+    }
+  };
 
   return (
     <div className="space-y-6">
@@ -97,7 +125,7 @@ export default function LawyerCases() {
                   placeholder={t("lawyer.filters.search_placeholder")}
                 />
               </div>
-              <div className="w-full md:w-64">
+              <div className="w-full md:w-48">
                 <Select value={status} onValueChange={(v) => setStatus(v as any)}>
                   <SelectTrigger>
                     <SelectValue placeholder={t("lawyer.filters.status")} />
@@ -107,6 +135,21 @@ export default function LawyerCases() {
                     {STATUS_OPTIONS.map((s) => (
                       <SelectItem key={s} value={s}>
                         {t(`lawyer.status.${s}`)}
+                      </SelectItem>
+                    ))}
+                  </SelectContent>
+                </Select>
+              </div>
+              <div className="w-full md:w-48">
+                <Select value={priority} onValueChange={(v) => setPriority(v as any)}>
+                  <SelectTrigger>
+                    <SelectValue placeholder={t("case.priority_label", { defaultValue: "Priority" })} />
+                  </SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value="all">{t("common.all", { defaultValue: "All" })}</SelectItem>
+                    {PRIORITY_OPTIONS.map((p) => (
+                      <SelectItem key={p} value={p}>
+                        {priorityLabel(p)}
                       </SelectItem>
                     ))}
                   </SelectContent>
@@ -130,7 +173,9 @@ export default function LawyerCases() {
                   <TableRow>
                     <TableHead>{t("cases.case_number", { defaultValue: "Case #" })}</TableHead>
                     <TableHead>{t("cases.title", { defaultValue: "Title" })}</TableHead>
+                    <TableHead>{t("case.case_type", { defaultValue: "Type" })}</TableHead>
                     <TableHead>{t("beneficiaries.name", { defaultValue: "Beneficiary" })}</TableHead>
+                    <TableHead>{t("case.priority_label", { defaultValue: "Priority" })}</TableHead>
                     <TableHead>{t("cases.status", { defaultValue: "Status" })}</TableHead>
                     <TableHead>{t("cases.updated_at", { defaultValue: "Updated" })}</TableHead>
                     <TableHead className="text-right">{t("common.actions", { defaultValue: "" })}</TableHead>
@@ -142,7 +187,13 @@ export default function LawyerCases() {
                       <TableRow key={String(c.id)}>
                         <TableCell className="font-medium">{c.caseNumber || "-"}</TableCell>
                         <TableCell>{c.title || "-"}</TableCell>
+                        <TableCell className="text-sm text-muted-foreground">{caseTypeLabel(c)}</TableCell>
                         <TableCell>{beneficiaryNameById.get(String(c.beneficiaryId)) || "-"}</TableCell>
+                        <TableCell>
+                          <Badge variant={priorityColor(c.priority) as any}>
+                            {priorityLabel(c.priority)}
+                          </Badge>
+                        </TableCell>
                         <TableCell>{statusLabel(c.status)}</TableCell>
                         <TableCell>{formatDate(c.updatedAt)}</TableCell>
                         <TableCell className="text-right">
@@ -156,7 +207,7 @@ export default function LawyerCases() {
                     ))
                   ) : (
                     <TableRow>
-                      <TableCell colSpan={6} className="text-center text-muted-foreground">
+                      <TableCell colSpan={8} className="text-center text-muted-foreground">
                         {t("common.no_data", { defaultValue: "No data" })}
                       </TableCell>
                     </TableRow>

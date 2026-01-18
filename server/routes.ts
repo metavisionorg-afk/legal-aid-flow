@@ -4711,7 +4711,15 @@ export async function registerRoutes(
       }
 
       const attachments = await storage.getDocumentsBySession(session.id);
-      return res.json({ ...session, attachments });
+      
+      // Fetch Zoom meeting if exists (additive only)
+      const zoomMeeting = await storage.getZoomMeetingBySession(session.id);
+      
+      return res.json({ 
+        ...session, 
+        attachments,
+        zoomMeeting: zoomMeeting || null,
+      });
     } catch (error: any) {
       return res.status(500).json({ error: error.message });
     }
@@ -4831,6 +4839,60 @@ export async function registerRoutes(
       }
 
       await createAudit(user.id, "create", "session", created.id, `Created session: ${created.title}`, req.ip);
+
+      // ===== Zoom Integration (Additive Only) =====
+      // Auto-create Zoom meeting if enabled and session type is remote/hybrid
+      if ((input.sessionType === "remote" || input.sessionType === "hybrid") && !input.meetingUrl) {
+        try {
+          const { createZoomMeeting, isZoomEnabled } = await import("./lib/zoomIntegration");
+          
+          if (isZoomEnabled()) {
+            const zoomMeeting = await createZoomMeeting({
+              topic: created.title,
+              start_time: new Date(input.dateGregorian).toISOString(),
+              duration: 60, // Default 60 minutes
+              timezone: "Asia/Riyadh",
+            });
+
+            // Store Zoom meeting details
+            await storage.createZoomMeeting({
+              sessionId: created.id,
+              meetingId: String(zoomMeeting.id),
+              joinUrl: zoomMeeting.join_url,
+              provider: "zoom",
+            } as any);
+
+            // Notify lawyer
+            if (caseData.assignedLawyerId) {
+              await storage.createNotification({
+                userId: caseData.assignedLawyerId,
+                type: "ZOOM_MEETING_CREATED",
+                title: "Zoom meeting created",
+                message: `Zoom meeting created for session: ${created.title}`,
+                url: `/lawyer/sessions`,
+                relatedEntityId: created.id,
+              } as any);
+            }
+
+            // Notify beneficiary
+            const beneficiary = await storage.getBeneficiary(caseData.beneficiaryId);
+            if ((beneficiary as any)?.userId) {
+              await storage.createNotification({
+                userId: String((beneficiary as any).userId),
+                type: "ZOOM_MEETING_CREATED",
+                title: "Zoom meeting created",
+                message: `Zoom meeting created for your session: ${created.title}`,
+                url: `/portal/sessions`,
+                relatedEntityId: created.id,
+              } as any);
+            }
+          }
+        } catch (zoomError: any) {
+          // Log error but don't fail session creation
+          console.error("[Zoom Integration] Failed to create meeting:", zoomError.message);
+        }
+      }
+
       return res.status(201).json(created);
     } catch (error: any) {
       res.status(500).json({ error: error.message });
@@ -5337,6 +5399,154 @@ export async function registerRoutes(
       }
     },
   );
+
+  // ========== LAWYER CASE NOTES ROUTES (PHASE 6) ==========
+
+  // List notes for a case (lawyer only, their own notes)
+  app.get("/api/lawyer/cases/:caseId/notes", requireLawyer, async (req: AuthRequest, res) => {
+    try {
+      const lawyer = req.user!;
+      const caseData = await storage.getCase(req.params.caseId);
+      if (!caseData) return res.status(404).json({ error: "Case not found" });
+      if (!canLawyerAccessCase(lawyer, caseData)) return res.status(403).json({ error: "Forbidden" });
+
+      const notes = await storage.listLawyerCaseNotes(caseData.id, lawyer.id);
+      return res.json(notes);
+    } catch (error: any) {
+      return res.status(500).json({ error: getErrorMessage(error) });
+    }
+  });
+
+  // Create note for a case (lawyer only)
+  app.post("/api/lawyer/cases/:caseId/notes", requireLawyer, async (req: AuthRequest, res) => {
+    try {
+      const lawyer = req.user!;
+      const caseData = await storage.getCase(req.params.caseId);
+      if (!caseData) return res.status(404).json({ error: "Case not found" });
+      if (!canLawyerAccessCase(lawyer, caseData)) return res.status(403).json({ error: "Forbidden" });
+
+      const parsed = z
+        .object({
+          noteText: z.string().trim().min(1).max(5000),
+          isPinned: z.boolean().optional().default(false),
+        })
+        .safeParse(req.body);
+
+      if (!parsed.success) {
+        return res.status(400).json({ error: fromZodError(parsed.error).message });
+      }
+
+      const created = await storage.createLawyerCaseNote({
+        caseId: caseData.id,
+        lawyerId: lawyer.id,
+        noteText: parsed.data.noteText,
+        isPinned: parsed.data.isPinned,
+      } as any);
+
+      return res.status(201).json(created);
+    } catch (error: any) {
+      return res.status(500).json({ error: getErrorMessage(error) });
+    }
+  });
+
+  // Update note (lawyer only, their own notes)
+  app.patch("/api/lawyer/notes/:noteId", requireLawyer, async (req: AuthRequest, res) => {
+    try {
+      const lawyer = req.user!;
+
+      const parsed = z
+        .object({
+          noteText: z.string().trim().min(1).max(5000).optional(),
+          isPinned: z.boolean().optional(),
+        })
+        .safeParse(req.body);
+
+      if (!parsed.success) {
+        return res.status(400).json({ error: fromZodError(parsed.error).message });
+      }
+
+      const updated = await storage.updateLawyerCaseNote(req.params.noteId, lawyer.id, parsed.data as any);
+      if (!updated) return res.status(404).json({ error: "Note not found" });
+
+      return res.json(updated);
+    } catch (error: any) {
+      return res.status(500).json({ error: getErrorMessage(error) });
+    }
+  });
+
+  // Delete note (lawyer only, their own notes)
+  app.delete("/api/lawyer/notes/:noteId", requireLawyer, async (req: AuthRequest, res) => {
+    try {
+      const lawyer = req.user!;
+      const ok = await storage.deleteLawyerCaseNote(req.params.noteId, lawyer.id);
+      if (!ok) return res.status(404).json({ error: "Note not found" });
+      return res.json({ success: true });
+    } catch (error: any) {
+      return res.status(500).json({ error: getErrorMessage(error) });
+    }
+  });
+
+  // ========== LAWYER SESSION REMINDERS ROUTES (PHASE 6) ==========
+
+  // List reminders for lawyer
+  app.get("/api/lawyer/reminders", requireLawyer, async (req: AuthRequest, res) => {
+    try {
+      const lawyer = req.user!;
+      const reminders = await storage.listLawyerSessionReminders(lawyer.id);
+      return res.json(reminders);
+    } catch (error: any) {
+      return res.status(500).json({ error: getErrorMessage(error) });
+    }
+  });
+
+  // Create reminder for a session (lawyer only)
+  app.post("/api/lawyer/sessions/:sessionId/reminders", requireLawyer, async (req: AuthRequest, res) => {
+    try {
+      const lawyer = req.user!;
+      const session = await storage.getSession(req.params.sessionId);
+      if (!session) return res.status(404).json({ error: "Session not found" });
+
+      // Verify lawyer has access to this session's case
+      const caseData = await storage.getCase(String(session.caseId));
+      if (!caseData) return res.status(404).json({ error: "Case not found" });
+      if (!canLawyerAccessCase(lawyer, caseData)) return res.status(403).json({ error: "Forbidden" });
+
+      const parsed = z
+        .object({
+          reminderTime: z.string().datetime(),
+          note: z.string().trim().max(500).optional().nullable(),
+        })
+        .safeParse(req.body);
+
+      if (!parsed.success) {
+        return res.status(400).json({ error: fromZodError(parsed.error).message });
+      }
+
+      const created = await storage.createLawyerSessionReminder({
+        sessionId: session.id,
+        lawyerId: lawyer.id,
+        reminderTime: new Date(parsed.data.reminderTime),
+        note: parsed.data.note ?? null,
+        isSent: false,
+      } as any);
+
+      return res.status(201).json(created);
+    } catch (error: any) {
+      return res.status(500).json({ error: getErrorMessage(error) });
+    }
+  });
+
+  // Delete reminder (lawyer only, their own reminders)
+  app.delete("/api/lawyer/reminders/:reminderId", requireLawyer, async (req: AuthRequest, res) => {
+    try {
+      const lawyer = req.user!;
+      const ok = await storage.deleteLawyerSessionReminder(req.params.reminderId, lawyer.id);
+      if (!ok) return res.status(404).json({ error: "Reminder not found" });
+      return res.json({ success: true });
+    } catch (error: any) {
+      return res.status(500).json({ error: getErrorMessage(error) });
+    }
+  });
 
   // ========== SUPPORT TICKETS ROUTES (BENEFICIARY) ==========
 

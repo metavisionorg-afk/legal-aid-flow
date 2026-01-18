@@ -4,6 +4,8 @@ import { format, isPast, isFuture, parseISO } from "date-fns";
 import { ar, enUS } from "date-fns/locale";
 import { Calendar as CalendarIcon, Clock, MapPin, Video, Building2, AlertCircle } from "lucide-react";
 
+import { Button } from "@/components/ui/button";
+
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { Skeleton } from "@/components/ui/skeleton";
@@ -29,6 +31,11 @@ interface Session {
   requirements: string | null;
   isConfidential: boolean;
   createdAt: string;
+  zoomMeeting?: {
+    joinUrl: string;
+    meetingId: string;
+    provider: string;
+  } | null;
 }
 
 export default function PortalSessions() {
@@ -145,18 +152,35 @@ export default function PortalSessions() {
               </div>
             )}
 
-            {/* Meeting URL for remote sessions */}
-            {session.sessionType === "remote" && session.meetingUrl && (
+            {/* Meeting URL for remote/hybrid sessions */}
+            {(session.sessionType === "remote" || session.sessionType === "hybrid") && (
               <div className="flex items-center gap-3">
                 <Video className="h-4 w-4 text-muted-foreground flex-shrink-0" />
-                <a
-                  href={session.meetingUrl}
-                  target="_blank"
-                  rel="noopener noreferrer"
-                  className="text-sm text-primary hover:underline truncate"
-                >
-                  {t("portal_sessions.join_meeting")}
-                </a>
+                {session.zoomMeeting?.joinUrl ? (
+                  <Button
+                    size="sm"
+                    variant="default"
+                    onClick={() => window.open(session.zoomMeeting!.joinUrl, "_blank")}
+                    className="gap-2"
+                  >
+                    <Video className="h-4 w-4" />
+                    {t("sessions.join_meeting", { defaultValue: "Join Meeting" })}
+                  </Button>
+                ) : session.meetingUrl ? (
+                  <Button
+                    size="sm"
+                    variant="default"
+                    onClick={() => window.open(session.meetingUrl!, "_blank")}
+                    className="gap-2"
+                  >
+                    <Video className="h-4 w-4" />
+                    {t("sessions.join_meeting", { defaultValue: "Join Meeting" })}
+                  </Button>
+                ) : (
+                  <span className="text-sm text-muted-foreground">
+                    {t("portal_sessions.no_meeting_link")}
+                  </span>
+                )}
               </div>
             )}
 

@@ -721,3 +721,29 @@ export const supportAPI = {
       body: JSON.stringify(data),
     }),
 };
+// Lawyer Notes API (Phase 6)
+export const lawyerNotesAPI = {
+  list: (caseId: string) => fetchAPI(`/lawyer/cases/${caseId}/notes`),
+  create: (caseId: string, data: { noteText: string; isPinned?: boolean }) =>
+    fetchAPI(`/lawyer/cases/${caseId}/notes`, {
+      method: "POST",
+      body: JSON.stringify(data),
+    }),
+  update: (noteId: string, data: { noteText?: string; isPinned?: boolean }) =>
+    fetchAPI(`/lawyer/notes/${noteId}`, {
+      method: "PATCH",
+      body: JSON.stringify(data),
+    }),
+  delete: (noteId: string) => fetchAPI(`/lawyer/notes/${noteId}`, { method: "DELETE" }),
+};
+
+// Lawyer Reminders API (Phase 6)
+export const lawyerRemindersAPI = {
+  list: () => fetchAPI("/lawyer/reminders"),
+  create: (sessionId: string, data: { reminderTime: string; note?: string | null }) =>
+    fetchAPI(`/lawyer/sessions/${sessionId}/reminders`, {
+      method: "POST",
+      body: JSON.stringify(data),
+    }),
+  delete: (reminderId: string) => fetchAPI(`/lawyer/reminders/${reminderId}`, { method: "DELETE" }),
+};

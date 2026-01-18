@@ -523,6 +523,9 @@
     "hijri": "هجري",
     "circuit": "الدائرة",
     "join_meeting": "انضم للاجتماع الإلكتروني",
+    "meeting_created": "تم إنشاء الاجتماع",
+    "meeting_provider_zoom": "زووم",
+    "no_meeting_link": "لا يوجد رابط للاجتماع",
     "requirements": "المتطلبات",
     "no_upcoming": "لا توجد جلسات قادمة",
     "no_upcoming_description": "ليس لديك أي جلسات مجدولة في الوقت الحالي.",
@@ -946,6 +949,14 @@
     "unknown": "خطأ غير معروف"
   },
   "case": {
+    "case_type": "النوع",
+    "priority_label": "الأولوية",
+    "priority": {
+      "low": "منخفضة",
+      "medium": "متوسطة",
+      "high": "عالية",
+      "urgent": "عاجلة"
+    },
     "status": {
       "open": "مفتوحة",
       "in_progress": "قيد التنفيذ",
@@ -1058,6 +1069,7 @@
     "issue_summary_required": "ملخص المشكلة مطلوب"
   },
   "beneficiaries": {
+    "name": "المستفيد",
     "add_title": "إضافة مستفيد",
     "first_name": "الاسم الأول",
     "last_name": "اسم العائلة",

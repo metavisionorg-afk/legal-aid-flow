@@ -10,7 +10,8 @@ import { RequireBeneficiary } from "@/components/auth/RequireBeneficiary";
 import { PortalLayout } from "@/components/layout/PortalLayout";
 import { LawyerPortalLayout } from "@/components/layout/LawyerPortalLayout";
 import LawyerDashboard from "@/pages/lawyer/LawyerDashboard";
-import LawyerCases from "@/pages/lawyer/LawyerCases";
+import LawyerCases from "@/pages/lawyer/LawyerCases";import LawyerCaseDetail from "@/pages/lawyer/LawyerCaseDetail";import LawyerSessions from "@/pages/lawyer/LawyerSessions";
+import LawyerDocuments from "@/pages/lawyer/LawyerDocuments";
 import NotFound from "@/pages/not-found";
 import Forbidden from "@/pages/Forbidden";
 import Dashboard from "@/pages/Dashboard";
@@ -287,7 +288,27 @@ function Router() {
       <Route path="/lawyer/cases/:id">
         {() => (
           <RequireRole role="lawyer">
-            <Cases />
+            <LawyerPortalLayout>
+              <LawyerCaseDetail />
+            </LawyerPortalLayout>
+          </RequireRole>
+        )}
+      </Route>
+      <Route path="/lawyer/sessions">
+        {() => (
+          <RequireRole role="lawyer">
+            <LawyerPortalLayout>
+              <LawyerSessions />
+            </LawyerPortalLayout>
+          </RequireRole>
+        )}
+      </Route>
+      <Route path="/lawyer/documents">
+        {() => (
+          <RequireRole role="lawyer">
+            <LawyerPortalLayout>
+              <LawyerDocuments />
+            </LawyerPortalLayout>
           </RequireRole>
         )}
       </Route>

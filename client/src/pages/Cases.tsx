@@ -505,9 +505,9 @@ export default function Cases() {
             <Table>
               <TableHeader>
                 <TableRow>
-                  <TableHead>Case Number</TableHead>
+                  <TableHead>{t('cases.case_number', { defaultValue: 'Case Number' })}</TableHead>
                   <TableHead>{t('intake.case_type')}</TableHead>
-                  <TableHead>Title</TableHead>
+                  <TableHead>{t('cases.title', { defaultValue: 'Title' })}</TableHead>
                   <TableHead>{t('app.priority')}</TableHead>
                   <TableHead>{t('app.status')}</TableHead>
                   <TableHead>{t("cases.lawyer")}</TableHead>

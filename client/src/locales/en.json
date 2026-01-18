@@ -359,6 +359,8 @@
     "hijri": "Hijri",
     "circuit": "Circuit",
     "join_meeting": "Join Online Meeting",
+    "meeting_created": "Meeting Created",
+    "meeting_provider_zoom": "Zoom",
     "requirements": "Requirements",
     "no_upcoming": "No upcoming sessions",
     "no_upcoming_description": "You don't have any scheduled sessions at the moment.",
@@ -491,7 +493,8 @@
       "JUDICIAL_SERVICE_STATUS_CHANGED": "Service Status",
       "JUDICIAL_SERVICE_ASSIGNED": "Service Assigned",
       "APPOINTMENT_CONFIRMED": "Appointment Confirmed",
-      "APPOINTMENT_CANCELLED": "Appointment Cancelled"
+      "APPOINTMENT_CANCELLED": "Appointment Cancelled",
+      "ZOOM_MEETING_CREATED": "Zoom Meeting Created"
     }
   },
   "portal_calendar": {

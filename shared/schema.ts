@@ -1001,3 +1001,62 @@ export const templates = pgTable("templates", {
 export const insertTemplateSchema = createInsertSchema(templates).omit({ id: true, createdAt: true, updatedAt: true });
 export type InsertTemplate = z.infer<typeof insertTemplateSchema>;
 export type Template = typeof templates.$inferSelect;
+
+// ===== Phase 6: Lawyer Portal - Notes & Reminders (Additive-only, isolated) =====
+
+// Lawyer Case Notes (private notes for lawyers on their cases)
+export const lawyerCaseNotes = pgTable("lawyer_case_notes", {
+  id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
+  caseId: varchar("case_id").notNull().references(() => cases.id, { onDelete: "cascade" }),
+  lawyerId: varchar("lawyer_id").notNull().references(() => users.id, { onDelete: "cascade" }),
+  noteText: text("note_text").notNull(),
+  isPinned: boolean("is_pinned").notNull().default(false),
+  createdAt: timestamp("created_at").notNull().defaultNow(),
+  updatedAt: timestamp("updated_at").notNull().defaultNow(),
+}, (t) => ({
+  caseIdIdx: index("lawyer_case_notes_case_id_idx").on(t.caseId),
+  lawyerIdIdx: index("lawyer_case_notes_lawyer_id_idx").on(t.lawyerId),
+  createdAtIdx: index("lawyer_case_notes_created_at_idx").on(t.createdAt),
+}));
+
+export const insertLawyerCaseNoteSchema = createInsertSchema(lawyerCaseNotes).omit({ id: true, createdAt: true, updatedAt: true });
+export type InsertLawyerCaseNote = z.infer<typeof insertLawyerCaseNoteSchema>;
+export type LawyerCaseNote = typeof lawyerCaseNotes.$inferSelect;
+
+// Lawyer Session Reminders (personal reminders for lawyers)
+export const lawyerSessionReminders = pgTable("lawyer_session_reminders", {
+  id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
+  sessionId: varchar("session_id").notNull().references(() => sessions.id, { onDelete: "cascade" }),
+  lawyerId: varchar("lawyer_id").notNull().references(() => users.id, { onDelete: "cascade" }),
+  reminderTime: timestamp("reminder_time").notNull(),
+  note: text("note"),
+  isSent: boolean("is_sent").notNull().default(false),
+  createdAt: timestamp("created_at").notNull().defaultNow(),
+}, (t) => ({
+  sessionIdIdx: index("lawyer_session_reminders_session_id_idx").on(t.sessionId),
+  lawyerIdIdx: index("lawyer_session_reminders_lawyer_id_idx").on(t.lawyerId),
+  reminderTimeIdx: index("lawyer_session_reminders_time_idx").on(t.reminderTime),
+  isSentIdx: index("lawyer_session_reminders_is_sent_idx").on(t.isSent),
+}));
+
+export const insertLawyerSessionReminderSchema = createInsertSchema(lawyerSessionReminders).omit({ id: true, createdAt: true });
+export type InsertLawyerSessionReminder = z.infer<typeof insertLawyerSessionReminderSchema>;
+export type LawyerSessionReminder = typeof lawyerSessionReminders.$inferSelect;
+
+// ===== Zoom Meetings Integration (Additive Only) =====
+
+export const integrationsZoomMeetings = pgTable("integrations_zoom_meetings", {
+  id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
+  sessionId: varchar("session_id").notNull().references(() => sessions.id, { onDelete: "cascade" }),
+  meetingId: varchar("meeting_id").notNull(),
+  joinUrl: text("join_url").notNull(),
+  provider: varchar("provider").notNull().default("zoom"),
+  createdAt: timestamp("created_at").notNull().defaultNow(),
+}, (t) => ({
+  sessionIdIdx: index("integrations_zoom_meetings_session_id_idx").on(t.sessionId),
+  providerIdx: index("integrations_zoom_meetings_provider_idx").on(t.provider),
+}));
+
+export const insertIntegrationsZoomMeetingSchema = createInsertSchema(integrationsZoomMeetings).omit({ id: true, createdAt: true });
+export type InsertIntegrationsZoomMeeting = z.infer<typeof insertIntegrationsZoomMeetingSchema>;
+export type IntegrationsZoomMeeting = typeof integrationsZoomMeetings.$inferSelect;

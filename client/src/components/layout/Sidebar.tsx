@@ -103,6 +103,8 @@ export function Sidebar() {
   const lawyerNavItems = [
     { icon: LayoutDashboard, label: t("lawyer.dashboard"), href: "/lawyer/dashboard" },
     { icon: Briefcase, label: t("lawyer.my_cases"), href: "/lawyer/cases" },
+    { icon: Calendar, label: t("lawyer.sessions"), href: "/lawyer/sessions" },
+    { icon: Folder, label: t("lawyer.documents"), href: "/lawyer/documents" },
   ];
 
 

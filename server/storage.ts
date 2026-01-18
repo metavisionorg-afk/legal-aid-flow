@@ -439,6 +439,22 @@ export interface IStorage {
   updateServiceType(id: string, updates: Partial<InsertServiceType>): Promise<ServiceType | undefined>;
   toggleServiceType(id: string, isActive: boolean): Promise<ServiceType | undefined>;
   deleteServiceType(id: string): Promise<{ ok: boolean; reason?: "not_found" }>;
+
+  // ===== Phase 6: Lawyer Case Notes =====
+  listLawyerCaseNotes(caseId: string, lawyerId: string): Promise<schema.LawyerCaseNote[]>;
+  createLawyerCaseNote(input: schema.InsertLawyerCaseNote): Promise<schema.LawyerCaseNote>;
+  updateLawyerCaseNote(id: string, lawyerId: string, updates: Partial<schema.InsertLawyerCaseNote>): Promise<schema.LawyerCaseNote | undefined>;
+  deleteLawyerCaseNote(id: string, lawyerId: string): Promise<boolean>;
+
+  // ===== Phase 6: Lawyer Session Reminders =====
+  listLawyerSessionReminders(lawyerId: string): Promise<schema.LawyerSessionReminder[]>;
+  createLawyerSessionReminder(input: schema.InsertLawyerSessionReminder): Promise<schema.LawyerSessionReminder>;
+  deleteLawyerSessionReminder(id: string, lawyerId: string): Promise<boolean>;
+
+  // ===== Zoom Meetings Integration (Additive Only) =====
+  getZoomMeetingBySession(sessionId: string): Promise<schema.IntegrationsZoomMeeting | undefined>;
+  createZoomMeeting(input: schema.InsertIntegrationsZoomMeeting): Promise<schema.IntegrationsZoomMeeting>;
+  deleteZoomMeeting(sessionId: string): Promise<boolean>;
 }
 
 export class DatabaseStorage implements IStorage {
@@ -2180,6 +2196,85 @@ export class DatabaseStorage implements IStorage {
 
     const result = await db.delete(schema.serviceTypes).where(eq(schema.serviceTypes.id, id));
     return { ok: Boolean(result.rowCount && result.rowCount > 0) };
+  }
+
+  // ===== Phase 6: Lawyer Case Notes =====
+
+  async listLawyerCaseNotes(caseId: string, lawyerId: string): Promise<schema.LawyerCaseNote[]> {
+    return db
+      .select()
+      .from(schema.lawyerCaseNotes)
+      .where(and(eq(schema.lawyerCaseNotes.caseId, caseId), eq(schema.lawyerCaseNotes.lawyerId, lawyerId)))
+      .orderBy(desc(schema.lawyerCaseNotes.isPinned), desc(schema.lawyerCaseNotes.createdAt));
+  }
+
+  async createLawyerCaseNote(input: schema.InsertLawyerCaseNote): Promise<schema.LawyerCaseNote> {
+    const [row] = await db.insert(schema.lawyerCaseNotes).values(input as any).returning();
+    return row;
+  }
+
+  async updateLawyerCaseNote(
+    id: string,
+    lawyerId: string,
+    updates: Partial<schema.InsertLawyerCaseNote>,
+  ): Promise<schema.LawyerCaseNote | undefined> {
+    const [row] = await db
+      .update(schema.lawyerCaseNotes)
+      .set({ ...(updates as any), updatedAt: new Date() })
+      .where(and(eq(schema.lawyerCaseNotes.id, id), eq(schema.lawyerCaseNotes.lawyerId, lawyerId)))
+      .returning();
+    return row;
+  }
+
+  async deleteLawyerCaseNote(id: string, lawyerId: string): Promise<boolean> {
+    const result = await db
+      .delete(schema.lawyerCaseNotes)
+      .where(and(eq(schema.lawyerCaseNotes.id, id), eq(schema.lawyerCaseNotes.lawyerId, lawyerId)));
+    return Boolean(result.rowCount && result.rowCount > 0);
+  }
+
+  // ===== Phase 6: Lawyer Session Reminders =====
+
+  async listLawyerSessionReminders(lawyerId: string): Promise<schema.LawyerSessionReminder[]> {
+    return db
+      .select()
+      .from(schema.lawyerSessionReminders)
+      .where(eq(schema.lawyerSessionReminders.lawyerId, lawyerId))
+      .orderBy(asc(schema.lawyerSessionReminders.reminderTime));
+  }
+
+  async createLawyerSessionReminder(input: schema.InsertLawyerSessionReminder): Promise<schema.LawyerSessionReminder> {
+    const [row] = await db.insert(schema.lawyerSessionReminders).values(input as any).returning();
+    return row;
+  }
+
+  async deleteLawyerSessionReminder(id: string, lawyerId: string): Promise<boolean> {
+    const result = await db
+      .delete(schema.lawyerSessionReminders)
+      .where(and(eq(schema.lawyerSessionReminders.id, id), eq(schema.lawyerSessionReminders.lawyerId, lawyerId)));
+    return Boolean(result.rowCount && result.rowCount > 0);
+  }
+
+  // ===== Zoom Meetings Integration (Additive Only) =====
+
+  async getZoomMeetingBySession(sessionId: string): Promise<schema.IntegrationsZoomMeeting | undefined> {
+    const [row] = await db
+      .select()
+      .from(schema.integrationsZoomMeetings)
+      .where(eq(schema.integrationsZoomMeetings.sessionId, sessionId));
+    return row;
+  }
+
+  async createZoomMeeting(input: schema.InsertIntegrationsZoomMeeting): Promise<schema.IntegrationsZoomMeeting> {
+    const [row] = await db.insert(schema.integrationsZoomMeetings).values(input as any).returning();
+    return row;
+  }
+
+  async deleteZoomMeeting(sessionId: string): Promise<boolean> {
+    const result = await db
+      .delete(schema.integrationsZoomMeetings)
+      .where(eq(schema.integrationsZoomMeetings.sessionId, sessionId));
+    return Boolean(result.rowCount && result.rowCount > 0);
   }
 }
 

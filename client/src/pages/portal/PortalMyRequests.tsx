@@ -140,7 +140,7 @@ export default function PortalMyRequests() {
       >
         <DialogContent className="max-w-2xl">
           <DialogHeader>
-            <DialogTitle>Attachments</DialogTitle>
+            <DialogTitle>{t("portal_requests.dialog.attachments_title")}</DialogTitle>
           </DialogHeader>
 
           {loadingAttachments ? (

@@ -50,6 +50,21 @@
         },
         "toasts": {
           "attachments_uploaded": "Uploaded {{count}} attachment(s)"
+        },
+        "dialog": {
+          "task_attachments": "Task attachments",
+          "add_attachment": "Add attachment",
+          "existing_attachments": "Existing attachments",
+          "no_attachments": "No attachments",
+          "visible_to_beneficiary": "Visible to beneficiary",
+          "attach": "Attach",
+          "public": "Public",
+          "internal": "Internal"
+        },
+        "table": {
+          "title": "Title",
+          "lawyer": "Lawyer",
+          "attachments": "Attachments"
         }
       },
     "nav": {
@@ -106,6 +121,11 @@
             "meta_size_only": "• {{size}} bytes"
           }
         },
+    "portal_requests": {
+      "dialog": {
+        "attachments_title": "Attachments"
+      }
+    },
     "sidebar": {
       "documentsLibrary": "Documents Library",
       "judicialServices": "Judicial Services",

@@ -50,6 +50,21 @@
         },
         "toasts": {
           "attachments_uploaded": "تم رفع {{count}} مرفق(ات)"
+        },
+        "dialog": {
+          "task_attachments": "مرفقات المهمة",
+          "add_attachment": "إضافة مرفق",
+          "existing_attachments": "المرفقات الموجودة",
+          "no_attachments": "لا توجد مرفقات",
+          "visible_to_beneficiary": "مرئي للمستفيد",
+          "attach": "إرفاق",
+          "public": "عام",
+          "internal": "داخلي"
+        },
+        "table": {
+          "title": "العنوان",
+          "lawyer": "المحامي",
+          "attachments": "المرفقات"
         }
       },
     "nav": {
@@ -106,6 +121,11 @@
             "meta_size_only": "• {{size}} بايت"
           }
         },
+    "portal_requests": {
+      "dialog": {
+        "attachments_title": "المرفقات"
+      }
+    },
     "sidebar": {
       "documentsLibrary": "مكتبة المستندات",
       "judicialServices": "الخدمات القضائية",

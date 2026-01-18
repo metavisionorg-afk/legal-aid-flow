@@ -494,12 +494,12 @@ export default function Tasks() {
               <Table>
                 <TableHeader>
                   <TableRow>
-                    <TableHead>Title</TableHead>
+                    <TableHead>{t("tasks.table.title")}</TableHead>
                     <TableHead>{t("app.assigned_to")}</TableHead>
-                    <TableHead>Lawyer</TableHead>
+                    <TableHead>{t("tasks.table.lawyer")}</TableHead>
                     <TableHead>{t("app.priority")}</TableHead>
                     <TableHead>{t("app.status")}</TableHead>
-                    <TableHead>Attachments</TableHead>
+                    <TableHead>{t("tasks.table.attachments")}</TableHead>
                     <TableHead>{t("app.actions")}</TableHead>
                   </TableRow>
                 </TableHeader>
@@ -550,12 +550,12 @@ export default function Tasks() {
                             </DialogTrigger>
                             <DialogContent className="max-w-2xl">
                               <DialogHeader>
-                                <DialogTitle>Task attachments</DialogTitle>
+                                <DialogTitle>{t("tasks.dialog.task_attachments")}</DialogTitle>
                               </DialogHeader>
 
                               <div className="space-y-4">
                                 <div className="space-y-2">
-                                  <Label>Add attachment</Label>
+                                  <Label>{t("tasks.dialog.add_attachment")}</Label>
                                   <div className="flex flex-col gap-3">
                                     <Input
                                       type="file"
@@ -569,26 +569,26 @@ export default function Tasks() {
                                         checked={attachIsPublic}
                                         onCheckedChange={(v) => setAttachIsPublic(Boolean(v))}
                                       />
-                                      <span className="text-sm">Visible to beneficiary</span>
+                                      <span className="text-sm">{t("tasks.dialog.visible_to_beneficiary")}</span>
                                     </div>
                                     <Button
                                       onClick={() => addAttachmentMutation.mutate()}
                                       disabled={addAttachmentMutation.isPending || !attachFile}
                                     >
-                                      {addAttachmentMutation.isPending ? t("common.loading") : "Attach"}
+                                      {addAttachmentMutation.isPending ? t("common.loading") : t("tasks.dialog.attach")}
                                     </Button>
                                   </div>
                                 </div>
 
                                 <div className="space-y-2">
-                                  <Label>Existing attachments</Label>
+                                  <Label>{t("tasks.dialog.existing_attachments")}</Label>
                                   {loadingAttachments ? (
                                     <div className="space-y-2">
                                       <Skeleton className="h-10 w-full" />
                                       <Skeleton className="h-10 w-full" />
                                     </div>
                                   ) : (attachments || []).length === 0 ? (
-                                    <div className="text-sm text-muted-foreground">No attachments</div>
+                                    <div className="text-sm text-muted-foreground">{t("tasks.dialog.no_attachments")}</div>
                                   ) : (
                                     <div className="space-y-2">
                                       {(attachments || []).map((a) => (
@@ -599,7 +599,7 @@ export default function Tasks() {
                                           <div className="min-w-0">
                                             <div className="font-medium text-sm truncate">{a.fileName}</div>
                                             <div className="text-xs text-muted-foreground">
-                                              {a.isPublic ? "Public" : "Internal"}
+                                              {a.isPublic ? t("tasks.dialog.public") : t("tasks.dialog.internal")}
                                             </div>
                                           </div>
                                           <a
@@ -608,7 +608,7 @@ export default function Tasks() {
                                             target="_blank"
                                             rel="noreferrer"
                                           >
-                                            Download
+                                            {t("common.download")}
                                           </a>
                                         </div>
                                       ))}

@@ -48,6 +48,19 @@
           "notify_beneficiary": "Notify beneficiary",
           "show_in_portal": "Show in beneficiary portal"
         },
+        "types": {
+          "follow_up": "Follow-up",
+          "document_preparation": "Document preparation",
+          "court_appearance": "Court appearance",
+          "client_meeting": "Client meeting",
+          "research": "Research",
+          "other": "Other"
+        },
+        "priority": {
+          "low": "Low",
+          "medium": "Medium",
+          "high": "High"
+        },
         "toasts": {
           "attachments_uploaded": "Uploaded {{count}} attachment(s)"
         },
@@ -60,6 +73,15 @@
           "attach": "Attach",
           "public": "Public",
           "internal": "Internal"
+        },
+        "actions": {
+          "complete": "Complete",
+          "reopen": "Reopen",
+          "view_add": "View / Add"
+        },
+        "status": {
+          "pending": "Pending",
+          "completed": "Completed"
         },
         "table": {
           "title": "Title",

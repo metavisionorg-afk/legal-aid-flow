@@ -88,6 +88,9 @@ export default function Tasks() {
   const queryClient = useQueryClient();
   const { user } = useAuth();
 
+  const statusLabel = (s: string) => t(`tasks.status.${s}`, { defaultValue: String(s) });
+  const priorityLabel = (p: string) => t(`tasks.priority.${p}`, { defaultValue: String(p) });
+
   const [title, setTitle] = useState("");
   const [description, setDescription] = useState("");
   const [taskType, setTaskType] = useState<(typeof TASK_TYPES)[number]>("follow_up");
@@ -518,20 +521,25 @@ export default function Tasks() {
                         <TableCell>{beneficiary?.fullName || assignee?.fullName || task.assignedTo}</TableCell>
                         <TableCell>{lawyer?.fullName || "—"}</TableCell>
                         <TableCell>
-                          <Badge variant="secondary">{task.priority}</Badge>
+                          <Badge variant="secondary">{priorityLabel(String(task.priority))}</Badge>
                         </TableCell>
                         <TableCell>
+                          {(() => {
+                            const status = String(task.status);
+                            return (
                           <Badge
                             variant={
-                              task.status === "completed"
+                              status === "completed"
                                 ? "default"
-                                : task.status === "cancelled"
+                                : status === "cancelled"
                                   ? "destructive"
                                   : "secondary"
                             }
                           >
-                            {task.status}
+                            {statusLabel(status)}
                           </Badge>
+                            );
+                          })()}
                         </TableCell>
                         <TableCell>
                           <Dialog>
@@ -545,7 +553,7 @@ export default function Tasks() {
                                   setAttachFile(null);
                                 }}
                               >
-                                View / Add
+                                {t("tasks.actions.view_add", { defaultValue: "عرض/إضافة" })}
                               </Button>
                             </DialogTrigger>
                             <DialogContent className="max-w-2xl">
@@ -636,7 +644,9 @@ export default function Tasks() {
                             }
                             disabled={updateTaskMutation.isPending}
                           >
-                            {task.status === "completed" ? "Reopen" : "Complete"}
+                            {task.status === "completed"
+                              ? t("tasks.actions.reopen", { defaultValue: "إعادة فتح" })
+                              : t("tasks.actions.complete", { defaultValue: "إكمال" })}
                           </Button>
                           <Button
                             variant="destructive"

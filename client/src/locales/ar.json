@@ -48,6 +48,19 @@
           "notify_beneficiary": "إرسال إشعار للمستفيد",
           "show_in_portal": "إظهار في بوابة المستفيد"
         },
+        "types": {
+          "follow_up": "متابعة",
+          "document_preparation": "إعداد مستندات",
+          "court_appearance": "حضور جلسة",
+          "client_meeting": "اجتماع مع العميل",
+          "research": "بحث",
+          "other": "أخرى"
+        },
+        "priority": {
+          "low": "منخفضة",
+          "medium": "متوسطة",
+          "high": "مرتفع"
+        },
         "toasts": {
           "attachments_uploaded": "تم رفع {{count}} مرفق(ات)"
         },
@@ -60,6 +73,15 @@
           "attach": "إرفاق",
           "public": "عام",
           "internal": "داخلي"
+        },
+        "actions": {
+          "complete": "إكمال",
+          "reopen": "إعادة فتح",
+          "view_add": "عرض/إضافة"
+        },
+        "status": {
+          "pending": "قيد التنفيذ",
+          "completed": "مكتملة"
         },
         "table": {
           "title": "العنوان",

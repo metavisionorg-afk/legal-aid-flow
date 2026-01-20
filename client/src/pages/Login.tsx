@@ -49,7 +49,17 @@ export default function Login() {
       });
       // Redirect is handled by the effect once `user` is set.
     } catch (error: any) {
-      const errorMessage = getErrorMessage(error, t);
+      const inactive =
+        error?.response?.status === 403 &&
+        error?.response?.data &&
+        typeof error.response.data === "object" &&
+        error.response.data.error === "INACTIVE_ACCOUNT";
+
+      const errorMessage = inactive
+        ? t("auth.errors.inactive_account", {
+            defaultValue: "حسابك غير مفعل حاليًا. إذا كان الحساب تحت المراجعة فسيتم تفعيله بعد الاعتماد.",
+          })
+        : getErrorMessage(error, t);
       toast({
         title: t("auth.login_failed"),
         description: errorMessage,
@@ -112,6 +122,15 @@ export default function Login() {
             <div className="w-full space-y-2">
               <Button type="submit" className="w-full" disabled={loading} data-testid="button-login">
                 {loading ? "Signing in..." : t('app.sign_in')}
+              </Button>
+              <Button
+                type="button"
+                variant="outline"
+                className="w-full"
+                onClick={() => setLocation("/lawyer-register")}
+                data-testid="button-lawyer-register"
+              >
+                {t("auth.lawyer_register.cta", { defaultValue: "تسجيل كمحامي" })}
               </Button>
               <Button
                 type="button"

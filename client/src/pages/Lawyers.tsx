@@ -38,6 +38,8 @@ import {
   FormMessage,
 } from "@/components/ui/form";
 
+import LawyerRegistrationForm from "@/components/lawyer/LawyerRegistrationForm";
+
 import {
   DropdownMenu,
   DropdownMenuContent,
@@ -54,27 +56,6 @@ import { useToast } from "@/hooks/use-toast";
 import { useAuth } from "@/contexts/AuthContext";
 import { isAdmin } from "@/lib/authz";
 import Forbidden from "@/pages/Forbidden";
-
-const createLawyerSchema = z
-  .object({
-    fullName: z.string().min(1),
-    email: z.string().email(),
-    username: z.string().min(1),
-    password: z.string().min(8),
-    confirmPassword: z.string().min(8),
-    isActive: z.boolean().default(true),
-  })
-  .superRefine((data, ctx) => {
-    if (data.password !== data.confirmPassword) {
-      ctx.addIssue({
-        code: z.ZodIssueCode.custom,
-        path: ["confirmPassword"],
-        message: "Passwords do not match",
-      });
-    }
-  });
-
-type CreateLawyerValues = z.infer<typeof createLawyerSchema>;
 
 const editLawyerSchema = z.object({
   fullName: z.string().min(1),
@@ -148,47 +129,10 @@ export default function Lawyers() {
     return { total, active, completed, closed };
   }, [reportCases]);
 
-  const createForm = useForm<CreateLawyerValues>({
-    resolver: zodResolver(createLawyerSchema),
-    defaultValues: {
-      fullName: "",
-      email: "",
-      username: "",
-      password: "",
-      confirmPassword: "",
-      isActive: true,
-    },
-    mode: "onTouched",
-  });
-
   const editForm = useForm<EditLawyerValues>({
     resolver: zodResolver(editLawyerSchema),
     defaultValues: { fullName: "", isActive: true },
     mode: "onTouched",
-  });
-
-  const createMutation = useMutation({
-    mutationFn: async (values: CreateLawyerValues) =>
-      usersAPI.create({
-        fullName: values.fullName.trim(),
-        email: values.email.trim(),
-        username: values.username.trim(),
-        password: values.password,
-        isActive: values.isActive,
-      }),
-    onSuccess: async () => {
-      await queryClient.invalidateQueries({ queryKey: ["users"] });
-      toast({ title: t("common.success"), description: t("lawyers.add_success") });
-      setCreateOpen(false);
-      createForm.reset();
-    },
-    onError: (err: any) => {
-      toast({
-        title: t("common.error"),
-        description: getErrorMessage(err, t) || t("lawyers.add_failed"),
-        variant: "destructive",
-      });
-    },
   });
 
   const updateMutation = useMutation({
@@ -235,114 +179,12 @@ export default function Lawyers() {
                 {t("lawyers.add")}
               </Button>
             </DialogTrigger>
-            <DialogContent className="max-w-lg">
+            <DialogContent className="max-w-lg w-[95vw] sm:max-w-3xl max-h-[85vh] overflow-y-auto">
               <DialogHeader>
                 <DialogTitle>{t("lawyers.add")}</DialogTitle>
               </DialogHeader>
 
-              <Form {...createForm}>
-                <form
-                  onSubmit={createForm.handleSubmit((values) => createMutation.mutate(values))}
-                  className="space-y-4"
-                >
-                  <FormField
-                    control={createForm.control}
-                    name="fullName"
-                    render={({ field }) => (
-                      <FormItem>
-                        <FormLabel>{t("lawyers.full_name")}</FormLabel>
-                        <FormControl>
-                          <Input {...field} />
-                        </FormControl>
-                        <FormMessage />
-                      </FormItem>
-                    )}
-                  />
-
-                  <FormField
-                    control={createForm.control}
-                    name="email"
-                    render={({ field }) => (
-                      <FormItem>
-                        <FormLabel>{t("lawyers.email")}</FormLabel>
-                        <FormControl>
-                          <Input {...field} />
-                        </FormControl>
-                        <FormMessage />
-                      </FormItem>
-                    )}
-                  />
-
-                  <FormField
-                    control={createForm.control}
-                    name="username"
-                    render={({ field }) => (
-                      <FormItem>
-                        <FormLabel>{t("lawyers.username")}</FormLabel>
-                        <FormControl>
-                          <Input {...field} />
-                        </FormControl>
-                        <FormMessage />
-                      </FormItem>
-                    )}
-                  />
-
-                  <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
-                    <FormField
-                      control={createForm.control}
-                      name="password"
-                      render={({ field }) => (
-                        <FormItem>
-                          <FormLabel>{t("lawyers.password")}</FormLabel>
-                          <FormControl>
-                            <Input type="password" {...field} />
-                          </FormControl>
-                          <FormMessage />
-                        </FormItem>
-                      )}
-                    />
-
-                    <FormField
-                      control={createForm.control}
-                      name="confirmPassword"
-                      render={({ field }) => (
-                        <FormItem>
-                          <FormLabel>{t("lawyers.confirm_password")}</FormLabel>
-                          <FormControl>
-                            <Input type="password" {...field} />
-                          </FormControl>
-                          <FormMessage />
-                        </FormItem>
-                      )}
-                    />
-                  </div>
-
-                  <FormField
-                    control={createForm.control}
-                    name="isActive"
-                    render={({ field }) => (
-                      <FormItem className="flex items-center justify-between rounded-md border p-3">
-                        <div>
-                          <div className="font-medium">{t("lawyers.status")}</div>
-                          <div className="text-sm text-muted-foreground">{t("lawyers.status_help")}</div>
-                        </div>
-                        <FormControl>
-                          <Switch checked={field.value} onCheckedChange={field.onChange} />
-                        </FormControl>
-                      </FormItem>
-                    )}
-                  />
-
-                  <div className="flex items-center justify-end gap-2">
-                    <Button type="button" variant="outline" onClick={() => setCreateOpen(false)}>
-                      {t("common.cancel")}
-                    </Button>
-                    <Button type="submit" disabled={createMutation.isPending}>
-                      {createMutation.isPending ? t("common.loading") : t("common.save")}
-                    </Button>
-                  </div>
-                </form>
-              </Form>
+              <LawyerRegistrationForm mode="admin" onDone={() => setCreateOpen(false)} />
             </DialogContent>
           </Dialog>
         </div>

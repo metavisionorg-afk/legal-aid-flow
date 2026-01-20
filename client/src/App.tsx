@@ -35,6 +35,7 @@ import JudicialServicesSettings from "@/pages/JudicialServicesSettings";
 import RegisterBeneficiary from "@/pages/RegisterBeneficiary";
 import BeneficiaryRegister from "@/pages/BeneficiaryRegister";
 import Login from "@/pages/Login";
+import LawyerRegister from "@/pages/LawyerRegister";
 import PortalLogin from "@/pages/portal/PortalLogin";
 import PortalRegister from "@/pages/portal/PortalRegister";
 import PortalDashboard from "@/pages/portal/PortalDashboard";
@@ -191,6 +192,7 @@ function Router() {
     <Switch>
       <Route path="/register" component={RegisterBeneficiary} />
       <Route path="/beneficiary/register" component={BeneficiaryRegister} />
+      <Route path="/lawyer-register" component={LawyerRegister} />
 
       {/* Staff Routes */}
       <Route path="/login" component={Login} />

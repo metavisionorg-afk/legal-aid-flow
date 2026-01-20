@@ -310,6 +310,10 @@ export async function registerRoutes(
         return res.status(401).json({ error: "WRONG_PASSWORD", message: "Invalid credentials" });
       }
 
+      if ((user as any)?.isActive === false) {
+        return res.status(403).json({ error: "INACTIVE_ACCOUNT", message: "Account is inactive" });
+      }
+
       req.session.userId = user.id;
 
       await createAudit(user.id, "login", "user", user.id, "User logged in", req.ip);
@@ -318,6 +322,141 @@ export async function registerRoutes(
       res.json(userWithoutPassword);
     } catch (error: any) {
       res.status(500).json({ error: error.message });
+    }
+  });
+
+  // Public: self-register as a lawyer (inactive until approved)
+  // We store all submitted lawyer fields (excluding passwords) inside `verificationToken`
+  // to retain the submission without requiring DB schema changes.
+  app.post("/api/auth/register-lawyer", async (req, res) => {
+    try {
+      const parsed =
+        z
+          .object({
+            fullName: z.string().trim().min(1),
+            email: z.string().trim().email(),
+            username: z.string().trim().min(1),
+            password: z.string().min(8),
+            confirmPassword: z.string().min(8),
+
+            professionalSpecialties: z.string().optional(),
+            yearsOfExperience: z.preprocess(
+              (v) => (v === "" || v == null ? undefined : Number(v)),
+              z.number().int().min(0).max(80).optional(),
+            ),
+            serviceScope: z.string().optional(),
+            volunteeringReady: z.boolean(),
+            lawLicenseAttachment: z.string().trim().min(1),
+            cvAttachment: z.string().trim().min(1),
+            degreeLevel: z.string().optional(),
+            academicMajor: z.string().optional(),
+            bankName: z.string().optional(),
+            iban: z.string().optional(),
+            declarationAccepted: z.boolean(),
+          })
+          .superRefine((data, ctx) => {
+            if (data.password !== data.confirmPassword) {
+              ctx.addIssue({
+                code: z.ZodIssueCode.custom,
+                path: ["confirmPassword"],
+                message: "Passwords do not match",
+              });
+            }
+          })
+          .safeParse(req.body);
+
+      if (!parsed.success) {
+        return res.status(400).json({ error: fromZodError(parsed.error).message });
+      }
+
+      const {
+        fullName,
+        email,
+        username,
+        password,
+        confirmPassword: _confirmPassword,
+        ...lawyerSubmission
+      } = parsed.data;
+
+      const existingUsername = await storage.getUserByUsername(username);
+      if (existingUsername) {
+        return res.status(409).json({ error: "Username already exists" });
+      }
+
+      const existingEmail = await storage.getUserByEmail(email);
+      if (existingEmail) {
+        return res.status(409).json({ error: "Email already exists" });
+      }
+
+      const hashedPassword = await bcrypt.hash(password, 10);
+
+      const created = await storage.createUser({
+        username,
+        email,
+        password: hashedPassword,
+        fullName,
+        userType: "staff",
+        role: "lawyer",
+        isActive: false,
+        emailVerified: false,
+        verificationToken: JSON.stringify({
+          type: "lawyer_registration",
+          submittedAt: new Date().toISOString(),
+          ...lawyerSubmission,
+        }),
+      } as any);
+
+      return res.status(201).json({ ok: true, userId: (created as any).id });
+    } catch (error: any) {
+      return res.status(500).json({ error: error.message });
+    }
+  });
+
+  // Public: self-register as a lawyer (inactive until approved)
+  app.post("/api/lawyer-register", async (req, res) => {
+    try {
+      const parsed = z
+        .object({
+          fullName: z.string().trim().min(1),
+          email: z.string().trim().email(),
+          username: z.string().trim().min(1),
+          password: z.string().min(8),
+        })
+        .safeParse(req.body);
+
+      if (!parsed.success) {
+        return res.status(400).json({ error: fromZodError(parsed.error).message });
+      }
+
+      const { fullName, email, username, password } = parsed.data;
+
+      const existingUsername = await storage.getUserByUsername(username);
+      if (existingUsername) {
+        return res.status(409).json({ error: "Username already exists" });
+      }
+
+      const existingEmail = await storage.getUserByEmail(email);
+      if (existingEmail) {
+        return res.status(409).json({ error: "Email already exists" });
+      }
+
+      const hashedPassword = await bcrypt.hash(password, 10);
+
+      const created = await storage.createUser({
+        username,
+        email,
+        password: hashedPassword,
+        fullName,
+        userType: "staff",
+        role: "lawyer",
+        isActive: false,
+        emailVerified: false,
+      } as any);
+
+      const { password: _pw, ...userWithoutPassword } = created as any;
+      return res.status(201).json(userWithoutPassword);
+    } catch (error: any) {
+      return res.status(500).json({ error: getErrorMessage(error) });
     }
   });
 

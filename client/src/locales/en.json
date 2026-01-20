@@ -1001,7 +1001,18 @@
     "attachments_list": "Uploaded attachments",
     "attachments_uploaded": "Attachments uploaded",
     "empty": "No sessions found",
-    "created": "Session created"
+    "created": "Session created",
+    "total": "Total Sessions",
+    "upcoming": "Upcoming",
+    "upcoming_description": "Sessions scheduled in the future",
+    "past": "Past",
+    "past_description": "Sessions that have already occurred",
+    "no_upcoming": "No upcoming sessions",
+    "no_past": "No past sessions",
+    "join_meeting": "Join Meeting",
+    "generate_zoom_link": "Generate Zoom Link",
+    "meeting_created": "Zoom meeting created successfully",
+    "meeting_provider_zoom": "Zoom"
   },
   "appointments": {
     "title": "Appointments",
@@ -1287,17 +1298,6 @@
       "notifications": "Notifications",
       "unread_notifications": "Unread notifications"
     },
-    "sessions": {
-      "title": "My Sessions",
-      "description": "Court sessions for your cases",
-      "total": "Total Sessions",
-      "upcoming": "Upcoming",
-      "upcoming_description": "Sessions scheduled in the future",
-      "past": "Past",
-      "past_description": "Sessions that have already occurred",
-      "no_upcoming": "No upcoming sessions",
-      "no_past": "No past sessions"
-    },
     "documents": {
       "title": "Documents",
       "description": "View and download case documents",
@@ -1545,12 +1545,6 @@
       "test_ok": "Connection successful",
       "test_fail": "Connection failed"
     }
-  },
-  "sessions": {
-    "join_meeting": "Join Meeting",
-    "generate_zoom_link": "Generate Zoom Link",
-    "meeting_created": "Zoom meeting created successfully",
-    "meeting_provider_zoom": "Zoom"
   },
   "errors": {
     "zoom_not_configured": "Zoom integration is not configured",

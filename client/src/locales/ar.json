@@ -1157,7 +1157,18 @@
     "attachments_list": "المرفقات المرفوعة",
     "attachments_uploaded": "تم رفع المرفقات",
     "empty": "لا توجد جلسات",
-    "created": "تم إنشاء الجلسة"
+    "created": "تم إنشاء الجلسة",
+    "total": "إجمالي الجلسات",
+    "upcoming": "القادمة",
+    "upcoming_description": "الجلسات المجدولة في المستقبل",
+    "past": "السابقة",
+    "past_description": "الجلسات التي تم عقدها",
+    "no_upcoming": "لا توجد جلسات قادمة",
+    "no_past": "لا توجد جلسات سابقة",
+    "join_meeting": "الانضمام للاجتماع",
+    "generate_zoom_link": "إنشاء رابط Zoom",
+    "meeting_created": "تم إنشاء اجتماع Zoom بنجاح",
+    "meeting_provider_zoom": "Zoom"
   },
   "appointments": {
     "title": "المواعيد",
@@ -1436,17 +1447,6 @@
       "notifications": "الإشعارات",
       "unread_notifications": "إشعارات غير مقروءة"
     },
-    "sessions": {
-      "title": "جلساتي",
-      "description": "جلسات المحكمة لقضاياك",
-      "total": "إجمالي الجلسات",
-      "upcoming": "القادمة",
-      "upcoming_description": "الجلسات المجدولة في المستقبل",
-      "past": "السابقة",
-      "past_description": "الجلسات التي تم عقدها",
-      "no_upcoming": "لا توجد جلسات قادمة",
-      "no_past": "لا توجد جلسات سابقة"
-    },
     "documents": {
       "title": "المستندات",
       "description": "عرض وتنزيل مستندات القضايا",
@@ -1610,12 +1610,6 @@
       "test_ok": "نجح الاتصال",
       "test_fail": "فشل الاتصال"
     }
-  },
-  "sessions": {
-    "join_meeting": "الانضمام للاجتماع",
-    "generate_zoom_link": "إنشاء رابط Zoom",
-    "meeting_created": "تم إنشاء اجتماع Zoom بنجاح",
-    "meeting_provider_zoom": "Zoom"
   },
   "errors": {
     "zoom_not_configured": "لم يتم تكوين تكامل Zoom",

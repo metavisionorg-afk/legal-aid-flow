@@ -1398,7 +1398,26 @@
     "hearing": "جلسة",
     "meeting": "اجتماع",
     "deadline": "موعد نهائي",
-    "appointment": "موعد"
+    "appointment": "موعد",
+    "title": "التقويم",
+    "today": "اليوم",
+    "previous_month": "السابق",
+    "next_month": "التالي",
+    "month": "شهر",
+    "more": "+{{count}} المزيد",
+    "dialog": {
+      "title": "التفاصيل"
+    },
+    "actions": {
+      "open": "فتح",
+      "view_details": "عرض التفاصيل",
+      "print": "طباعة"
+    },
+    "types": {
+      "session": "جلسة",
+      "task": "مهمة",
+      "case": "قضية"
+    }
   },
   "reports": {
     "case_distribution_title": "توزيع القضايا حسب النوع",

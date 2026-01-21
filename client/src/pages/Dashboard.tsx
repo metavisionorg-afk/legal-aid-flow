@@ -24,6 +24,7 @@ import { Skeleton } from "@/components/ui/skeleton";
 import { Button } from "@/components/ui/button";
 import { Link } from "wouter";
 import { Plus, CheckSquare } from "lucide-react";
+import { UnifiedMonthlyCalendar } from "@/components/calendar/UnifiedMonthlyCalendar";
 
 export default function Dashboard() {
   const { t } = useTranslation();
@@ -193,6 +194,15 @@ export default function Dashboard() {
           </CardContent>
         </Card>
       </div>
+
+      <Card>
+        <CardHeader>
+          <CardTitle>{t("calendar.title")}</CardTitle>
+        </CardHeader>
+        <CardContent>
+          <UnifiedMonthlyCalendar scope="admin" embedded />
+        </CardContent>
+      </Card>
     </Layout>
   );
 }

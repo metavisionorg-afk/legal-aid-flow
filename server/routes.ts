@@ -252,6 +252,22 @@ export async function registerRoutes(
     });
   }
 
+  function parseMonthParam(month: string): { start: Date; end: Date } | null {
+    const m = String(month || "");
+    const match = /^\d{4}-\d{2}$/.exec(m);
+    if (!match) return null;
+    const [yearStr, monthStr] = m.split("-");
+    const year = Number(yearStr);
+    const monthIndex1 = Number(monthStr); // 1-12
+    if (!Number.isFinite(year) || !Number.isFinite(monthIndex1)) return null;
+    if (year < 1970 || year > 2100) return null;
+    if (monthIndex1 < 1 || monthIndex1 > 12) return null;
+
+    const start = new Date(Date.UTC(year, monthIndex1 - 1, 1, 0, 0, 0, 0));
+    const end = new Date(Date.UTC(year, monthIndex1, 0, 23, 59, 59, 999));
+    return { start, end };
+  }
+
   // ========== AUTH ROUTES (STAFF) ==========
   
   app.post("/api/auth/register", async (req, res) => {
@@ -289,6 +305,210 @@ export async function registerRoutes(
       res.json(userWithoutPassword);
     } catch (error: any) {
       res.status(500).json({ error: error.message });
+    }
+  });
+
+  // Unified calendar endpoint
+  // GET /api/calendar?month=YYYY-MM&scope=admin|lawyer|beneficiary
+  app.get("/api/calendar", requireUser, async (req: AuthRequest, res) => {
+    try {
+      const user = req.user as User;
+
+      const monthParam = typeof req.query.month === "string" ? req.query.month : "";
+      const range = parseMonthParam(monthParam);
+      if (!range) {
+        return res.status(400).json({ error: "Invalid month. Expected YYYY-MM." });
+      }
+
+      const requestedScope = typeof req.query.scope === "string" ? req.query.scope : "";
+      const defaultScope =
+        user.userType === "beneficiary" ? "beneficiary" : user.role === "lawyer" ? "lawyer" : "admin";
+      const scope = (requestedScope || defaultScope) as "admin" | "lawyer" | "beneficiary";
+      if (scope !== "admin" && scope !== "lawyer" && scope !== "beneficiary") {
+        return res.status(400).json({ error: "Invalid scope." });
+      }
+
+      if (scope === "admin") {
+        if (user.userType !== "staff" || (user.role !== "admin" && user.role !== "super_admin")) {
+          return res.status(403).json({ error: "Forbidden" });
+        }
+      }
+      if (scope === "lawyer") {
+        if (user.userType !== "staff" || user.role !== "lawyer") {
+          return res.status(403).json({ error: "Forbidden" });
+        }
+      }
+      if (scope === "beneficiary") {
+        if (user.userType !== "beneficiary") {
+          return res.status(403).json({ error: "Forbidden" });
+        }
+      }
+
+      const inRange = (value: any) => {
+        if (!value) return false;
+        const d = value instanceof Date ? value : new Date(value);
+        const t = d.getTime();
+        return Number.isFinite(t) && t >= range.start.getTime() && t <= range.end.getTime();
+      };
+
+      const events: Array<{
+        type: "session" | "task" | "case";
+        id: string;
+        title: string;
+        date: string;
+        relatedId?: string | null;
+        status?: string | null;
+        priority?: string | null;
+      }> = [];
+
+      if (scope === "admin") {
+        const [cases, tasks, sessions] = await Promise.all([
+          storage.getAllCases(),
+          storage.listTasksForAdmin(),
+          storage.getAllSessions(),
+        ]);
+
+        for (const c of cases) {
+          if (!inRange((c as any).createdAt)) continue;
+          events.push({
+            type: "case",
+            id: String((c as any).id),
+            title: String((c as any).title || (c as any).caseNumber || "Case"),
+            date: new Date((c as any).createdAt).toISOString(),
+          });
+        }
+
+        for (const t of tasks) {
+          if (!inRange((t as any).dueDate)) continue;
+          events.push({
+            type: "task",
+            id: String((t as any).id),
+            title: String((t as any).title || "Task"),
+            date: new Date((t as any).dueDate).toISOString(),
+            relatedId: (t as any).caseId ? String((t as any).caseId) : null,
+            status: (t as any).status ? String((t as any).status) : null,
+            priority: (t as any).priority ? String((t as any).priority) : null,
+          });
+        }
+
+        for (const s of sessions) {
+          if (!inRange((s as any).gregorianDate)) continue;
+          events.push({
+            type: "session",
+            id: String((s as any).id),
+            title: String((s as any).title || "Session"),
+            date: new Date((s as any).gregorianDate).toISOString(),
+            relatedId: (s as any).caseId ? String((s as any).caseId) : null,
+            status: (s as any).status ? String((s as any).status) : null,
+          });
+        }
+      }
+
+      if (scope === "lawyer") {
+        const [cases, tasks, sessions] = await Promise.all([
+          storage.getCasesByLawyer(user.id),
+          storage.listTasksForLawyer(user.id),
+          storage.getAllSessions(),
+        ]);
+
+        const allowedCaseIds = new Set(cases.map((c: any) => String(c.id)));
+
+        for (const c of cases) {
+          if (!inRange((c as any).createdAt)) continue;
+          events.push({
+            type: "case",
+            id: String((c as any).id),
+            title: String((c as any).title || (c as any).caseNumber || "Case"),
+            date: new Date((c as any).createdAt).toISOString(),
+          });
+        }
+
+        for (const t of tasks) {
+          if (!inRange((t as any).dueDate)) continue;
+          events.push({
+            type: "task",
+            id: String((t as any).id),
+            title: String((t as any).title || "Task"),
+            date: new Date((t as any).dueDate).toISOString(),
+            relatedId: (t as any).caseId ? String((t as any).caseId) : null,
+            status: (t as any).status ? String((t as any).status) : null,
+            priority: (t as any).priority ? String((t as any).priority) : null,
+          });
+        }
+
+        for (const s of sessions) {
+          if (!inRange((s as any).gregorianDate)) continue;
+          const caseId = (s as any).caseId ? String((s as any).caseId) : null;
+          if (caseId && !allowedCaseIds.has(caseId)) continue;
+          events.push({
+            type: "session",
+            id: String((s as any).id),
+            title: String((s as any).title || "Session"),
+            date: new Date((s as any).gregorianDate).toISOString(),
+            relatedId: caseId,
+            status: (s as any).status ? String((s as any).status) : null,
+          });
+        }
+      }
+
+      if (scope === "beneficiary") {
+        const beneficiary = await storage.getBeneficiaryByUserId(user.id);
+        if (!beneficiary) {
+          return res.status(404).json({ error: "Beneficiary profile not found" });
+        }
+
+        const [cases, tasks, sessions] = await Promise.all([
+          storage.getCasesByBeneficiary(beneficiary.id),
+          storage.listTasksForBeneficiary(beneficiary.id, user.id),
+          storage.getAllSessions(),
+        ]);
+
+        const allowedCaseIds = new Set(cases.map((c: any) => String(c.id)));
+
+        for (const c of cases) {
+          if (!inRange((c as any).createdAt)) continue;
+          events.push({
+            type: "case",
+            id: String((c as any).id),
+            title: String((c as any).title || (c as any).caseNumber || "Case"),
+            date: new Date((c as any).createdAt).toISOString(),
+          });
+        }
+
+        for (const t of tasks) {
+          if ((t as any).showInPortal === false) continue;
+          if (!inRange((t as any).dueDate)) continue;
+          events.push({
+            type: "task",
+            id: String((t as any).id),
+            title: String((t as any).title || "Task"),
+            date: new Date((t as any).dueDate).toISOString(),
+            relatedId: (t as any).caseId ? String((t as any).caseId) : null,
+            status: (t as any).status ? String((t as any).status) : null,
+            priority: (t as any).priority ? String((t as any).priority) : null,
+          });
+        }
+
+        for (const s of sessions) {
+          if (!inRange((s as any).gregorianDate)) continue;
+          const caseId = (s as any).caseId ? String((s as any).caseId) : null;
+          if (caseId && !allowedCaseIds.has(caseId)) continue;
+          events.push({
+            type: "session",
+            id: String((s as any).id),
+            title: String((s as any).title || "Session"),
+            date: new Date((s as any).gregorianDate).toISOString(),
+            relatedId: caseId,
+            status: (s as any).status ? String((s as any).status) : null,
+          });
+        }
+      }
+
+      events.sort((a, b) => new Date(a.date).getTime() - new Date(b.date).getTime());
+
+      return res.json({ month: monthParam, scope, events });
+    } catch (error: any) {
+      return res.status(500).json({ error: getErrorMessage(error) });
     }
   });
 

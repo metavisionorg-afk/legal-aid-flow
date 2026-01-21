@@ -3,7 +3,7 @@ import { Link, useLocation } from "wouter";
 import { useTranslation } from "react-i18next";
 import { cn } from "@/lib/utils";
 import { LanguageSwitcher } from "@/components/LanguageSwitcher";
-import { LayoutDashboard, Briefcase, LogOut } from "lucide-react";
+import { LayoutDashboard, Briefcase, Calendar, LogOut } from "lucide-react";
 import { useAuth } from "@/contexts/AuthContext";
 
 export function LawyerPortalLayout({ children }: { children: ReactNode }) {
@@ -14,6 +14,7 @@ export function LawyerPortalLayout({ children }: { children: ReactNode }) {
   const navItems = [
     { icon: LayoutDashboard, label: t("lawyer.dashboard"), href: "/lawyer/dashboard" },
     { icon: Briefcase, label: t("lawyer.my_cases"), href: "/lawyer/cases" },
+    { icon: Calendar, label: t("calendar.title"), href: "/lawyer/calendar" },
   ];
 
   return (

@@ -25,7 +25,7 @@ export function PortalLayout({ children }: { children: ReactNode }) {
     { icon: Briefcase, label: t('portal.my_cases'), href: "/portal/my-cases" },
     { icon: CheckSquare, label: t('portal.my_tasks'), href: "/portal/tasks" },
     { icon: FilePlus, label: t('portal.my_requests'), href: "/portal/my-requests" },
-    { icon: Calendar, label: t('portal.my_appointments'), href: "/portal/my-appointments" },
+    { icon: Calendar, label: t('portal.my_appointments'), href: "/portal/calendar" },
     { icon: User, label: t('portal.my_profile'), href: "/portal/profile" },
   ];
 

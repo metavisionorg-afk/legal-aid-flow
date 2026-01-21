@@ -133,4 +133,39 @@
   [dir="rtl"] {
     font-family: 'IBM Plex Sans Arabic', sans-serif;
   }
+  
+  /* FullCalendar tweaks (scoped) */
+  .lafc .fc {
+    --fc-border-color: hsl(var(--border));
+    --fc-page-bg-color: transparent;
+    --fc-today-bg-color: hsl(var(--accent) / 0.35);
+  }
+  
+  .lafc .fc .fc-toolbar-title {
+    font-weight: 600;
+  }
+  
+  .lafc .lafc-event {
+    width: 100%;
+  }
+  
+  .lafc .lafc-dot {
+    width: 0.5rem;
+    height: 0.5rem;
+    border-radius: 9999px;
+    flex: 0 0 auto;
+  }
+  
+  .lafc .lafc-title {
+    min-width: 0;
+  }
+  
+  .lafc .fc .fc-event {
+    background: transparent;
+    border: none;
+  }
+  
+  .lafc .fc .fc-daygrid-event {
+    padding: 0 2px;
+  }
 }

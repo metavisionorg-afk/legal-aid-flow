@@ -12,6 +12,7 @@ import { LawyerPortalLayout } from "@/components/layout/LawyerPortalLayout";
 import LawyerDashboard from "@/pages/lawyer/LawyerDashboard";
 import LawyerCases from "@/pages/lawyer/LawyerCases";import LawyerCaseDetail from "@/pages/lawyer/LawyerCaseDetail";import LawyerSessions from "@/pages/lawyer/LawyerSessions";
 import LawyerDocuments from "@/pages/lawyer/LawyerDocuments";
+import LawyerCalendar from "@/pages/lawyer/LawyerCalendar";
 import NotFound from "@/pages/not-found";
 import Forbidden from "@/pages/Forbidden";
 import Dashboard from "@/pages/Dashboard";
@@ -314,6 +315,15 @@ function Router() {
           </RequireRole>
         )}
       </Route>
+      <Route path="/lawyer/calendar">
+        {() => (
+          <RequireRole role="lawyer">
+            <LawyerPortalLayout>
+              <LawyerCalendar />
+            </LawyerPortalLayout>
+          </RequireRole>
+        )}
+      </Route>
       <Route path="/calendar">
         {() => <StaffRoute component={CalendarPage} />}
       </Route>
@@ -388,7 +398,7 @@ function Router() {
         {() => <PortalRoute component={PortalSupport} />}
       </Route>
       <Route path="/portal/my-appointments">
-        {() => <PortalRoute component={PortalDashboard} />}
+        {() => <PortalRoute component={PortalCalendar} />}
       </Route>
       <Route path="/portal/profile">
         {() => <PortalRoute component={PortalDashboard} />}

@@ -1242,7 +1242,26 @@
     "hearing": "Hearing",
     "meeting": "Meeting",
     "deadline": "Deadline",
-    "appointment": "Appointment"
+    "appointment": "Appointment",
+    "title": "Calendar",
+    "today": "Today",
+    "previous_month": "Previous",
+    "next_month": "Next",
+    "month": "Month",
+    "more": "+{{count}} more",
+    "dialog": {
+      "title": "Details"
+    },
+    "actions": {
+      "open": "Open",
+      "view_details": "View details",
+      "print": "Print"
+    },
+    "types": {
+      "session": "Session",
+      "task": "Task",
+      "case": "Case"
+    }
   },
   "reports": {
     "case_distribution_title": "Case Distribution by Type",

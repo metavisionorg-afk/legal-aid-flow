@@ -32,6 +32,9 @@ export default function Beneficiaries() {
   const { t } = useTranslation();
   const queryClient = useQueryClient();
 
+  const statusLabel = (s: unknown) =>
+    t(`beneficiaries.status.${String(s ?? "")}`, { defaultValue: String(s ?? "") });
+
   const [createOpen, setCreateOpen] = useState(false);
 
   const { data: beneficiaries, isLoading } = useQuery({
@@ -87,7 +90,7 @@ export default function Beneficiaries() {
         <Table>
           <TableHeader>
             <TableRow>
-              <TableHead>ID</TableHead>
+              <TableHead>{t("beneficiaries.columns.id", { defaultValue: "المعرّف" })}</TableHead>
               <TableHead>{t('intake.full_name')}</TableHead>
               <TableHead>{t('intake.id_number')}</TableHead>
               <TableHead>{t('intake.phone')}</TableHead>
@@ -116,7 +119,7 @@ export default function Beneficiaries() {
                   <TableCell className="text-muted-foreground">{ben.phone}</TableCell>
                   <TableCell>
                     <Badge variant={ben.status === "active" ? "default" : "secondary"}>
-                      {ben.status}
+                      {statusLabel(ben.status)}
                     </Badge>
                   </TableCell>
                   <TableCell className="text-right rtl:text-left">
@@ -124,15 +127,25 @@ export default function Beneficiaries() {
                       <DropdownMenuTrigger asChild>
                         <Button variant="ghost" size="icon" data-testid={`button-actions-${ben.id}`}>
                           <MoreHorizontal className="h-4 w-4" />
-                          <span className="sr-only">Actions</span>
+                          <span className="sr-only">
+                            {t("beneficiaries.actions.title", { defaultValue: "الإجراءات" })}
+                          </span>
                         </Button>
                       </DropdownMenuTrigger>
                       <DropdownMenuContent align="end">
-                        <DropdownMenuLabel>Actions</DropdownMenuLabel>
-                        <DropdownMenuItem>View Profile</DropdownMenuItem>
-                        <DropdownMenuItem>Edit Details</DropdownMenuItem>
+                        <DropdownMenuLabel>
+                          {t("beneficiaries.actions.title", { defaultValue: "الإجراءات" })}
+                        </DropdownMenuLabel>
+                        <DropdownMenuItem>
+                          {t("beneficiaries.actions.view_profile", { defaultValue: "عرض الملف" })}
+                        </DropdownMenuItem>
+                        <DropdownMenuItem>
+                          {t("beneficiaries.actions.edit_details", { defaultValue: "تعديل البيانات" })}
+                        </DropdownMenuItem>
                         <DropdownMenuSeparator />
-                        <DropdownMenuItem className="text-destructive">Archive</DropdownMenuItem>
+                        <DropdownMenuItem className="text-destructive">
+                          {t("beneficiaries.actions.archive", { defaultValue: "أرشفة" })}
+                        </DropdownMenuItem>
                       </DropdownMenuContent>
                     </DropdownMenu>
                   </TableCell>
@@ -141,7 +154,7 @@ export default function Beneficiaries() {
             ) : (
               <TableRow>
                 <TableCell colSpan={6} className="text-center text-muted-foreground py-8">
-                  No beneficiaries found
+                  {t("beneficiaries.empty", { defaultValue: "لا يوجد مستفيدون" })}
                 </TableCell>
               </TableRow>
             )}

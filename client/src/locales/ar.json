@@ -1090,7 +1090,22 @@
     "cancel": "إلغاء",
     "create": "إنشاء",
     "created": "تم إنشاء المستفيد",
-    "create_failed": "تعذر إنشاء المستفيد"
+    "create_failed": "تعذر إنشاء المستفيد",
+    "empty": "لا يوجد مستفيدون",
+    "columns": {
+      "id": "المعرّف"
+    },
+    "status": {
+      "pending": "قيد المراجعة",
+      "active": "نشط",
+      "archived": "مؤرشف"
+    },
+    "actions": {
+      "title": "الإجراءات",
+      "view_profile": "عرض الملف",
+      "edit_details": "تعديل البيانات",
+      "archive": "أرشفة"
+    }
   },
   "sessions": {
     "new_session": "إضافة جلسة",

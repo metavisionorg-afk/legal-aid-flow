@@ -926,7 +926,22 @@
     "cancel": "Cancel",
     "create": "Create",
     "created": "Beneficiary created",
-    "create_failed": "Failed to create beneficiary"
+    "create_failed": "Failed to create beneficiary",
+    "empty": "No beneficiaries found",
+    "columns": {
+      "id": "ID"
+    },
+    "status": {
+      "pending": "Pending",
+      "active": "Active",
+      "archived": "Archived"
+    },
+    "actions": {
+      "title": "Actions",
+      "view_profile": "View profile",
+      "edit_details": "Edit details",
+      "archive": "Archive"
+    }
   },
   "sessions": {
     "new_session": "New session",

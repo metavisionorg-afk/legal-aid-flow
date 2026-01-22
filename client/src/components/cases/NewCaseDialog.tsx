@@ -58,66 +58,48 @@ type ActiveCaseType = {
   sortOrder: number;
 };
 
-const formSchema = z
-  .object({
-    // Step 1
-    caseNumber: z.string().min(1, "Case number is required"),
-    title: z.string().min(1, "Title is required"),
-    beneficiaryId: z.string().optional().nullable(),
-    caseTypeId: z.string().optional().nullable(),
-    caseType: z.enum(legacyCaseTypes).optional().nullable(),
-    description: z.string().optional().nullable(),
+const baseFormSchema = z.object({
+  // Step 1
+  caseNumber: z.string().min(1, "Case number is required"),
+  title: z.string().min(1, "Title is required"),
+  beneficiaryId: z.string().optional().nullable(),
+  caseTypeId: z.string().optional().nullable(),
+  caseType: z.enum(legacyCaseTypes).optional().nullable(),
+  description: z.string(),
 
-    // Step 2
-    issueSummary: z.string().optional().nullable(),
-    issueDetails: z.string().optional().nullable(),
-    urgency: z.boolean().default(false),
-    urgencyDate: z.string().optional().nullable(),
-    jurisdiction: z.string().optional().nullable(),
-    relatedLaws: z.string().optional().nullable(),
+  // Step 2
+  issueSummary: z.string().optional().nullable(),
+  issueDetails: z.string().optional().nullable(),
+  urgency: z.boolean().default(false),
+  urgencyDate: z.string().optional().nullable(),
+  jurisdiction: z.string().optional().nullable(),
+  relatedLaws: z.string().optional().nullable(),
 
-    // Step 3
-    documents: z
-      .array(
-        z.object({
-          file: fileSchema,
-          documentType: z.string().min(1, "Document type is required"),
-          isPublic: z.boolean().default(false),
-        }),
-      )
-      .default([]),
-    documentDraft: z
-      .object({
-        file: z.any().nullable(),
-        documentType: z.string().optional().nullable(),
+  // Step 3
+  documents: z
+    .array(
+      z.object({
+        file: fileSchema,
+        documentType: z.string().min(1, "Document type is required"),
         isPublic: z.boolean().default(false),
-      })
-      .default({ file: null, documentType: "", isPublic: false }),
+      }),
+    )
+    .default([]),
+  documentDraft: z
+    .object({
+      file: z.any().nullable(),
+      documentType: z.string().optional().nullable(),
+      isPublic: z.boolean().default(false),
+    })
+    .default({ file: null, documentType: "", isPublic: false }),
 
-    // Step 4
-    acknowledge: z.literal(true, {
-      errorMap: () => ({ message: "You must confirm before creating the case" }),
-    }),
-  })
-  .superRefine((data, ctx) => {
-    if (!data.caseTypeId && !data.caseType) {
-      ctx.addIssue({
-        code: z.ZodIssueCode.custom,
-        path: ["caseTypeId"],
-        message: "Case type is required",
-      });
-    }
+  // Step 4
+  acknowledge: z.literal(true, {
+    errorMap: () => ({ message: "You must confirm before creating the case" }),
+  }),
+});
 
-    if (data.urgency && !data.urgencyDate) {
-      ctx.addIssue({
-        code: z.ZodIssueCode.custom,
-        path: ["urgencyDate"],
-        message: "Urgency date is required when urgency is enabled",
-      });
-    }
-  });
-
-type FormValues = z.infer<typeof formSchema>;
+type FormValues = z.infer<typeof baseFormSchema>;
 
 type StepKey = "basic" | "legal" | "docs" | "review";
 
@@ -203,8 +185,31 @@ export function NewCaseDialog() {
 
   const schema = useMemo(
     () =>
-      formSchema.superRefine((data, ctx) => {
-        if (!isBen) {
+      baseFormSchema
+        .extend({
+          description: z
+            .string()
+            .trim()
+            .min(1, t("cases.errors.description_required", { defaultValue: "وصف القضية مطلوب" })),
+        })
+        .superRefine((data, ctx) => {
+          if (!data.caseTypeId && !data.caseType) {
+            ctx.addIssue({
+              code: z.ZodIssueCode.custom,
+              path: ["caseTypeId"],
+              message: "Case type is required",
+            });
+          }
+
+          if (data.urgency && !data.urgencyDate) {
+            ctx.addIssue({
+              code: z.ZodIssueCode.custom,
+              path: ["urgencyDate"],
+              message: "Urgency date is required when urgency is enabled",
+            });
+          }
+
+          if (!isBen) {
           if (!data.beneficiaryId || !String(data.beneficiaryId).trim()) {
             ctx.addIssue({
               code: z.ZodIssueCode.custom,
@@ -220,9 +225,9 @@ export function NewCaseDialog() {
               message: "Issue summary is required",
             });
           }
-        }
-      }),
-    [isBen],
+          }
+        }),
+    [isBen, t],
   );
 
   const form = useForm<FormValues>({
@@ -244,7 +249,7 @@ export function NewCaseDialog() {
       documentDraft: { file: null, documentType: "", isPublic: false },
       acknowledge: false as any,
     },
-    mode: "onTouched",
+    mode: "onChange",
   });
 
   const documents = useFieldArray({
@@ -254,13 +259,18 @@ export function NewCaseDialog() {
 
   const submitMutation = useMutation({
     mutationFn: async (values: FormValues) => {
+      const description =
+        String(values.description ?? "").trim() ||
+        String(values.issueSummary ?? "").trim() ||
+        String(values.issueDetails ?? "").trim();
+
       const created = await casesAPI.create({
         caseNumber: values.caseNumber.trim(),
         title: values.title.trim(),
         ...(isBen ? {} : { beneficiaryId: values.beneficiaryId }),
         caseTypeId: values.caseTypeId ? String(values.caseTypeId) : undefined,
         caseType: values.caseType ?? undefined,
-        description: values.description?.trim() ? values.description.trim() : "",
+        description,
         priority: "medium",
       });
 
@@ -309,8 +319,8 @@ export function NewCaseDialog() {
   });
 
   const stepFields: Array<Array<keyof FormValues>> = isBen
-    ? [["caseNumber", "title", "caseTypeId"], [], ["acknowledge"]]
-    : [["caseNumber", "title", "beneficiaryId", "caseTypeId"], ["issueSummary", "urgency", "urgencyDate"], [], ["acknowledge"]];
+    ? [["caseNumber", "title", "caseTypeId", "description"], [], ["acknowledge"]]
+    : [["caseNumber", "title", "beneficiaryId", "caseTypeId", "description"], ["issueSummary", "urgency", "urgencyDate"], [], ["acknowledge"]];
 
   const goNext = async () => {
     const fields = stepFields[step] || [];
@@ -515,12 +525,12 @@ export function NewCaseDialog() {
                   name="description"
                   render={({ field }) => (
                     <FormItem className="md:col-span-2">
-                      <FormLabel>{t("intake.description")}</FormLabel>
+                      <FormLabel>{t("cases.fields.description", { defaultValue: "وصف القضية" })}</FormLabel>
                       <FormControl>
                         <Textarea
                           value={field.value ?? ""}
                           onChange={field.onChange}
-                          placeholder={t("intake.description")}
+                          placeholder={t("cases.fields.description_placeholder", { defaultValue: "اكتب وصف القضية" })}
                           data-testid="textarea-case-description"
                         />
                       </FormControl>
@@ -943,7 +953,11 @@ export function NewCaseDialog() {
                   {t("common.next")}
                 </Button>
               ) : (
-                <Button type="submit" disabled={submitMutation.isPending} data-testid="button-step-submit">
+                <Button
+                  type="submit"
+                  disabled={!form.formState.isValid || submitMutation.isPending}
+                  data-testid="button-step-submit"
+                >
                   {submitMutation.isPending ? t("common.loading") : t("cases.create")}
                 </Button>
               )}

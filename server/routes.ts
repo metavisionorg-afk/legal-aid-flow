@@ -268,6 +268,34 @@ export async function registerRoutes(
     return { start, end };
   }
 
+  function parseDateOnlyParam(value: string): Date | null {
+    const m = /^([0-9]{4})-([0-9]{2})-([0-9]{2})$/.exec(String(value || ""));
+    if (!m) return null;
+    const year = Number(m[1]);
+    const monthIndex1 = Number(m[2]); // 1-12
+    const day = Number(m[3]); // 1-31
+    if (!Number.isFinite(year) || !Number.isFinite(monthIndex1) || !Number.isFinite(day)) return null;
+    if (year < 1970 || year > 2100) return null;
+    if (monthIndex1 < 1 || monthIndex1 > 12) return null;
+    if (day < 1 || day > 31) return null;
+
+    const d = new Date(Date.UTC(year, monthIndex1 - 1, day, 0, 0, 0, 0));
+    if (d.getUTCFullYear() !== year || d.getUTCMonth() !== monthIndex1 - 1 || d.getUTCDate() !== day) return null;
+    return d;
+  }
+
+  function parseDateRangeParams(input: { from: string; to: string }): { start: Date; endExclusive: Date } | null {
+    const fromDate = parseDateOnlyParam(input.from);
+    const toDate = parseDateOnlyParam(input.to);
+    if (!fromDate || !toDate) return null;
+
+    const endExclusive = new Date(
+      Date.UTC(toDate.getUTCFullYear(), toDate.getUTCMonth(), toDate.getUTCDate() + 1, 0, 0, 0, 0),
+    );
+    if (fromDate.getTime() >= endExclusive.getTime()) return null;
+    return { start: fromDate, endExclusive };
+  }
+
   // ========== AUTH ROUTES (STAFF) ==========
   
   app.post("/api/auth/register", async (req, res) => {
@@ -310,9 +338,246 @@ export async function registerRoutes(
 
   // Unified calendar endpoint
   // GET /api/calendar?month=YYYY-MM&scope=admin|lawyer|beneficiary
+  // GET /api/calendar?from=YYYY-MM-DD&to=YYYY-MM-DD
   app.get("/api/calendar", requireUser, async (req: AuthRequest, res) => {
     try {
       const user = req.user as User;
+
+      const fromParam = typeof req.query.from === "string" ? req.query.from : "";
+      const toParam = typeof req.query.to === "string" ? req.query.to : "";
+      if (fromParam || toParam) {
+        if (!fromParam || !toParam) {
+          return res.status(400).json({ error: "Invalid date range. Expected from=YYYY-MM-DD&to=YYYY-MM-DD" });
+        }
+
+        const range = parseDateRangeParams({ from: fromParam, to: toParam });
+        if (!range) {
+          return res.status(400).json({ error: "Invalid date range. Expected from/to in YYYY-MM-DD." });
+        }
+
+        const effectiveScope: "admin" | "lawyer" | "beneficiary" =
+          user.userType === "beneficiary" ? "beneficiary" : user.role === "lawyer" ? "lawyer" : "admin";
+
+        const inRange = (value: any) => {
+          if (!value) return false;
+          const d = value instanceof Date ? value : new Date(value);
+          const t = d.getTime();
+          return Number.isFinite(t) && t >= range.start.getTime() && t < range.endExclusive.getTime();
+        };
+
+        const buildUrl = (type: "task" | "session" | "case" | "event", entityId: string): string | undefined => {
+          if (type === "case") {
+            if (effectiveScope === "beneficiary") return `/portal/cases/${entityId}`;
+            if (effectiveScope === "lawyer") return `/lawyer/cases/${entityId}`;
+            return `/cases/${entityId}`;
+          }
+          if (type === "task") {
+            if (effectiveScope === "beneficiary") return "/portal/tasks";
+            return "/tasks";
+          }
+          if (type === "session") {
+            if (effectiveScope === "beneficiary") return "/portal/sessions";
+            if (effectiveScope === "lawyer") return "/lawyer/sessions";
+            return "/sessions";
+          }
+          return undefined;
+        };
+
+        const items: Array<{
+          id: string;
+          type: "task" | "session" | "case" | "event";
+          title: string;
+          start: string;
+          end?: string;
+          allDay?: boolean;
+          status?: string;
+          url?: string;
+          entityId: string;
+          colorKey?: string;
+        }> = [];
+
+        if (effectiveScope === "admin") {
+          const [cases, tasks, sessions] = await Promise.all([
+            storage.getAllCases(),
+            storage.listTasksForAdmin(),
+            storage.getAllSessions(),
+          ]);
+
+          for (const c of cases) {
+            if (!inRange((c as any).createdAt)) continue;
+            const entityId = String((c as any).id);
+            items.push({
+              id: `case:${entityId}`,
+              type: "case",
+              title: String((c as any).title || (c as any).caseNumber || "Case"),
+              start: new Date((c as any).createdAt).toISOString(),
+              allDay: true,
+              url: buildUrl("case", entityId),
+              entityId,
+              colorKey: "case",
+            });
+          }
+
+          for (const t of tasks) {
+            if (!inRange((t as any).dueDate)) continue;
+            const entityId = String((t as any).id);
+            items.push({
+              id: `task:${entityId}`,
+              type: "task",
+              title: String((t as any).title || "Task"),
+              start: new Date((t as any).dueDate).toISOString(),
+              allDay: true,
+              status: (t as any).status ? String((t as any).status) : undefined,
+              url: buildUrl("task", entityId),
+              entityId,
+              colorKey: "task",
+            });
+          }
+
+          for (const s of sessions) {
+            if (!inRange((s as any).gregorianDate)) continue;
+            const entityId = String((s as any).id);
+            items.push({
+              id: `session:${entityId}`,
+              type: "session",
+              title: String((s as any).title || "Session"),
+              start: new Date((s as any).gregorianDate).toISOString(),
+              allDay: false,
+              status: (s as any).status ? String((s as any).status) : undefined,
+              url: buildUrl("session", entityId),
+              entityId,
+              colorKey: "session",
+            });
+          }
+        }
+
+        if (effectiveScope === "lawyer") {
+          const [cases, tasks, sessions] = await Promise.all([
+            storage.getCasesByLawyer(user.id),
+            storage.listTasksForLawyer(user.id),
+            storage.getAllSessions(),
+          ]);
+
+          const allowedCaseIds = new Set(cases.map((c: any) => String(c.id)));
+
+          for (const c of cases) {
+            if (!inRange((c as any).createdAt)) continue;
+            const entityId = String((c as any).id);
+            items.push({
+              id: `case:${entityId}`,
+              type: "case",
+              title: String((c as any).title || (c as any).caseNumber || "Case"),
+              start: new Date((c as any).createdAt).toISOString(),
+              allDay: true,
+              url: buildUrl("case", entityId),
+              entityId,
+              colorKey: "case",
+            });
+          }
+
+          for (const t of tasks) {
+            if (!inRange((t as any).dueDate)) continue;
+            const entityId = String((t as any).id);
+            items.push({
+              id: `task:${entityId}`,
+              type: "task",
+              title: String((t as any).title || "Task"),
+              start: new Date((t as any).dueDate).toISOString(),
+              allDay: true,
+              status: (t as any).status ? String((t as any).status) : undefined,
+              url: buildUrl("task", entityId),
+              entityId,
+              colorKey: "task",
+            });
+          }
+
+          for (const s of sessions) {
+            if (!inRange((s as any).gregorianDate)) continue;
+            const caseId = (s as any).caseId ? String((s as any).caseId) : null;
+            if (caseId && !allowedCaseIds.has(caseId)) continue;
+            const entityId = String((s as any).id);
+            items.push({
+              id: `session:${entityId}`,
+              type: "session",
+              title: String((s as any).title || "Session"),
+              start: new Date((s as any).gregorianDate).toISOString(),
+              allDay: false,
+              status: (s as any).status ? String((s as any).status) : undefined,
+              url: buildUrl("session", entityId),
+              entityId,
+              colorKey: "session",
+            });
+          }
+        }
+
+        if (effectiveScope === "beneficiary") {
+          const beneficiary = await storage.getBeneficiaryByUserId(user.id);
+          if (!beneficiary) {
+            return res.status(404).json({ error: "Beneficiary profile not found" });
+          }
+
+          const [cases, tasks, sessions] = await Promise.all([
+            storage.getCasesByBeneficiary(beneficiary.id),
+            storage.listTasksForBeneficiary(beneficiary.id, user.id),
+            storage.getAllSessions(),
+          ]);
+
+          const allowedCaseIds = new Set(cases.map((c: any) => String(c.id)));
+
+          for (const c of cases) {
+            if (!inRange((c as any).createdAt)) continue;
+            const entityId = String((c as any).id);
+            items.push({
+              id: `case:${entityId}`,
+              type: "case",
+              title: String((c as any).title || (c as any).caseNumber || "Case"),
+              start: new Date((c as any).createdAt).toISOString(),
+              allDay: true,
+              url: buildUrl("case", entityId),
+              entityId,
+              colorKey: "case",
+            });
+          }
+
+          for (const t of tasks) {
+            if ((t as any).showInPortal === false) continue;
+            if (!inRange((t as any).dueDate)) continue;
+            const entityId = String((t as any).id);
+            items.push({
+              id: `task:${entityId}`,
+              type: "task",
+              title: String((t as any).title || "Task"),
+              start: new Date((t as any).dueDate).toISOString(),
+              allDay: true,
+              status: (t as any).status ? String((t as any).status) : undefined,
+              url: buildUrl("task", entityId),
+              entityId,
+              colorKey: "task",
+            });
+          }
+
+          for (const s of sessions) {
+            if (!inRange((s as any).gregorianDate)) continue;
+            const caseId = (s as any).caseId ? String((s as any).caseId) : null;
+            if (caseId && !allowedCaseIds.has(caseId)) continue;
+            const entityId = String((s as any).id);
+            items.push({
+              id: `session:${entityId}`,
+              type: "session",
+              title: String((s as any).title || "Session"),
+              start: new Date((s as any).gregorianDate).toISOString(),
+              allDay: false,
+              status: (s as any).status ? String((s as any).status) : undefined,
+              url: buildUrl("session", entityId),
+              entityId,
+              colorKey: "session",
+            });
+          }
+        }
+
+        items.sort((a, b) => new Date(a.start).getTime() - new Date(b.start).getTime());
+        return res.json({ items });
+      }
 
       const monthParam = typeof req.query.month === "string" ? req.query.month : "";
       const range = parseMonthParam(monthParam);
@@ -3267,7 +3532,7 @@ export async function registerRoutes(
           caseNumber: z.string().trim().min(1),
           title: z.string().trim().min(1),
           beneficiaryId: z.string().trim().min(1),
-          description: z.string().min(1),
+          description: z.string().trim().min(1),
           caseType: z.string().optional().nullable(),
           caseTypeId: z.string().optional().nullable(),
           opponentName: z.string().optional().nullable(),

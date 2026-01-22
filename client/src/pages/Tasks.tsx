@@ -297,6 +297,7 @@ export default function Tasks() {
       setTaskDialogMode("create");
       setActiveTask(null);
       await queryClient.invalidateQueries({ queryKey: ["tasks"] });
+      await queryClient.invalidateQueries({ queryKey: ["calendar"] });
     },
     onError: (err) => toast.error(getErrorMessage(err, t)),
   });
@@ -310,6 +311,7 @@ export default function Tasks() {
       setActiveTask(null);
       setNewAttachments([]);
       await queryClient.invalidateQueries({ queryKey: ["tasks"] });
+      await queryClient.invalidateQueries({ queryKey: ["calendar"] });
     },
     onError: (err) => toast.error(getErrorMessage(err, t)),
   });
@@ -319,6 +321,7 @@ export default function Tasks() {
     onSuccess: async () => {
       toast.success(t("tasks.toasts.deleted", { defaultValue: "تم حذف المهمة" }));
       await queryClient.invalidateQueries({ queryKey: ["tasks"] });
+      await queryClient.invalidateQueries({ queryKey: ["calendar"] });
     },
     onError: (err) => toast.error(getErrorMessage(err, t)),
   });
@@ -427,7 +430,7 @@ export default function Tasks() {
       });
   }, [tasks, search, statusFilter, priorityFilter, typeFilter, beneficiariesById, usersById]);
 
-  const TaskForm = () => (
+  const renderTaskForm = () => (
     <div className="space-y-4">
       <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
         <div className="space-y-2">
@@ -645,6 +648,7 @@ export default function Tasks() {
               }
 
               await queryClient.invalidateQueries({ queryKey: ["tasks"] });
+              await queryClient.invalidateQueries({ queryKey: ["calendar"] });
               return;
             }
 
@@ -1049,7 +1053,7 @@ export default function Tasks() {
               </div>
             </div>
           ) : (
-            <TaskForm />
+            renderTaskForm()
           )}
         </DialogContent>
       </Dialog>

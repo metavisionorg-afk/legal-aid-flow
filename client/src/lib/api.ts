@@ -190,6 +190,26 @@ export const serviceRequestsAPI = {
     }),
 };
 
+export type CalendarItem = {
+  id: string;
+  type: "task" | "session" | "case" | "event";
+  title: string;
+  start: string;
+  end?: string;
+  allDay?: boolean;
+  status?: string;
+  url?: string;
+  entityId: string;
+  colorKey?: string;
+};
+
+export const calendarAPI = {
+  list: (input: { from: string; to: string }): Promise<{ items: CalendarItem[] }> => {
+    const qs = new URLSearchParams({ from: input.from, to: input.to });
+    return fetchAPI(`/calendar?${qs.toString()}`);
+  },
+};
+
 // Staff Beneficiaries API
 // Staff-only endpoint for creating beneficiary user + beneficiary profile.
 export const staffBeneficiariesAPI = {

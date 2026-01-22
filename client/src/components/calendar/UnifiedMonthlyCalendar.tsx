@@ -1,12 +1,15 @@
 import { useMemo, useState } from "react";
 import { useTranslation } from "react-i18next";
 import { useQuery } from "@tanstack/react-query";
-import { format } from "date-fns";
+import { addDays, endOfMonth, format, startOfMonth } from "date-fns";
 import { useLocation } from "wouter";
 
 import FullCalendar from "@fullcalendar/react";
 import dayGridPlugin from "@fullcalendar/daygrid";
 import interactionPlugin from "@fullcalendar/interaction";
+
+import arLocale from "@fullcalendar/core/locales/ar";
+import enGbLocale from "@fullcalendar/core/locales/en-gb";
 import type {
   DatesSetArg,
   EventApi,
@@ -15,35 +18,39 @@ import type {
   EventInput,
 } from "@fullcalendar/core";
 
-import "@fullcalendar/core/index.css";
-import "@fullcalendar/daygrid/index.css";
+import { calendarAPI, type CalendarItem } from "@/lib/api";
+import type { CalendarScope } from "@/lib/calendarApi";
 
-import { getCalendarMonth, type CalendarEvent, type CalendarScope } from "@/lib/calendarApi";
+import { getCalendarDotClass, type CalendarItemType } from "@/components/calendar/calendarColors";
 
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/ui/dialog";
 import { Button } from "@/components/ui/button";
+import { Switch } from "@/components/ui/switch";
+import { Label } from "@/components/ui/label";
 import { Skeleton } from "@/components/ui/skeleton";
+import { Empty, EmptyDescription, EmptyHeader, EmptyTitle } from "@/components/ui/empty";
 
-function getTypeLabel(type: CalendarEvent["type"], t: (key: string, opts?: any) => string) {
-  if (type === "session") return t("calendar.types.session", { defaultValue: "Session" });
-  if (type === "task") return t("calendar.types.task", { defaultValue: "Task" });
-  return t("calendar.types.case", { defaultValue: "Case" });
+function getTypeLabel(type: CalendarItemType, t: (key: string, opts?: any) => string) {
+  if (type === "task") return t("calendar.type.task", { defaultValue: "Task" });
+  if (type === "session") return t("calendar.type.session", { defaultValue: "Session" });
+  if (type === "case") return t("calendar.type.case", { defaultValue: "Case" });
+  return t("calendar.type.event", { defaultValue: "Event" });
 }
 
-function buildOpenHref(scope: CalendarScope, event: CalendarEvent): string {
-  if (event.type === "case") {
-    if (scope === "beneficiary") return `/portal/cases/${event.id}`;
-    if (scope === "lawyer") return `/lawyer/cases/${event.id}`;
-    return `/cases/${event.id}`;
+function buildOpenHref(scope: CalendarScope, item: CalendarItem): string {
+  if (item.type === "case") {
+    if (scope === "beneficiary") return `/portal/cases/${item.entityId}`;
+    if (scope === "lawyer") return `/lawyer/cases/${item.entityId}`;
+    return `/cases/${item.entityId}`;
   }
 
-  if (event.type === "task") {
+  if (item.type === "task") {
     if (scope === "beneficiary") return "/portal/tasks";
     return "/tasks";
   }
 
-  // session
+  // session/event
   if (scope === "beneficiary") return "/portal/sessions";
   if (scope === "lawyer") return "/lawyer/sessions";
   return "/sessions";
@@ -58,43 +65,64 @@ export function UnifiedMonthlyCalendar(props: {
   const { t, i18n } = useTranslation();
   const [, setLocation] = useLocation();
 
-  const [monthParam, setMonthParam] = useState(() => format(new Date(), "yyyy-MM"));
-
-  const { data, isLoading, error } = useQuery({
-    queryKey: ["calendar", scope, monthParam],
-    queryFn: async () => getCalendarMonth({ scope, month: monthParam }),
+  const [range, setRange] = useState(() => {
+    const now = new Date();
+    return {
+      from: format(startOfMonth(now), "yyyy-MM-dd"),
+      to: format(endOfMonth(now), "yyyy-MM-dd"),
+    };
   });
 
-  const events = Array.isArray(data?.events) ? data!.events : [];
+  const [filters, setFilters] = useState(() => ({
+    tasks: true,
+    sessions: true,
+    cases: true,
+  }));
+
+  const { data, isLoading, error } = useQuery({
+    queryKey: ["calendar", "range", range.from, range.to],
+    queryFn: async () => calendarAPI.list({ from: range.from, to: range.to }),
+  });
+
+  const items = Array.isArray((data as any)?.items) ? ((data as any).items as CalendarItem[]) : [];
+
+  const filteredItems = useMemo(() => {
+    return items.filter((it) => {
+      if (it.type === "task") return filters.tasks;
+      if (it.type === "session") return filters.sessions;
+      if (it.type === "case") return filters.cases;
+      return true;
+    });
+  }, [items, filters]);
 
   const fcEvents = useMemo<EventInput[]>(
     () =>
-      events.map((ev) => ({
-        id: ev.id,
-        title: ev.title,
-        start: ev.date,
+      filteredItems.map((it) => ({
+        id: it.id,
+        title: it.title,
+        start: it.start,
+        end: it.end,
+        allDay: it.allDay,
         extendedProps: {
-          type: ev.type,
-          relatedId: ev.relatedId ?? null,
-          status: ev.status ?? null,
-          priority: ev.priority ?? null,
+          item: it,
         },
       })),
-    [events],
+    [filteredItems],
   );
 
-  const [selected, setSelected] = useState<CalendarEvent | null>(null);
+  const [selected, setSelected] = useState<CalendarItem | null>(null);
 
-  const eventToSelected = (api: EventApi): CalendarEvent => {
+  const eventToSelected = (api: EventApi): CalendarItem => {
     const ext = api.extendedProps as any;
+    const item = ext?.item as CalendarItem | undefined;
+    if (item) return item;
     return {
       id: String(api.id),
+      type: "event",
       title: String(api.title || ""),
-      date: api.start ? api.start.toISOString() : new Date().toISOString(),
-      type: (ext?.type as CalendarEvent["type"]) || "task",
-      relatedId: typeof ext?.relatedId === "string" ? ext.relatedId : null,
-      status: typeof ext?.status === "string" ? ext.status : null,
-      priority: typeof ext?.priority === "string" ? ext.priority : null,
+      start: api.start ? api.start.toISOString() : new Date().toISOString(),
+      allDay: Boolean(api.allDay),
+      entityId: String(api.id),
     };
   };
 
@@ -104,19 +132,15 @@ export function UnifiedMonthlyCalendar(props: {
   };
 
   const onDatesSet = (arg: DatesSetArg) => {
-    // For dayGridMonth, currentStart is the first day of the month.
-    const next = format(arg.view.currentStart, "yyyy-MM");
-    setMonthParam(next);
+    // For dayGridMonth, currentStart is the first day of the month and currentEnd is exclusive.
+    const from = format(arg.view.currentStart, "yyyy-MM-dd");
+    const to = format(addDays(arg.view.currentEnd, -1), "yyyy-MM-dd");
+    setRange({ from, to });
   };
 
   const renderEventContent = (arg: EventContentArg) => {
-    const type = (arg.event.extendedProps as any)?.type as CalendarEvent["type"] | undefined;
-    const dotClass =
-      type === "session"
-        ? "bg-red-600"
-        : type === "task"
-          ? "bg-green-600"
-          : "bg-blue-600";
+    const type = ((arg.event.extendedProps as any)?.item?.type as CalendarItemType | undefined) ?? "event";
+    const dotClass = getCalendarDotClass(type);
 
     return (
       <div className="lafc-event flex items-center gap-1 min-w-0">
@@ -126,17 +150,51 @@ export function UnifiedMonthlyCalendar(props: {
     );
   };
 
+  const isRtl = i18n.language === "ar";
+  const calendarLocale = isRtl ? "ar" : "en-gb";
+
   const Wrapper = embedded ? "div" : Card;
 
   return (
     <Wrapper className={embedded ? undefined : "w-full"}>
       {embedded ? null : (
         <CardHeader className="pb-3">
-          <CardTitle>{title ?? t("calendar.title")}</CardTitle>
+          <CardTitle>{title ?? t("calendar.title", { defaultValue: "Calendar" })}</CardTitle>
         </CardHeader>
       )}
 
       <CardContent className={embedded ? "p-0" : undefined}>
+        <div className="flex flex-wrap items-center justify-between gap-4">
+          <div className="flex flex-wrap items-center gap-4">
+            <div className="flex items-center gap-2">
+              <Switch
+                id="calendar-filter-tasks"
+                checked={filters.tasks}
+                onCheckedChange={(checked) => setFilters((p) => ({ ...p, tasks: Boolean(checked) }))}
+              />
+              <Label htmlFor="calendar-filter-tasks">{t("calendar.filters.tasks", { defaultValue: "Tasks" })}</Label>
+            </div>
+            <div className="flex items-center gap-2">
+              <Switch
+                id="calendar-filter-sessions"
+                checked={filters.sessions}
+                onCheckedChange={(checked) => setFilters((p) => ({ ...p, sessions: Boolean(checked) }))}
+              />
+              <Label htmlFor="calendar-filter-sessions">
+                {t("calendar.filters.sessions", { defaultValue: "Sessions" })}
+              </Label>
+            </div>
+            <div className="flex items-center gap-2">
+              <Switch
+                id="calendar-filter-cases"
+                checked={filters.cases}
+                onCheckedChange={(checked) => setFilters((p) => ({ ...p, cases: Boolean(checked) }))}
+              />
+              <Label htmlFor="calendar-filter-cases">{t("calendar.filters.cases", { defaultValue: "Cases" })}</Label>
+            </div>
+          </div>
+        </div>
+
         <div className="mt-2">
           {isLoading ? (
             <div className="p-4">
@@ -149,6 +207,17 @@ export function UnifiedMonthlyCalendar(props: {
             </div>
           ) : error ? (
             <div className="p-4 text-sm text-destructive">{String((error as any)?.message || error)}</div>
+          ) : filteredItems.length === 0 ? (
+            <div className="p-4">
+              <Empty>
+                <EmptyHeader>
+                  <EmptyTitle>{t("calendar.empty", { defaultValue: "No events in this range" })}</EmptyTitle>
+                  <EmptyDescription>
+                    {t("calendar.empty_hint", { defaultValue: "Try adjusting filters or switching months." })}
+                  </EmptyDescription>
+                </EmptyHeader>
+              </Empty>
+            </div>
           ) : (
             <div className="lafc">
               <FullCalendar
@@ -165,7 +234,10 @@ export function UnifiedMonthlyCalendar(props: {
                 datesSet={onDatesSet}
                 eventClick={onEventClick}
                 eventContent={renderEventContent}
-                locale={i18n.language}
+                timeZone="local"
+                locales={[arLocale, enGbLocale]}
+                locale={calendarLocale}
+                direction={isRtl ? "rtl" : "ltr"}
                 buttonText={{
                   today: t("calendar.today", { defaultValue: "Today" }),
                   month: t("calendar.month", { defaultValue: "Month" }),
@@ -200,12 +272,12 @@ export function UnifiedMonthlyCalendar(props: {
                 <div className="flex items-center justify-end gap-2">
                   <Button
                     onClick={() => {
-                      const href = buildOpenHref(scope, selected);
+                      const href = selected.url || buildOpenHref(scope, selected);
                       setSelected(null);
                       setLocation(href);
                     }}
                   >
-                    {t("calendar.actions.view_details", { defaultValue: "View details" })}
+                    {t("calendar.dialog.open", { defaultValue: "Open" })}
                   </Button>
                   <Button
                     variant="outline"
@@ -214,7 +286,7 @@ export function UnifiedMonthlyCalendar(props: {
                       window.print();
                     }}
                   >
-                    {t("calendar.actions.print", { defaultValue: "Print" })}
+                    {t("calendar.dialog.print", { defaultValue: "Print" })}
                   </Button>
                 </div>
               </div>

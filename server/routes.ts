@@ -1959,14 +1959,19 @@ export async function registerRoutes(
         const beneficiary = await storage.getBeneficiaryByUserId(user.id);
         if (!beneficiary) return res.status(404).json({ error: "Beneficiary profile not found" });
 
+        const body = {
+          ...(req.body || {}),
+          description: typeof (req.body as any)?.description === "string" ? (req.body as any).description : "",
+        };
+
         const parsed = z
           .object({
             title: z.string().trim().min(1),
-            description: z.string().trim().min(1),
+            description: z.string().trim(),
             serviceTypeId: z.string().uuid().optional().nullable(),
             priority: z.enum(["low", "medium", "high", "urgent"]).optional().nullable(),
           })
-          .safeParse(req.body);
+          .safeParse(body);
 
         if (!parsed.success) return res.status(400).json({ error: fromZodError(parsed.error).message });
 
@@ -1976,12 +1981,11 @@ export async function registerRoutes(
         const created = await storage.createJudicialService({
           serviceNumber,
           title: parsed.data.title,
-          description: parsed.data.description,
+          description: parsed.data.description || null,
           beneficiaryId: beneficiary.id,
           serviceTypeId: snapshot?.serviceTypeId ?? null,
           serviceTypeNameAr: snapshot?.serviceTypeNameAr ?? null,
           serviceTypeNameEn: snapshot?.serviceTypeNameEn ?? null,
-          status: "new" as any,
           priority: (parsed.data.priority as any) ?? "medium",
           assignedLawyerId: null,
           createdByUserId: user.id,

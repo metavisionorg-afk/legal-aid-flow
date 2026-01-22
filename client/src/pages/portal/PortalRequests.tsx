@@ -54,6 +54,7 @@ export default function PortalRequests() {
   const [selectedServiceId, setSelectedServiceId] = useState<string | null>(null);
   const [uploadingFiles, setUploadingFiles] = useState<File[]>([]);
   const [uploadedDocs, setUploadedDocs] = useState<any[]>([]);
+  const [submitAttempted, setSubmitAttempted] = useState(false);
 
   // Form state
   const [formData, setFormData] = useState({
@@ -87,7 +88,7 @@ export default function PortalRequests() {
     mutationFn: async (data: typeof formData) => {
       const payload: any = {
         title: data.title,
-        description: data.description || null,
+        description: (data.description || "").trim(),
         serviceTypeId: data.serviceTypeId || null,
         priority: data.priority,
       };
@@ -129,6 +130,7 @@ export default function PortalRequests() {
       serviceTypeId: "",
       priority: "medium",
     });
+    setSubmitAttempted(false);
     setUploadedDocs([]);
     setUploadingFiles([]);
     if (fileInputRef.current) {
@@ -170,6 +172,8 @@ export default function PortalRequests() {
 
   const handleSubmit = (e: React.FormEvent) => {
     e.preventDefault();
+
+    setSubmitAttempted(true);
     
     if (!formData.title.trim()) {
       toast({
@@ -180,8 +184,21 @@ export default function PortalRequests() {
       return;
     }
 
+    if (!formData.description.trim()) {
+      toast({
+        title: t("portal_requests.validation_error", { defaultValue: "خطأ في التحقق" }),
+        description: t("portal.requests.validation.description_required", { defaultValue: "الوصف مطلوب" }),
+        variant: "destructive",
+      });
+      return;
+    }
+
     createMutation.mutate(formData);
   };
+
+  const titleIsValid = formData.title.trim().length > 0;
+  const descriptionIsValid = formData.description.trim().length > 0;
+  const canSubmit = titleIsValid && descriptionIsValid && !createMutation.isPending;
 
   const getStatusBadge = (status: string) => {
     const statusMap: Record<string, { variant: any; label: string }> = {
@@ -235,7 +252,15 @@ export default function PortalRequests() {
           <h1 className="text-3xl font-bold">{t("portal_requests.title")}</h1>
           <p className="text-muted-foreground mt-2">{t("portal_requests.subtitle")}</p>
         </div>
-        <Dialog open={isCreateDialogOpen} onOpenChange={setIsCreateDialogOpen}>
+        <Dialog
+          open={isCreateDialogOpen}
+          onOpenChange={(open) => {
+            setIsCreateDialogOpen(open);
+            if (open) {
+              resetForm();
+            }
+          }}
+        >
           <DialogTrigger asChild>
             <Button>
               <Plus className="h-4 w-4 mr-2" />
@@ -306,7 +331,9 @@ export default function PortalRequests() {
 
               {/* Description */}
               <div className="space-y-2">
-                <Label htmlFor="description">{t("portal_requests.form.description")}</Label>
+                <Label htmlFor="description">
+                  {t("portal_requests.form.description")} <span className="text-destructive">*</span>
+                </Label>
                 <Textarea
                   id="description"
                   value={formData.description}
@@ -315,6 +342,11 @@ export default function PortalRequests() {
                   rows={4}
                   disabled={createMutation.isPending}
                 />
+                {submitAttempted && !descriptionIsValid ? (
+                  <p className="text-sm text-destructive">
+                    {t("portal.requests.validation.description_required", { defaultValue: "الوصف مطلوب" })}
+                  </p>
+                ) : null}
               </div>
 
               {/* Attachments */}
@@ -378,7 +410,7 @@ export default function PortalRequests() {
                 >
                   {t("portal_requests.form.cancel")}
                 </Button>
-                <Button type="submit" disabled={createMutation.isPending}>
+                <Button type="submit" disabled={!canSubmit}>
                   {createMutation.isPending
                     ? t("portal_requests.submitting")
                     : t("portal_requests.form.submit")}

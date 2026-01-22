@@ -2079,7 +2079,15 @@ export class DatabaseStorage implements IStorage {
   }
 
   async createJudicialService(input: InsertJudicialService): Promise<JudicialService> {
-    const [row] = await db.insert(schema.judicialServices).values(input as any).returning();
+    const safeInput: any = { ...(input as any) };
+    
+    // Always omit status on create - let DB default handle it
+    // (DB enum may differ from schema enum definition due to migrations not yet run)
+    if ('status' in safeInput) {
+      delete safeInput.status;
+    }
+
+    const [row] = await db.insert(schema.judicialServices).values(safeInput).returning();
     return row;
   }
 
@@ -2087,9 +2095,23 @@ export class DatabaseStorage implements IStorage {
     id: string,
     updates: Partial<InsertJudicialService>,
   ): Promise<JudicialService | undefined> {
+    const normalizeJudicialServiceStatus = (value: any) => {
+      const v = typeof value === "string" ? value : null;
+      if (!v) return value;
+      if (v === "new" || v === "in_review") return "pending_review";
+      if (v === "accepted") return "accepted";
+      if (v === "rejected") return "rejected";
+      return value;
+    };
+
+    const safeUpdates: any = { ...(updates as any) };
+    if ("status" in safeUpdates) {
+      safeUpdates.status = normalizeJudicialServiceStatus(safeUpdates.status);
+    }
+
     const [row] = await db
       .update(schema.judicialServices)
-      .set({ ...(updates as any), updatedAt: new Date() })
+      .set({ ...safeUpdates, updatedAt: new Date() })
       .where(eq(schema.judicialServices.id, id))
       .returning();
     return row;

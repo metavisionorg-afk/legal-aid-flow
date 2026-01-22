@@ -135,7 +135,7 @@ export function UnifiedMonthlyCalendar(props: {
     // For dayGridMonth, currentStart is the first day of the month and currentEnd is exclusive.
     const from = format(arg.view.currentStart, "yyyy-MM-dd");
     const to = format(addDays(arg.view.currentEnd, -1), "yyyy-MM-dd");
-    setRange({ from, to });
+    setRange((prev) => (prev.from === from && prev.to === to ? prev : { from, to }));
   };
 
   const renderEventContent = (arg: EventContentArg) => {
